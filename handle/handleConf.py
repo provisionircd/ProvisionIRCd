@@ -138,7 +138,6 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
 
             for port in tempconf['listen']:
                 if 'ssl' in tempconf['listen'][port]['options']:
-                    ### Check if key and cert files are present.
                     if not os.path.isfile(localServer.rootdir+'/ssl/server.cert.pem') or not os.path.isfile(localServer.rootdir+'/ssl/server.key.pem'):
                         conferr("You have one or more SSL ports listening but there are files missing in {}/ssl/ folder. Make sure you have 'server.cert.pem' and 'server.key.pem' present!".format(localServer.rootdir), noConf=True)
                         conferr("You can create self-signed certs (not recommended) by issuing the following command in your terminal: openssl req -x509 -newkey rsa:4096 -keyout server.key.pem -out server.cert.pem", noConf=True)
@@ -159,7 +158,6 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
             conferr('\'allow\' block not found')
         else:
             for cls in tempconf['allow']:
-                ### Check if there exists a class block for this class.
                 if cls not in tempconf['class']:
                     conferr('Class \'{}\' found in allow-block, but it does not exist'.format(cls))
                 else:

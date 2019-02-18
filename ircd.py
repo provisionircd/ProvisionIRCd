@@ -28,7 +28,6 @@ import importlib
 import platform
 import argparse
 import atexit
-import psutil
 import handle.handleConf
 from handle.handleLink import Link as link
 import handle.handleModules as Modules
