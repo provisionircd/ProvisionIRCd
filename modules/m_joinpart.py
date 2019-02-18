@@ -132,13 +132,10 @@ def join(self, localServer, recv, override=False, skipmod=None, sourceServer=Non
             if self in channel.invites:
                 invite_override = channel.invites[self]['override']
 
-            ### Check for module events
             success = True
             broadcastjoin = None
             overrides = []
             for callable in [callable for callable in localServer.events if callable[0].lower() == recv[0].lower() and callable[2] != skipmod]:
-                ### (command, function, module) <--- why did I put module in this tuple? It still remains a mystery.
-                #localServer.modulename = callable[2].__name__
                 try:
                     success, temp_broadcastjoin, overrides = callable[1](self, localServer, channel)
                     if type(temp_broadcastjoin) == list and broadcastjoin is None:
@@ -162,7 +159,7 @@ def join(self, localServer, recv, override=False, skipmod=None, sourceServer=Non
                     self.sendraw(489, '{} :Cannot join channel (not using a secure connection)'.format(channel.name))
                     continue
 
-                if checkMatch(self, localServer, 'b', channel) and not checkMatch(self, localServer, 'e', channel) and not invite_override:
+                if checkMatch(self, localServer, 'b', channel) and not checkMatch(self, localServer, 'e', channel) and not invite_override and 'b' not in overrides:
                     self.sendraw(474, '{} :Cannot join channel (+b)'.format(channel.name))
                     continue
 

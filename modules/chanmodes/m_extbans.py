@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-man, I don't know
+support for extended bans
 """
 
 import ircd
@@ -17,7 +17,7 @@ from handle.functions import _print, match
 
 rt = None
 
-ext_bans = 'TtCO'
+ext_bans = 'TtCOa'
 
 def checkExpiredBans(localServer):
     remove_bans = {}
@@ -37,11 +37,11 @@ def checkExpiredBans(localServer):
 
 class RepeatedTimer(object):
     def __init__(self, interval, function, *args, **kwargs):
-        self._timer     = None
-        self.interval   = interval
-        self.function   = function
-        self.args       = args
-        self.kwargs     = kwargs
+        self._timer = None
+        self.interval = interval
+        self.function = function
+        self.args = args
+        self.kwargs = kwargs
         self.is_running = False
         self.start()
 
@@ -65,7 +65,7 @@ from modules.m_joinpart import checkMatch
 
 def init(self):
     global rt
-    rt = RepeatedTimer(1, checkExpiredBans, self) # it auto-starts, no need of rt.start()
+    rt = RepeatedTimer(1, checkExpiredBans, self)
 
 def unload(self):
     global rt
@@ -73,7 +73,6 @@ def unload(self):
 
 @ircd.Modules.support(('EXTBAN=~,'+str(ext_bans), True)) ### (support string, boolean if support must be sent to other servers)
 @ircd.Modules.events('mode')
-#def extbans(self, localServer, recv, tmodes=None, param=None):
 def extbans(*args): ### Params: self, localServer, recv, tmodes, param, commandQueue
     if len(args) < 5:
         return
@@ -92,8 +91,6 @@ def extbans(*args): ### Params: self, localServer, recv, tmodes, param, commandQ
         action = ''
 
         for m in recv[1]:
-            #print('m: {}'.format(m))
-            #print('paramcount: {}'.format(paramcount))
             if m in '+-':
                 action = m
                 continue
@@ -115,15 +112,12 @@ def extbans(*args): ### Params: self, localServer, recv, tmodes, param, commandQ
             if rawParam[1] not in ext_bans:
                 paramcount += 1
                 continue
+            try:
+                setter = self.fullmask()
+            except:
+                setter = self.hostname
 
             if m == 'b':
-                try:
-                    setter = self.fullmask()
-                except:
-                    setter = self.hostname
-                if action != '+' or rawParam in channel.bans:
-                    paramcount += 1
-                    continue
                 if rawParam[:2] == '~T':
                     ### Text block.
                     if rawParam.split(':')[1] not in ['block', 'replace'] or len(rawParam.split(':')) < 3:
@@ -171,13 +165,6 @@ def extbans(*args): ### Params: self, localServer, recv, tmodes, param, commandQ
                     rawParam = '{}:{}'.format(':'.join(rawParam.split(':')[:2]), banmask)
 
             elif m == 'I':
-                try:
-                    setter = self.fullmask()
-                except:
-                    setter = self.hostname
-                if action != '+' or rawParam in channel.bans:
-                    paramcount += 1
-                    continue
                 if rawParam[:2] == '~O':
                     if len(rawParam.split(':')) < 2:
                         paramcount += 1
@@ -188,13 +175,16 @@ def extbans(*args): ### Params: self, localServer, recv, tmodes, param, commandQ
                 c = channel.bans
             elif m == 'I':
                 c = channel.invex
+            elif m == 'e':
+                c = channel.excepts
             if c is not None:
                 paramcount += 1
-                tmodes.append(m)
-                param.append(rawParam)
-                c[rawParam] = {}
-                c[rawParam]['setter'] = setter
-                c[rawParam]['ctime'] = int(time.time())
+                if action == '+' and rawParam not in c:
+                    tmodes.append(m)
+                    param.append(rawParam)
+                    c[rawParam] = {}
+                    c[rawParam]['setter'] = setter
+                    c[rawParam]['ctime'] = int(time.time())
 
     except Exception as ex:
         exc_type, exc_obj, exc_tb = sys.exc_info()
@@ -229,6 +219,23 @@ def join(self, localServer, channel):
                 oper_class = i.split(':')[1]
                 if 'i' in channel.modes and ('o' in self.modes and (hasattr(self, 'operclass') and match(oper_class, self.operclass))) and 'i' not in overrides:
                     overrides.append('i')
+            if i.startswith('~a'):
+                account = i.split(':')[1]
+                if 'i' in channel.modes and ('r' in self.modes and (hasattr(self, 'svid') and match(account, self.svid))) and 'b' not in overrides:
+                    overrides.append('i')
+
+        for e in channel.excepts:
+            if e.startswith('~a'):
+                account = e.split(':')[1]
+                if ('r' in self.modes and (hasattr(self, 'svid') and match(account, self.svid))) and 'b' not in overrides:
+                    overrides.append('b')
+
+        for b in channel.bans:
+            if b.startswith('~a'):
+                account = b.split(':')[1]
+                if ('r' in self.modes and (hasattr(self, 'svid') and match(account, self.svid))) and 'b' not in overrides:
+                    self.sendraw(474, '{} :Cannot join channel (+b3)'.format(channel.name))
+                    return (False, None, overrides)
 
         return (True, None, overrides)
 
