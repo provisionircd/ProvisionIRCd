@@ -110,7 +110,7 @@ def server(self, localServer, recv):
                 return
 
             selfIntroduction(localServer, self)
-            data = ':{} SID {} 0 {} {}'.format(localServer.sid, self.hostname, self.sid, self.name)
+            data = ':{} SID {} 1 {} {}'.format(localServer.sid, self.hostname, self.sid, self.name)
             localServer.new_sync(localServer, self, data)
             #selfIntroduction(localServer, self)
             ###
