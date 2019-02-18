@@ -395,7 +395,6 @@ class Server:
                             source[0]._send(':{} MODE +s :{}'.format(source[0].server.hostname, recv[2:]))
                             source[0].sendraw(8, 'Server notice mask (+{})'.format(source[0].snomasks))
                         localServer.new_sync(localServer, self, raw)
-                        #localServer.syncToServers(localServer, source[0].server, raw)
                     try:
                         ### Old method -- use new method instead
                         cmd = importlib.import_module('cmds.cmd_'+command.lower())
@@ -403,10 +402,6 @@ class Server:
                         continue
                     except ImportError:
                         for callable in [callable for callable in localServer.commands if callable[0].lower() == command.lower()]:
-                            ### (cmd, callable, params, req_modes, req_flags, module)
-                            if command.lower() not in ['ping', 'pong']:
-                                pass
-                                #_print('handleLink calling: {} with {}'.format(callable, recv), server=localServer)
                             try:
                                 callable[1](self, localServer, recvNoStrip)
                             except Exception as ex:
@@ -421,12 +416,6 @@ class Server:
                     continue
 
                 else:
-                    ### Old method -- use new method instead
-                    '''
-                    cmd = importlib.import_module('cmds.cmd_'+command.lower())
-                    getattr(cmd, 'cmd_'+command.upper())(server, localServer, recvNoStrip)
-                    '''
-                    #_print('handleLink cmd handler 2 for cmd {}'.format(command), server=localServer)
                     for callable in [callable for callable in localServer.commands if callable[0].lower() == command.lower()]:
                         ### (command, function, params, req_modes, req_flags, req_class, module)
                         ### Do not add a return here, it will stop the recvbuffer read.
@@ -437,11 +426,6 @@ class Server:
                 fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
                 e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
                 _print(e, server=localServer)
-
-        #if not self.linkThread:
-        #    self.linkThread = link()
-
-        #self.linkThread.handle_recv(self)
 
     def chlevel(self, channel):
         return 10000
@@ -469,40 +453,32 @@ class Server:
                 _print('{}Lost connection to remote server {}: {}{}'.format(R, self.hostname, reason, W), server=localServer)
                 if not noSquit:
                     localServer.new_sync(localServer, localServer, ':{} SQUIT {} :{}'.format(localServer.sid, self.hostname, reason))
-            self.eos = False
 
             if not silent and self.hostname and self.socket:
                 localServer.snotice('s', '{} to server {}: {}'.format('Unable to connect' if not self.eos else 'Lost connection', self.hostname, reason), local=True)
+
+            self.eos = False
 
             if self.hostname in set(localServer.pendingLinks):
                 localServer.pendingLinks.remove(self.hostname)
 
             while self.sendbuffer:
                 _print('Server {} has sendbuffer remaining: {}'.format(self, self.sendbuffer.rstrip()), server=localServer)
-                ### Let's empty the sendbuffer manually.
                 try:
                     sent = self.socket.send(bytes(self.sendbuffer + '\n', 'utf-8'))
                     self.sendbuffer = self.sendbuffer[sent:]
                 except:
                     break
 
-            ### Make a list of additional servers.
-            additional_servers = [server for server in localServer.servers if server.introducedBy == self or server.uplink == self]
-            for server in additional_servers:
-                server.eos = False
-
-            #_print('Removing all users from servers: {}'.format(additional_servers), server=localServer)
-            ### Killing users with NoneType server.
             for user in [user for user in localServer.users if not user.server]:
                 user.quit('Unknown connection')
 
+            additional_servers = [server for server in localServer.servers if server.introducedBy == self or server.uplink == self]
             users = [user for user in localServer.users if user.server and (user.server == self or user.server in additional_servers or user.server.uplink == self)]
             for user in users:
-                ### Netsplit between dev & link1
                 server1 = self.hostname
                 server2 = source.hostname if source else localServer.hostname
                 user.quit('{} {}'.format(server1, server2), source=self)
-
 
             for server in additional_servers:
                 server.quit('{} {}'.format(self.hostname, source.hostname if source else localServer.hostname))
@@ -535,6 +511,7 @@ class Server:
                 except Exception as ex:
                     print('Could not write pidfile. Make sure you have write access: {}'.format(ex))
                     sys.exit()
+                    return
                 sys.exit()
                 atexit.register(exit_handler)
 
@@ -542,7 +519,6 @@ class Server:
         from handle.handleSockets import data_handler
         self.datahandler = data_handler(self)
         self.datahandler.start()
-        #self.datahandler.join()
         return
 
     def handle(self, cmd, data, params=None):
@@ -553,8 +529,6 @@ class Server:
             return
         except ImportError:
             for callable in [callable for callable in self.localServer.commands if callable[0].lower() == cmd.lower()]:
-                ### (cmd, callable, params, req_modes, req_flags, module)
-                _print('Calling {} with: {}'.format(callable, p))
                 if params:
                     callable[1](self, self.localServer, p, **params)
                 else:
@@ -567,7 +541,6 @@ class Server:
             _print(e, server=self.localServer)
 
     def broadcast(self, users, data, source=None):
-        ### Source must be a class.
         if source:
             if type(source).__name__ == 'Server':
                 source = source.hostname
@@ -585,7 +558,7 @@ class Server:
         localServer = self.localServer
         try:
             if sno:
-                users = list(filter(lambda u:'o' in u.modes and sno in u.snomasks, localServer.users))
+                users = list(filter(lambda u: 'o' in u.modes and sno in u.snomasks, localServer.users))
 
             for user in set(users):
                 try:
@@ -611,7 +584,6 @@ class Server:
                     sno = 'C'
                 data = '@{} Ss {} :{}'.format(self.hostname, sno, msg)
                 localServer.new_sync(localServer, self, data)
-                #localServer.syncToServers(localServer, self, data)
 
         except Exception as ex:
             exc_type, exc_obj, exc_tb = sys.exc_info()
@@ -683,13 +655,12 @@ if __name__ == "__main__":
     else:
         conffile = args.conf
     fork = not args.nofork
+    try:
+        import bcrypt
+    except ImportError:
+        print("Could not import required 'bcrypt' module. You can install it with pip")
+        sys.exit()
     if args.mkpasswd:
-        try:
-            import bcrypt
-        except ImportError:
-            print("Could not import required 'bcrypt' module. You can install it with pip")
-            sys.exit()
-
         hashed = bcrypt.hashpw(args.mkpasswd.encode('utf-8'),bcrypt.gensalt(15)).decode('utf-8')
         print('Your salted password: {}'.format(hashed))
     else:

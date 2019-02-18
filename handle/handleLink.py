@@ -98,31 +98,37 @@ def selfIntroduction(localServer, newServer):
         _print(e, server=localServer)
 
 def syncUsers(localServer, newServer):
-    totalServers = [localServer]+localServer.servers
-    for server in [server for server in totalServers if server != newServer and server.introducedBy != newServer and newServer.introducedBy != server and server not in newServer.syncDone and newServer.socket]:
-        newServer.syncDone.append(server)
-        _print('{}Syncing info from {} to {}{}'.format(Y, server.hostname, newServer.hostname, W), server=localServer)
-        for u in [u for u in localServer.users if u.server == server and u.registered]:
-            ip = IPtoBase64(u.ip)
-            if not ip:
-                ip = '*'
-            hopcount = u.server.hopcount + 1
-            data = ':{} UID {} {} {} {} {} {} 0 +{} {} {} {} :{}'.format(server.sid, u.nickname, hopcount, u.signon, u.ident, u.hostname, u.uid, u.modes, u.cloakhost, u.cloakhost, ip, u.realname)
-            _print('<<< {}'.format(data), server=localServer)
-            newServer._send(data)
-            if u.fingerprint:
-                data = 'MD client {} certfp :{}'.format(u.uid, u.fingerprint)
-                newServer._send(':{} {}'.format(server.sid, data))
-            if u.operaccount:
-                data = 'MD client {} operaccount :{}'.format(u.uid, u.operaccount)
-                newServer._send(':{} {}'.format(server.sid, data))
-            if u.snomasks:
-                newServer._send(':{} BV +{}'.format(u.uid, u.snomasks))
-            if 'o' in u.modes:
-                for line in u.swhois:
-                    newServer._send(':{} SWHOIS {} :{}'.format(server.sid, u.uid, line))
-            if u.away:
-                newServer._send(':{} AWAY :{}'.format(u.uid, u.away))
+    try:
+        totalServers = [localServer]+localServer.servers
+        for server in [server for server in totalServers if server != newServer and server.introducedBy != newServer and newServer.introducedBy != server and server not in newServer.syncDone and newServer.socket]:
+            newServer.syncDone.append(server)
+            _print('{}Syncing info from {} to {}{}'.format(Y, server.hostname, newServer.hostname, W), server=localServer)
+            for u in [u for u in localServer.users if u.server == server and u.registered]:
+                ip = IPtoBase64(u.ip)
+                if not ip:
+                    ip = '*'
+                hopcount = str(u.server.hopcount + 1)
+                data = ':{} UID {} {} {} {} {} {} 0 +{} {} {} {} :{}'.format(server.sid, u.nickname, hopcount, u.signon, u.ident, u.hostname, u.uid, u.modes, u.cloakhost, u.cloakhost, ip, u.realname)
+                _print('<<< {}'.format(data), server=localServer)
+                newServer._send(data)
+                if u.fingerprint:
+                    data = 'MD client {} certfp :{}'.format(u.uid, u.fingerprint)
+                    newServer._send(':{} {}'.format(server.sid, data))
+                if u.operaccount:
+                    data = 'MD client {} operaccount :{}'.format(u.uid, u.operaccount)
+                    newServer._send(':{} {}'.format(server.sid, data))
+                if u.snomasks:
+                    newServer._send(':{} BV +{}'.format(u.uid, u.snomasks))
+                if 'o' in u.modes:
+                    for line in u.swhois:
+                        newServer._send(':{} SWHOIS {} :{}'.format(server.sid, u.uid, line))
+                if u.away:
+                    newServer._send(':{} AWAY :{}'.format(u.uid, u.away))
+    except Exception as ex:
+        exc_type, exc_obj, exc_tb = sys.exc_info()
+        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+        e = '{}EXCEPTION: {} in file {} line {}: {}{}'.format(R, exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj,W)
+        _print(e, server=localServer)
 
 def syncData(localServer, newServer, serverIntroducer, selfRequest=True):
     if selfRequest:

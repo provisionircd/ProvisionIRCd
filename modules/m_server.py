@@ -51,7 +51,7 @@ def server(self, localServer, recv):
             self.linkAccept = True
             tempName = ' '.join(recv).split(':')[-2]
             self.hostname = tempName.split()[-2].strip()
-            self.hopcount = tempName.split()[-1]
+            self.hopcount = int(tempName.split()[-1])
             self.name = ' '.join(recv[4:])
             self.rawname = ' '.join(recv[3:])
             if self.name.startswith(':'):

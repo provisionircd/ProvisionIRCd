@@ -194,16 +194,18 @@ def extbans(*args): ### Params: self, localServer, recv, tmodes, param, commandQ
                         paramcount += 1
                         continue
 
-            paramcount += 1
-            tmodes.append(m)
-            param.append(rawParam)
+            c = None
             if m == 'b':
                 c = channel.bans
             elif m == 'I':
                 c = channel.invex
-            c[rawParam] = {}
-            c[rawParam]['setter'] = setter
-            c[rawParam]['ctime'] = int(time.time())
+            if c:
+                paramcount += 1
+                tmodes.append(m)
+                param.append(rawParam)
+                c[rawParam] = {}
+                c[rawParam]['setter'] = setter
+                c[rawParam]['ctime'] = int(time.time())
 
     except Exception as ex:
         exc_type, exc_obj, exc_tb = sys.exc_info()

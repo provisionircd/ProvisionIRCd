@@ -4,13 +4,7 @@
 import gc
 gc.enable()
 
-#from pympler.tracker import SummaryTracker
-#tracker = SummaryTracker()
-#from mem_top import mem_top
-
 from handle.functions import _print, match, TKL, cloak, IPtoBase64, Base64toIP, show_support, check_flood
-
-#from handle import handleMemory as mem
 
 import random
 import time
@@ -78,7 +72,6 @@ class DNSBLCheck(threading.Thread):
 class User:
     def __init__(self, server, sock=None, address=None, is_ssl=None, serverClass=None, params=None):
         try:
-            #mem.dump()
             self.socket = sock
             self.server = None
             self.cloakhost = '*'
@@ -193,9 +186,6 @@ class User:
 
             else:
                 try:
-                    ### :001 UID Sirius 1 1518982877 provision 109.201.133.76 001R909JRYW 0 +oixzshqW * root.provisionweb.org 109.201.133.76 :.
-                    ### [':002', 'UID', 'asdf', '0', '1518983093', 'provision', '109.201.133.76', '002G6LYS067', '0', '+ixz', '*', '40a2f7ea.9d2b21c8.abbb717e.IP', '109.201.133.76', ':.']
-                    ### :00B UID NickServ 1 1517540240 services services.host 00BAAAA6O * +qioS * * * :Nickname Registration Service
                     self.origin = serverClass
                     self.localServer = serverClass
                     self.origin.users.append(self)
@@ -217,7 +207,6 @@ class User:
                     else:
                         self.cloakhost = params[11]
                     if params[12] != '*' and not params[12].replace('.', '').isdigit() and params[12] is not None:
-                        ### If the IP position is not an actual IP.
                         self.ip = Base64toIP(params[12])
                     else:
                         self.ip = params[12]
@@ -261,9 +250,8 @@ class User:
                 self.recvbuffer = self.recvbuffer[self.recvbuffer.find('\n')+1:]
                 recv = recv.rstrip()
                 if not recv:
-                    self.recvbuffer = ''
-                    self.flood_safe = False
                     continue
+
                 localServer = self.server
                 self.ping = int(time.time())
 
@@ -298,11 +286,12 @@ class User:
                             self.validping = True
                             if self.ident != '' and self.nickname != '*' and (self.cap_end or not self.sends_cap):
                                 self.welcome()
-                false_cmd = True
+                #false_cmd = True
                 try:
                     cmd = importlib.import_module('cmds.cmd_'+command.lower())
                     getattr(cmd, 'cmd_'+command.upper())(self, localServer, parsed)
-                    false_cmd = False
+                    #false_cmd = False
+                    continue
                 except ImportError:
                     try:
                         alias = localServer.conf['aliases']
@@ -310,20 +299,15 @@ class User:
                             service = list(filter(lambda u: u.nickname == alias[command.lower()]['target'] and 'services' in localServer.conf['settings'] and u.server.hostname == localServer.conf['settings']['services'], localServer.users))
                             if not service:
                                 return self.sendraw(440, ':Services are currently down. Please try again later.')
-                        #print('forming data')
                         data = '{} :{}'.format(alias[command.lower()]['target'], ' '.join(recv.split()[1:]))
                         self.handle('PRIVMSG', data)
-                        return
+                        continue
                     except KeyError:
                         pass
 
-                ### Checking hooked commands.
-                #if command.lower() not in ignore:
-                    #print('Checking for hooked commands for {}'.format(command))
+                false_cmd = True
                 for callable in [callable for callable in localServer.commands if callable[0].lower() == command.lower()]:
                     try:
-                        ### (cmd, callable, params, req_modes, req_flags, req_class, module)
-                        #print('from handle recv: {}'.format(callable))
                         got_params = len(parsed) - 1
                         req_params = callable[2]
                         req_modes = callable[3]
@@ -331,7 +315,6 @@ class User:
                         req_class = callable[5]
                         module = callable[6]
                         if type(self).__name__ != req_class:
-                            ### Wrong class!
                             if req_class == 'Server':
                                 return self.sendraw(487, ':{} is a server only command'.format(command.upper()))
                         if got_params < req_params:
@@ -342,7 +325,6 @@ class User:
                         e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
                         _print(e, server=localServer)
 
-                    ### Check modes.
                     if req_modes:
                         req_modes = ' '.join(req_modes)
                         if 'o' in req_modes and 'o' not in self.modes:
@@ -350,7 +332,6 @@ class User:
                         forbid = set(req_modes).difference(set(self.modes))
                         if forbid:
                             return self.sendraw(481, ':Permission denied - Required mode not set')
-                    ### Check flags.
                     forbid = True
                     if req_flags:
                         for flag in req_flags:
@@ -366,10 +347,7 @@ class User:
                             return self.sendraw(481, ':Permission denied - You do not have the correct IRC Operator privileges')
                     try:
                         false_cmd = False
-                        ### Do not add a return here, it will interfere with select().
-                        ### On the plus side, you'll save some money on a haircut.
                         callable[1](self, localServer, parsed)
-
                     except Exception as ex:
                         _print('Exception in module {}: {}'.format(module, ex), server=localServer)
                 if false_cmd:
@@ -528,9 +506,9 @@ class User:
 
             binip = IPtoBase64(self.ip)
 
-            data = '{} {} {} {} {} {} 0 +{} {} {} {} :{}'.format(self.nickname, 0, self.signon, self.ident, self.hostname, self.uid, self.modes, self.cloakhost, self.cloakhost, binip, self.realname)
+            data = '{} {} {} {} {} {} 0 +{} {} {} {} :{}'.format(self.nickname, self.server.hopcount, self.signon, self.ident, self.hostname, self.uid, self.modes, self.cloakhost, self.cloakhost, binip, self.realname)
 
-            self.server.syncToServers(self.server, self.server, ':{} UID {}'.format(self.server.sid, data))
+            self.server.new_sync(self.server, self.server, ':{} UID {}'.format(self.server.sid, data))
             modes = []
             for mode in self.server.conf['settings']['modesonconnect']:
                 if mode in self.server.user_modes and mode not in 'oqrzS':
@@ -544,7 +522,7 @@ class User:
             if self.fingerprint:
                 data = 'MD client {} certfp :{}'.format(self.uid, self.fingerprint)
                 # :irc.foonet.com MD client 001HBEI01 certfp :a6fc0bd6100a776aa3266ed9d5853d6dce563560d8f18869bc7eef811cb2d413
-                self.server.syncToServers(self.server, self.server, ':{} {}'.format(self.server.sid, data))
+                self.server.new_sync(self.server, self.server, ':{} {}'.format(self.server.sid, data))
 
             watch_notify = [user for user in self.server.users if self.nickname.lower() in [x.lower() for x in user.watchlist]]
             for user in watch_notify:
@@ -555,17 +533,21 @@ class User:
         gc.collect()
 
     def __repr__(self):
+        if not hasattr(self, 'server'):
+            self.server.hostname = 'Unknown server hostname'
         return "<User '{}:{}'>".format(self.fullmask(), self.server.hostname)
 
     def fileno(self):
         return self.socket.fileno()
 
     def fullmask(self):
+        if not hasattr(self, 'cloakhost'):
+            self.cloakhost = '*'
         return '{}!{}@{}'.format(self.nickname, self.ident, self.cloakhost)
 
     def fullrealhost(self):
-        host = self.hostname if self.hostname != '' else self.ip
-        return '{}{}{}'.format(self.nickname+'!' if self.nickname != '*' else '', self.ident+'@' if self.ident != '' else '', host)
+        host = self.hostname if self.hostname else self.ip
+        return '{}!{}@{}'.format(self.nickname, self.ident if self.ident != '' else '*', host)
 
     def chlevel(self, channel):
         localServer = self.server if self.socket else self.origin
@@ -595,7 +577,6 @@ class User:
     def quit(self, reason, error=True, banmsg=None, kill=False, broadcast=None, silent=False, source=None):
         try:
             localServer = self.localServer if not self.socket else self.server
-            #print('HOE BEDOEL JE LOCALSERVER IS NIET DEFINED: {}'.format(localServer))
             sourceServer = source if source else self.server
             if not sourceServer.socket and sourceServer.uplink:
                 sourceServer = sourceServer.uplink
@@ -614,7 +595,6 @@ class User:
 
             while self.sendbuffer:
                 _print('User {} has sendbuffer remaining: {}'.format(self, self.sendbuffer.rstrip()), server=localServer)
-                ### Let's empty the sendbuffer manually.
                 try:
                     sent = self.socket.send(bytes(self.sendbuffer + '\n', 'utf-8'))
                     self.sendbuffer = self.sendbuffer[sent:]
@@ -629,7 +609,6 @@ class User:
 
             if self.registered and (self.server == localServer or self.server.eos):
                 if reason and not kill:
-                    ### Look for servers with NOQUIT and add them to the skip list.
                     skip = [sourceServer]
                     for server in [server for server in localServer.servers if hasattr(server, 'protoctl') and 'NOQUIT' in server.protoctl and not server.eos]:
                         skip.append(server)
