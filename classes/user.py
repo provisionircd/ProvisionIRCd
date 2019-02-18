@@ -280,11 +280,11 @@ class User:
                 else:
                     parsed = self.parse_command(recv)
 
-                ignore = ['ping', 'pong', 'ison', 'watch', 'who', 'privmsg', 'notice']
+                ignore = ['ping', 'pong', 'ison', 'watch', 'who', 'privmsg', 'notice', 'ns', 'cs', 'nickserv', 'chanserv', 'id', 'identify', 'login', 'auth']
                 #ignore = []
                 if command not in ignore:
-                    #pass
-                    _print('> {} :: {}'.format(self.nickname, recv), server=self.server)
+                    pass
+                    #_print('> {} :: {}'.format(self.nickname, recv), server=self.server)
                 #print('ik ga zo slaaaaaapen maar jij bent ernie?')
                 if type(self).__name__ == 'User' and command != 'nick' and command != 'user' and command != 'pong' and command != 'cap' and command != 'starttls' and not self.registered:
                     return self.sendraw(462, 'You have not registered')
