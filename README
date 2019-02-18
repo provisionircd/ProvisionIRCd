@@ -1,4 +1,6 @@
 An IRCd written in Python 3.
 
+Not to be confused with the deprecated mSL version I wrote years ago.
+
 Edit conf/ircd.example.conf and save it as conf/ircd.conf.
 After you editted the confs, simply run ircd.py.
