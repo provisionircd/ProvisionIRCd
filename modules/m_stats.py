@@ -18,7 +18,7 @@ except ImportError:
     pass
 
 #import resource
-import objgraph
+#import objgraph
 
 stats = 'duCGO'
 
@@ -96,17 +96,12 @@ def show_stats(self, localServer, recv):
         elif recv[1] == 'u':
             uptime = datetime.timedelta(seconds=int(time.time()) - localServer.creationtime)
             self.sendraw(242, ':Server up: {}'.format(uptime))
-            #ram = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-            #print(ram)
             try:
                 pid = os.getpid()
                 py = psutil.Process(pid)
-                memoryUse = float(py.memory_info()[0] /2.**20) # memory use in GB...I think
+                memoryUse = float(py.memory_info()[0] /2.**20)
                 memoryUse = "%.2f" % memoryUse
                 self.sendraw(242, ':RAM usage: {} MB'.format(memoryUse))
-                #objgraph.show_most_common_types()
-                version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
-                #self.sendraw(242,':CPU usage: {} (bugged)'.format('0.0'))
             except:
                 pass
 
