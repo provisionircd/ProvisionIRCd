@@ -286,11 +286,9 @@ class User:
                             self.validping = True
                             if self.ident != '' and self.nickname != '*' and (self.cap_end or not self.sends_cap):
                                 self.welcome()
-                #false_cmd = True
                 try:
                     cmd = importlib.import_module('cmds.cmd_'+command.lower())
                     getattr(cmd, 'cmd_'+command.upper())(self, localServer, parsed)
-                    #false_cmd = False
                     continue
                 except ImportError:
                     try:
@@ -304,7 +302,6 @@ class User:
                         continue
                     except KeyError:
                         pass
-
                 false_cmd = True
                 for callable in [callable for callable in localServer.commands if callable[0].lower() == command.lower()]:
                     try:

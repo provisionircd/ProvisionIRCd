@@ -116,17 +116,12 @@ def extbans(*args): ### Params: self, localServer, recv, tmodes, param, commandQ
                 paramcount += 1
                 continue
 
-
             if m == 'b':
                 try:
                     setter = self.fullmask()
                 except:
                     setter = self.hostname
                 if action != '+' or rawParam in channel.bans:
-                    paramcount += 1
-                    continue
-                if len(channel.bans) >= localServer.maxlist[m] and type(self).__name__ == 'User':
-                    self.sendraw(478, '{} {} :Channel ban list is full'.format(channel.name, rawParam))
                     paramcount += 1
                     continue
                 if rawParam[:2] == '~T':
@@ -164,7 +159,7 @@ def extbans(*args): ### Params: self, localServer, recv, tmodes, param, commandQ
                             commandQueue.append(cmd)
 
                 elif rawParam[:2] == '~t':
-                    ### Channel block.
+                    ### Timed bans.
                     if len(rawParam.split(':')) < 3:
                         paramcount += 1
                         continue
@@ -183,13 +178,7 @@ def extbans(*args): ### Params: self, localServer, recv, tmodes, param, commandQ
                 if action != '+' or rawParam in channel.bans:
                     paramcount += 1
                     continue
-                if len(channel.bans) >= localServer.maxlist[m] and type(self).__name__ == 'User':
-                    self.sendraw(478, '{} {} :Channel invex list is full'.format(channel.name, rawParam))
-                    paramcount += 1
-                    continue
-
                 if rawParam[:2] == '~O':
-                    ### Only allow specific oper classes.
                     if len(rawParam.split(':')) < 2:
                         paramcount += 1
                         continue
@@ -199,7 +188,7 @@ def extbans(*args): ### Params: self, localServer, recv, tmodes, param, commandQ
                 c = channel.bans
             elif m == 'I':
                 c = channel.invex
-            if c:
+            if c is not None:
                 paramcount += 1
                 tmodes.append(m)
                 param.append(rawParam)
@@ -221,7 +210,6 @@ def join(self, localServer, channel):
         if self in channel.invites:
             invite_override = channel.invites[self]['override']
         for c in self.channels:
-            ### First we check if the user is on a channel that's in the joined channel's banlist.
             for b in [b for b in channel.bans if b[:2] == '~C']:
                 banChan = b.split(':')[1]
                 ison_banchan = [chan for chan in localServer.channels if chan.name.lower() == banChan.lower() and self in chan.users]
@@ -236,7 +224,6 @@ def join(self, localServer, channel):
                     self.sendraw(474, '{} :Cannot join channel (+b2)'.format(channel.name))
                     return (False, None, overrides)
 
-        ### Now we check oper-class invex.
         for i in channel.invex:
             if i.startswith('~O'):
                 oper_class = i.split(':')[1]

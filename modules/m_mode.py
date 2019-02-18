@@ -236,7 +236,6 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
             temp_tmodes = ''.join(tmodes)
             temp_param = ' '.join(param)
             totalLength = len(temp_tmodes+' '+temp_param)
-            #print('totalLength: {}'.format(totalLength))
             if len(tmodes) > maxmodes or totalLength >= 400:
                 tmodes = ''.join(tmodes)
                 param = ' '.join(param)
@@ -244,7 +243,6 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                 self.broadcast(channel.users, 'MODE {} {}'.format(channel.name, modes), source=sourceUser)
                 if sync:
                     localServer.new_sync(localServer, sourceServer, ':{} MODE {} :{}'.format(displaySource, channel.name, modes if type(self).__name__ == 'User' else rawModes))
-                    #localServer.syncToServers(localServer, source, ':{} MODE {} {}'.format(displaySource, channel.name, modes if type(self).__name__ == 'User' else rawModes))
 
                 tmodes, param = [prevaction], []
 
@@ -262,9 +260,7 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                 if m not in '+-' and action != prevaction and ( (m in chmodes or m in localServer.chstatus) or (action == '-' and m in channel.modes) ):
                     tmodes.append(action)
                     prevaction = action
-        #else:
-            ### Still need to work on this. If no modeLevel is set, the default of minimum +h is used.
-            ### Excluding chstatus in this check because users can still remove their OWN status.
+
             if m not in localServer.chstatus and m not in '+-':
                 if self.chlevel(channel) < modeLevel[m] and not self.ocheck('o', 'override'):
                     if m in paramModes:
