@@ -494,7 +494,7 @@ class Server:
 
             #_print('Removing all users from servers: {}'.format(additional_servers), server=localServer)
             ### Killing users with NoneType server.
-            for [user for user in localServer.users if not user.server]:
+            for user in [user for user in localServer.users if not user.server]:
                 user.quit('Unknown connection')
 
             users = [user for user in localServer.users if user.server and (user.server == self or user.server in additional_servers or user.server.uplink == self)]
