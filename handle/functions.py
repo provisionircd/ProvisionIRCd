@@ -59,20 +59,6 @@ class TKL:
             expire = '0' if float(data[4]) == 0 else int(data[4])
             ctime = int(data[5])
             reason = data[6]
-            '''
-            if tkltype.lower() in 'gz':
-                ident = data[1]
-                mask = data[2]
-                mask = '{}@{}'.format(data[1], data[2])
-            elif tkltype.lower() == 'q':
-                mask = data[2]
-                setter = data[3]
-                expire = '0' if float(data[4]) == 0 else int(data[4])
-                ctime = int(data[5])
-                reason = data[6]
-            else:
-                return
-            '''
             user = list(filter(lambda c: c.nickname.lower() == setter.lower(), localServer.users))
             if expire != '0':
                 d = datetime.datetime.fromtimestamp(expire).strftime('%a %b %d %Y')
@@ -110,15 +96,12 @@ class TKL:
 
     def remove(self, localServer, data, expire=False):
         try:
-            ### Me:     :002 TKL - Z * * d74f:4000:fc7f:0:203b:eb94:657f:0
-            ### Unreal: ?
             tkltype = data[3]
             ident = data[4]
             mask = data[5]
             fullmask = '{}@{}'.format(ident, mask) if tkltype.lower() in 'gz' else mask
 
             if fullmask not in localServer.tkl[tkltype] or not fullmask:
-                ### TKL has already been removed locally.
                 return
             date = '{} {}'.format(datetime.datetime.fromtimestamp(float(localServer.tkl[tkltype][fullmask]['ctime'])).strftime('%a %b %d %Y'), datetime.datetime.fromtimestamp(float(localServer.tkl[tkltype][fullmask]['ctime'])).strftime('%H:%M:%S %Z'))
             date = date.strip()
@@ -127,7 +110,6 @@ class TKL:
             localServer.snotice('G', msg)
             del localServer.tkl[tkltype][fullmask]
             if tkltype in 'GZQ' and not expire:
-                ### Need to fix that mask shit for Q.
                 data = ':{} TKL - {} {} {}'.format(localServer.sid, tkltype, ident, mask)
                 localServer.new_sync(localServer, self, data)
         except Exception as ex:
@@ -153,7 +135,6 @@ def write(line, server=None):
         pass
 
 def match(first, second):
-    #if len(first) == 0 and len(second) == 0:
     if not first and not second:
         return True
     if len(first) > 1 and first[0] == '*' and not second:
@@ -226,26 +207,40 @@ def update_support(localServer):
     for module in localServer.modules:
         for function in [function for function in localServer.modules[module][9] if hasattr(function, 'support')]:
             for r in [r for r in function.support]:
+                server_support = False
                 if type(r) == tuple and len(r) > 1 and r[1]:
-                    localServer.server_support.append(r[0])
+                    server_support = True
                     r = r[0]
-                if r.upper() not in localServer.support:
-                    string = r.split('=')[0].upper()
-                    try:
-                        string += '='+''.join(r.split('=')[1])
-                    except:
-                        pass
+                param = None
+                support = r.split('=')[0]
+                if '=' in r:
+                    param = r.split('=')[1]
+                if support == 'CHANMODES':
+                    param = localServer.chmodes_string
+                if support not in localServer.support:
+                    string = '{}{}'.format(support, '={}'.format(param) if param else '')
                     localServer.support.append(string)
+                if server_support:
+                    localServer.server_support.append(string)
 
-    chprefix_string = ''
-    first = '('
-    second = ''
-    for key in localServer.chprefix:
-        first += key
-        second += localServer.chprefix[key]
-    first += ')'
-    chprefix_string = '{}{}'.format(first, second)
-    localServer.chprefix_string = chprefix_string
+    if hasattr(localServer, 'chprefix'):
+        chprefix_string = ''
+        first = '('
+        second = ''
+        for key in localServer.chprefix:
+            first += key
+            second += localServer.chprefix[key]
+        first += ')'
+        chprefix_string = '{}{}'.format(first, second)
+        localServer.chprefix_string = chprefix_string
+
+    if hasattr(localServer, 'channel_modes'):
+        chmodes_string = ''
+        for t in localServer.channel_modes:
+            for m in localServer.channel_modes[t]:
+                chmodes_string += m
+            chmodes_string += ','
+        localServer.chmodes_string = chmodes_string[:-1]
 
 def show_support(self, localServer):
     line = []

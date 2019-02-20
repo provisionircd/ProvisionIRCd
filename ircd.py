@@ -119,6 +119,7 @@ class Server:
                 self.validconf = False
                 self.datahandler = None
                 self.localServer = self
+                self.linkRequests = {}
 
                 self.creationtime = int(time.time())
 
@@ -309,7 +310,7 @@ class Server:
         words = list(filter(None, words))
         return words
 
-    def _send(self, data, noSquit=False):
+    def _send(self, data):
         if not data:
             return
         if self.socket:
@@ -349,6 +350,27 @@ class Server:
                     pass
                     #print(ex)
 
+                missing_mods = []
+                if recv[0].upper() == 'MODLIST':
+                    try:
+                        remote_modules
+                    except:
+                        remote_modules = []
+                    remote_modules.extend(' '.join(recv[1:])[1:].split())
+                    continue
+                try:
+                    if remote_modules:
+                        local_modules = [m.__name__ for m in localServer.modules]
+                        for m in [m for m in remote_modules if m not in local_modules]:
+                            missing_mods.append(m)
+                    if missing_mods:
+                        string = ', '.join(missing_mods)
+                        self._send(':{} ERROR :The following modules are missing on {}: {}'.format(localServer.sid, localServer.hostname, string))
+                        self.quit('Server is missing the following modules {}: {}'.format(string))
+                        return
+                except:
+                    pass
+
                 if prefix == '@':
                     # Server only.
                     for s in [s for s in localServer.servers if s != localServer and s != self and s.socket]:
@@ -377,6 +399,7 @@ class Server:
                     source = command[1:]
                     command = recv[1]
                     token = recv[1]
+
                     if command == 'BW' or command == 'BV' or command == 'SVSSNO':
                         source = list(filter(lambda u: u.uid == recv[0][1:] or u.nickname == recv[0][1:], localServer.users))
                         if not source:
@@ -406,6 +429,7 @@ class Server:
                                 callable[1](self, localServer, recvNoStrip)
                             except Exception as ex:
                                 _print('Exception in module {}: {}'.format(callable[6], ex), server=localServer)
+                                _print('Should we disconnect the server because of this issue?', server=localServer)
                         continue
                     except Exception as ex:
                         #pass
@@ -436,28 +460,33 @@ class Server:
     def __repr__(self):
         return "<Server '{}:{}'>".format('*' if not hasattr(self, 'hostname') else self.hostname, '*' if not hasattr(self, 'sid') else self.sid)
 
-    def quit(self, reason, silent=False, error=False, noSquit=False, source=None):
+    def quit(self, reason, silent=False, error=False, source=None):
         localServer = self.localServer
         _print('Server QUIT self: {}'.format(self), server=localServer)
+        self.recvbuffer = ''
         #print('Source: {}'.format(source))
         if self.uplink:
             _print('Server was uplinked to {}'.format(self.uplink), server=localServer)
         reason = reason[1:] if reason.startswith(':') else reason
-        if self.hostname in localServer.linkRequests:
-            del localServer.linkRequests[self.hostname]
         if self in localServer.introducedTo:
             localServer.introducedTo.remove(self)
 
         try:
             if self.hostname and self.eos:
                 _print('{}Lost connection to remote server {}: {}{}'.format(R, self.hostname, reason, W), server=localServer)
-                if not noSquit:
-                    localServer.new_sync(localServer, localServer, ':{} SQUIT {} :{}'.format(localServer.sid, self.hostname, reason))
+                localServer.new_sync(localServer, localServer, ':{} SQUIT {} :{}'.format(localServer.sid, self.hostname, reason))
 
             if not silent and self.hostname and self.socket:
+                if not self.eos and self not in localServer.linkrequester:
+                    _print('Surpress error message because {} is not done syncing and the link was not requested locally'.format(self), server=localServer)
+                    #return
                 localServer.snotice('s', '{} to server {}: {}'.format('Unable to connect' if not self.eos else 'Lost connection', self.hostname, reason), local=True)
-
+            if self in localServer.linkrequester:
+                del localServer.linkrequester[self]
             self.eos = False
+
+            if self.hostname in localServer.linkRequests:
+                del localServer.linkRequests[self.hostname]
 
             if self.hostname in set(localServer.pendingLinks):
                 localServer.pendingLinks.remove(self.hostname)
@@ -515,7 +544,6 @@ class Server:
                 sys.exit()
                 atexit.register(exit_handler)
 
-        self.linkRequests = {}
         from handle.handleSockets import data_handler
         self.datahandler = data_handler(self)
         self.datahandler.start()

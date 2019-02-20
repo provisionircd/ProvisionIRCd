@@ -80,11 +80,21 @@ def selfIntroduction(localServer, newServer):
             if 'link' in localServer.conf and newServer.hostname in localServer.conf['link']:
                 destPass = localServer.conf['link'][newServer.hostname]['pass']
                 newServer._send('PASS :{}'.format(destPass))
-                newServer._send('PROTOCTL NOQUIT NICKv2 CLK SJOIN SJOIN2 UMODE2 VL SJ3 TKLEXT TKLEXT2 NICKIP ESVID')
                 server_support = ' '.join(localServer.server_support)
-                newServer._send('PROTOCTL EAUTH={} {} EXTSWHOIS SID={}'.format(localServer.hostname, server_support, localServer.sid))
+                newServer._send('PROTOCTL EAUTH={} SID={} {}'.format(localServer.hostname, localServer.sid, server_support))
+                newServer._send('PROTOCTL NOQUIT NICKv2 CLK SJOIN SJOIN2 UMODE2 VL SJ3 TKLEXT TKLEXT2 NICKIP ESVID EXTSWHOIS')
                 ### :version-sid
                 version = 'P{}-{}'.format(localServer.versionnumber.replace('.', ''), localServer.sid)
+                local_modules = [m.__name__ for m in localServer.modules]
+                modlist = []
+                for entry in local_modules:
+                    totlen = len(' '.join(modlist))
+                    if totlen >= 400:
+                        newServer._send('MODLIST :{}'.format(' '.join(modlist)))
+                        modlist = []
+                    modlist.append(entry)
+                if modlist:
+                    newServer._send('MODLIST :{}'.format(' '.join(modlist)))
                 newServer._send('SERVER {} 1 :{} {}'.format(localServer.hostname, version, localServer.name))
             else:
                 newServer._send(':{} SID {} 1 {} :{}'.format(localServer.sid, localServer.hostname, localServer.sid, localServer.name))
@@ -223,16 +233,24 @@ class Link(threading.Thread):
             serv.port = self.port
             # Requesting and authing link to remote server.
             if self.origin or self.autoLink:
-                server = self.localServer if not self.origin else self.origin.server
-                server.linkrequester[serv] = {}
-                server.linkrequester[serv]['user'] = self.origin
-                server.linkrequester[serv]['name'] = self.name
+                self.localServer.linkrequester[serv] = self.origin
 
             serv._send('PASS :{}'.format(self.pswd))
             serv._send('PROTOCTL NOQUIT NICKv2 SJOIN EXTSWHOIS CLK SJOIN2 UMODE2 VL SJ3 TKLEXT TKLEXT2 NICKIP ESVID')
             server_support = ' '.join(self.localServer.server_support)
-            serv._send(':{} PROTOCTL EAUTH={} {} EXTSWHOIS SID={}'.format(self.localServer.sid, self.localServer.hostname, server_support, self.localServer.sid))
-            serv._send(':{} SERVER {} 1 :{}'.format(self.localServer.sid, self.localServer.hostname, self.localServer.name))
+            serv._send(':{} PROTOCTL EAUTH={} SID={} {}'.format(self.localServer.sid, self.localServer.hostname, self.localServer.sid, server_support))
+            ### Sending modlis.
+            local_modules = [m.__name__ for m in self.localServer.modules]
+            modlist = []
+            for entry in local_modules:
+                totlen = len(' '.join(modlist))
+                if totlen >= 400:
+                    serv._send('MODLIST :{}'.format(' '.join(modlist)))
+                    modlist = []
+                modlist.append(entry)
+            if modlist:
+                serv._send('MODLIST :{}'.format(' '.join(modlist)))
+                serv._send(':{} SERVER {} 1 :{}'.format(self.localServer.sid, self.localServer.hostname, self.localServer.name))
 
             if serv not in self.localServer.introducedTo:
                 self.localServer.introducedTo.append(serv)

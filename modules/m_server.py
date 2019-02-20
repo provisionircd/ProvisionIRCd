@@ -20,27 +20,13 @@ Y = '\033[33m' # yellow
 B = '\033[34m' # blue
 P = '\033[35m' # purple
 
-def checkSid(self, localServer, sid, hostname):
-    sid_exist = list(filter(lambda s: s.sid == sid, localServer.servers+[localServer]))
-    hostname_exist = list(filter(lambda s: s.hostname == hostname, localServer.servers+[localServer]))
-    if sid_exist or hostname_exist:
-        _print('{}NETWORK ERROR: {} {} already found on this network!{}'.format(R, 'SID' if sid_exist else 'Hostname', sid if sid_exist else hostname, W), server=localServer)
-        ip, port = self.socket.getsockname()
-        msg = 'Error connecting to server {}[{}:{}]: {} {} is already in use by a server'.format(self.hostname, ip, port, 'SID' if sid_exist else 'Hostname', sid if sid_exist else hostname)
-        if self not in localServer.linkrequester:
-            self._send('ERROR :{}'.format(msg))
-        elif localServer.linkrequester[self]['user']:
-            localServer.linkrequester[self]['user'].send('NOTICE','*** {}'.format(msg))
-        self.quit('{} {} is already in use by another server'.format('SID' if sid_exist else 'Hostname', sid if sid_exist else hostname), silent=True)
-        return
-
 @ircd.Modules.params(5)
 @ircd.Modules.req_class('Server')
 @ircd.Modules.commands('server')
 def server(self, localServer, recv):
     try:
         exists = list(filter(lambda s: s.hostname.lower() == recv[2].lower(), localServer.servers+[localServer]))
-        if exists:
+        if exists and self != exists[0]:
             _print('Server {} already exists on this network2'.format(recv[2]), server=localServer)
             #self.quit('Server already exists on this network')
             return
@@ -56,7 +42,7 @@ def server(self, localServer, recv):
             self.rawname = ' '.join(recv[3:])
             if self.name.startswith(':'):
                 self.name = self.name[1:]
-            #self.introducedBy = localServer
+
             _print('{}Hostname for {} set: {}{}'.format(G, self, self.hostname, W), server=localServer)
             _print('{}Server name for {} set: {}{}'.format(G, self, self.name, W), server=localServer)
             _print('{}Hopcount for {} set: {}{}'.format(G, self, self.hopcount, W), server=localServer)
@@ -67,10 +53,10 @@ def server(self, localServer, recv):
                 msg = 'Error connecting to server {}[{}:{}]: no matching link configuration: not found in conf'.format(self.hostname, ip, port)
                 error = 'Error connecting to server {}[{}:{}]: no matching link configuration1'.format(localServer.hostname, ip2, port2)
                 if self not in localServer.linkrequester:
-                    self._send('ERROR :{}'.format(error))
-                elif localServer.linkrequester[self]['user']:
-                    localServer.linkrequester[self]['user'].send('NOTICE', '*** {}'.format(msg))
-                self.quit('no matching link configuration1', silent=True)
+                    self._send(':{} ERROR :{}'.format(localServer.sid, error))
+                elif localServer.linkrequester[self]:
+                    localServer.linkrequester[self].send('NOTICE', '*** {}'.format(msg))
+                self.quit('no matching link configuration1')
                 return
             ### Assign the class.
             self.cls = localServer.conf['link'][self.hostname]['class']
@@ -79,9 +65,9 @@ def server(self, localServer, recv):
                 msg = 'Error connecting to server {}[{}:{}]: no matching link configuration: remote server has no class'.format(self.hostname, ip, port)
                 error = 'Error connecting to server {}[{}:{}]: no matching link configuration1'.format(localServer.hostname, ip2, port2)
                 if self not in localServer.linkrequester:
-                    self._send('ERROR :{}'.format(error))
-                elif localServer.linkrequester[self]['user']:
-                    localServer.linkrequester[self]['user'].send('NOTICE', '*** {}'.format(msg))
+                    self._send(':{} ERROR :{}'.format(localServer.sid, error))
+                elif localServer.linkrequester[self]:
+                    localServer.linkrequester[self].send('NOTICE', '*** {}'.format(msg))
                 self.quit('no matching link configuration')
                 return
             totalClasses = list(filter(lambda s: s.cls == self.cls, localServer.servers))
@@ -94,20 +80,30 @@ def server(self, localServer, recv):
                     msg = 'Error connecting to server {}[{}:{}]: no matching link configuration: wrong password'.format(self.hostname, ip, port)
                     error = 'Error connecting to server {}[{}:{}]: no matching link configuration2'.format(localServer.hostname, ip2, port2)
                     if self not in localServer.linkrequester:
-                        self._send('ERROR :{}'.format(error))
-                    elif localServer.linkrequester[self]['user']:
-                        localServer.linkrequester[self]['user'].send('NOTICE', '*** {}'.format(msg))
-                    self.quit('no matching link configuration2',silent=True)
+                        self._send(':{} ERROR :{}'.format(localServer.sid, error))
+                    elif localServer.linkrequester[self]:
+                        localServer.linkrequester[self].send('NOTICE', '*** {}'.format(msg))
+                    self.quit('no matching link configuration2')
                     return
             if not match(localServer.conf['link'][self.hostname]['incoming']['host'], ip):
                 msg = 'Error connecting to server {}[{}:{}]: no matching link configuration: incoming IP does not match'.format(self.hostname, ip,port)
                 error = 'Error connecting to server {}[{}:{}]: no matching link configuration3'.format(localServer.hostname, ip2, port2)
                 if self not in localServer.linkrequester:
-                    self._send('ERROR :{}'.format(error))
-                elif localServer.linkrequester[self]['user']:
-                    localServer.linkrequester[self]['user'].send('NOTICE', '*** {}'.format(msg))
-                self.quit('no matching link configuration3', silent=True)
+                    self._send(':{} ERROR :{}'.format(localServer.sid, error))
+                elif localServer.linkrequester[self]:
+                    localServer.linkrequester[self].send('NOTICE', '*** {}'.format(msg))
+                self.quit('no matching link configuration3')
                 return
+
+            ### Check for other missing caps.
+            if self.hostname != localServer.conf['settings']['ulines'] and self.hostname != localServer.conf['settings']['services']:
+                for cap in [cap.split('=')[0] for cap in localServer.server_support]:
+                    if cap in self.protoctl:
+                        _print('Cap {} is supported by both parties'.format(cap), server=localServer)
+                    else:
+                        self._send(':{} ERROR :Server {} is missing support for {}'.format(self.sid, self.hostname, cap))
+                        self.quit('Server {} is missing support for {}'.format(self.hostname, cap))
+                        return
 
             selfIntroduction(localServer, self)
             data = ':{} SID {} 1 {} {}'.format(localServer.sid, self.hostname, self.sid, self.name)
@@ -131,19 +127,6 @@ def server(self, localServer, recv):
             syncData(localServer, self, None)
             return
 
-            '''
-            if self in localServer.syncDone:
-                #print('{}Received SERVER command from remote server {}, but I have already synced to it.{}'.format(R, self.hostname, W))
-                return
-
-            if self in localServer.linkrequester:
-                ### This must also being triggered upon auto-link.
-                syncData(localServer, self, None)
-            else:
-                selfIntroduction(localServer, self)
-                return
-            '''
-
     except Exception as ex:
         exc_type, exc_obj, exc_tb = sys.exc_info()
         fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
@@ -157,13 +140,16 @@ def sid(self, localServer, recv):
     try:
         uplink = [s for s in localServer.servers if s.sid == recv[0][1:]]
         if not uplink:
-            self._send('ERROR :Could not find uplink for {}'.format(recv[0][1:]))
+            self._send(':{} ERROR :Could not find uplink for {}'.format(localServer.sid, recv[0][1:]))
             self.quit()
             return
         uplink = uplink[0]
         sid = recv[4]
         hostname = recv[2]
-        checkSid(self, localServer, sid, hostname)
+        for server in [server for server in localServer.servers if server.sid == sid and server != self]:
+            self._send(':{} ERROR :SID {} is already in use on that network'.format(localServer.sid, sid))
+            self.quit('SID {} is already in use on that network'.format(sid))
+            return
 
         hopcount = int(recv[3])
 

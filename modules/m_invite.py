@@ -10,6 +10,9 @@ from handle.functions import _print
 import time
 
 @ircd.Modules.params(2)
+### Types: 0 = mask, 1 = require param, 2 = optional param, 3 = no param, 4 = special user channel-mode.
+@ircd.Modules.channel_modes('i', 3, 2, 'You need to be invited to join the channel', None, None) ### ('mode', type, level, 'Mode description', class 'user' or None, prefix, 'param desc')
+@ircd.Modules.support(('INVEX', 1))
 @ircd.Modules.commands('invite')
 def invite(self, localServer, recv, override=False):
     try:

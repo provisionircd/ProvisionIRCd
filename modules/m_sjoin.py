@@ -41,9 +41,11 @@ def sjoin(self, localServer, recv):
             return
 
         #localServer.syncToServers(localServer, self, raw)
+        '''
         if not sourceServer.eos:
             ### Don't conflict with normal join.
             localServer.new_sync(localServer, sourceServer, raw)
+        ''' # Trying this shit
 
         memberlist = ' '.join(' '.join(recv).split(':')[2:]).split('&')[0].split('"')[0].split("'")[0].split()
 

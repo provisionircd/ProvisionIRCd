@@ -115,9 +115,15 @@ def HookToCore(self, callables):
                         for entry in [entry for entry in self.support if len(entry.split('=')) > 1 and entry.split('=')[0] == 'PREFIX']:
                             current_prefix = entry
                             break
-
                         #print('New prefix found. Current prefix support: {}'.format(current_prefix))
                         ### Append new prefix at the end. ok back to watching HIMYM, again.
+
+                    chmodes_string = ''
+                    for t in self.channel_modes:
+                        for m in self.channel_modes[t]:
+                            chmodes_string += m
+                        chmodes_string += ','
+                    self.chmodes_string = chmodes_string[:-1]
 
                     #_print('Hooked channel mode {} (type: {}, prefix: {}) to core'.format(m, type, prefix), server=self)
                     #_print('Mode level: {}'.format(level), server=self)

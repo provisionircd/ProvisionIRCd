@@ -48,7 +48,7 @@ channel_modes = {
                 "l": (2, "Set a channel user limit", "[number]"),
                 },
             3: {
-                "i": (2, "You need to be invited to join the channel"),
+                #"i": (2, "You need to be invited to join the channel"),
                 "m": (2, "Moderated channel, need +v or higher to talk"),
                 "n": (2, "No outside messages allowed"),
                 "j": (3, "Quits appear as parts"),
@@ -151,15 +151,9 @@ def makeMask(localServer, data):
     result = '{}!{}@{}'.format(nick, ident, host)
     return result
 
-
 oper_override = False
 def processModes(self, localServer, channel, recv, sync=True, sourceServer=None, sourceUser=None):
     try:
-        #print('processModes self: {}'.format(self))
-        #print('processModes sourceServer: {}'.format(sourceServer))
-        #print('processModes sourceUser: {}'.format(sourceUser))
-        #self = sourceUser # This should not be enabled.
-        ### sourceServer will be a class. Yes, it will. So act accordingly!
         rawModes = ' '.join(recv[1:])
         if rawModes.startswith(':'):
             rawModes = rawModes[1:]
@@ -169,7 +163,6 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
             displaySource = sourceUser.sid
             if not sourceServer.eos and sourceServer != localServer:
                 sync = False
-        ### displaySource will be used to pass along to syncToServers()
     except Exception as ex:
         exc_type, exc_obj, exc_tb = sys.exc_info()
         fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
@@ -177,10 +170,6 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
         _print(e, server=localServer)
     try:
         chstatus = localServer.chstatus
-        ##chmodes = ''.join(localServer.chmodes.split(',')[0:])+chstatus
-        ### Modes that require a parameter.
-        # paramModes = localServer.channel_modes[0]+localServer.channel_modes[1]+localServer.channel_modes[2]
-        #paramModes = localServer.chstatus+''.join(localServer.chmodes.split(',')[0])
         global tmodes, action, prevaction, param, commandQueue
         tmodes, param, commandQueue = [], [], []
         action = ''
@@ -214,14 +203,7 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
             'h': 3,
             'o': 3,
             'a': 4,
-            'q': 5,
-
-            ### Non-paramental channel modes.
-            's': 3,
-            'z': 3,
-            'N': 4,
-            'Q': 4,
-            'V': 3
+            'q': 5
         }
         for t in localServer.channel_modes:
             for m in localServer.channel_modes[t]:
@@ -421,7 +403,6 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                             channel.temp_status = {}
                         if valid_expire(t[1]):
                             timed = valid_expire(t[1])
-
                     except:
                         pass
                     user = list(filter(lambda u: u.uid == temp_user or u.nickname.lower() == temp_user.lower(), channel.users))
@@ -662,9 +643,12 @@ def mode(self, localServer, recv, override=False, handleParams=None):
         else:
             sourceServer = self.server
             sourceUser = self
-        recv = ' '.join(recv).split()
+        #recv = ' '.join(recv).split() # Why?
+
         chstatus = localServer.chstatus
         if len(recv) == 2 and recv[1][:1] in localServer.chantypes:
+            if recv[1][0] == '+':
+                return
             channel = list(filter(lambda c: c.name.lower() == recv[1].lower(), localServer.channels))
             if not channel:
                 return self.sendraw(401, '{} :No such channel'.format(recv[1]))

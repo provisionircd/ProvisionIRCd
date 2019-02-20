@@ -573,6 +573,7 @@ class User:
 
     def quit(self, reason, error=True, banmsg=None, kill=False, broadcast=None, silent=False, source=None):
         try:
+            self.recvbuffer = ''
             localServer = self.localServer if not self.socket else self.server
             sourceServer = source if source else self.server
             if not sourceServer.socket and sourceServer.uplink:
