@@ -7,5 +7,5 @@ After you editted the confs, simply run ircd.py.
 
 
 For anyone interested, there is a live version running on irc.provisionweb.org. (port 6667 plain, 6697 TLS)
-You can oper up with /oper github betatest. Keep in mind that the server may be offline at any time.
-It is merely a dev/test server.
+You can oper up with /oper github betatest. Keep in mind that the server may be off-line at any time.
+It is merely a dev/test server meant as a testing environment and the occasional playground.
