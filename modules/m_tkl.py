@@ -12,9 +12,6 @@ import os
 import sys
 from handle.functions import TKL, _print, valid_expire
 
-def init(localServer):
-    localServer.tkl = {}
-
 def makerMask(data):
     ident = data.split('@')[0]
     if ident == '':

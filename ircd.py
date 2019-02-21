@@ -133,6 +133,7 @@ class Server:
                 self.dnsblCache = {}
                 self.hostcache = {}
                 self.throttle = {}
+                self.tkl = {}
 
                 handle.handleConf.checkConf(self, None, self.confdir, self.conffile)
 
