@@ -25,7 +25,6 @@ P  = '\033[35m' # purple
 @ircd.Modules.req_class('Server')
 @ircd.Modules.commands('sjoin')
 def sjoin(self, localServer, recv):
-    sourceServer = self
     try:
         raw = ' '.join(recv)
         source = list(filter(lambda s: s.sid == recv[0][1:] or s.hostname == recv[0][1:], localServer.servers))
@@ -40,12 +39,8 @@ def sjoin(self, localServer, recv):
             self.squit('Sync error! Remote server tried to link local channels.')
             return
 
-        #localServer.syncToServers(localServer, self, raw)
-        '''
-        if not sourceServer.eos:
-            ### Don't conflict with normal join.
-            localServer.new_sync(localServer, sourceServer, raw)
-        ''' # Trying this shit
+        if not self.eos:
+            localServer.new_sync(localServer, self, raw)
 
         memberlist = ' '.join(' '.join(recv).split(':')[2:]).split('&')[0].split('"')[0].split("'")[0].split()
 
@@ -101,7 +96,7 @@ def sjoin(self, localServer, recv):
                 continue
 
             userClass = userClass[0]
-            p = {'override': True, 'sourceServer': sourceServer}
+            p = {'override': True, 'sourceServer': self}
             userClass.handle('join', channel, params=p)
             localChan = list(filter(lambda c: c.name.lower() == channel.lower(), localServer.channels))[0]
             if len(localChan.users) == 1:
@@ -189,8 +184,6 @@ def sjoin(self, localServer, recv):
             for p in giveParams:
                 data.append(p)
 
-            #processModes(self, localServer, localChan, data, sync=True, sourceServer=sourceServer, sourceUser=sourceServer)
-
         elif timestamp == localChan.creation and not source.eos:
             if modes:
                 _print('{}Equal timestamps for remote channel {} -- merging modes.{}'.format(Y, localChan.name, W), server=localServer)
@@ -244,7 +237,7 @@ def sjoin(self, localServer, recv):
                     data.append(p)
 
         if modes and data:
-            processModes(self, localServer, localChan, data, sync=True, sourceServer=sourceServer, sourceUser=sourceServer)
+            processModes(self, localServer, localChan, data, sync=True, sourceServer=self, sourceUser=self)
 
     except Exception as ex:
         exc_type, exc_obj, exc_tb = sys.exc_info()
