@@ -83,7 +83,6 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
     confLinks = []
     errors = []
     main_conf = conffile
-
     if rehash:
         user.sendraw(382, '{} :Rehashing'.format(confdir+conffile))
     try:
@@ -299,11 +298,12 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
         exc_type, exc_obj, exc_tb = sys.exc_info()
         fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
         e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        _print(e, server=localServer)
         conferr('Missing conf block: {}'.format(ex), err_conf=main_conf)
 
     except json.JSONDecodeError as ex:
-        conferr('Invalid conf format. Make sure the JSON format is correct: {}'.format(ex))
+        s = 'Invalid conf format. Make sure the JSON format is correct: {}'.format(ex)
+        _print(s, server=localServer)
+        conferr(s)
 
     except Exception as ex:
         #pass
@@ -314,7 +314,11 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
 
     if errors:
         for e in errors:
-            _print('ERROR: '+e, server=localServer)
+            s = 'ERROR: '+e
+            if localServer.running:
+                _print('ERROR: '+e, server=localServer)
+            else:
+                print(s)
             if rehash:
                 localServer.broadcast([user], 'NOTICE {} :*** [error] -- {}'.format(user.nickname, e))
         if rehash:
@@ -329,7 +333,7 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
                 ip, port = sock.getsockname()
                 currently_listening.append(str(port))
             except Exception as ex:
-                print(ex)
+                _print(ex, server=localServer)
         for port in tempconf['listen']:
             new_ports.append(port)
 

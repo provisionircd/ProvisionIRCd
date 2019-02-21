@@ -101,7 +101,7 @@ class Server:
         if not serverLink:
             try:
                 self.forked = forked
-                self.running = True
+                self.running = False
                 self.listen_socks = {}
                 self.bannedList = []
                 self.rootdir = dir_path
@@ -141,6 +141,7 @@ class Server:
                     exit()
                     return
 
+                self.running = True
                 self.hostname = self.conf['me']['server']
                 self.name = self.conf['me']['name']
                 self.sid = self.conf['me']['sid']
