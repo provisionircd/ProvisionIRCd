@@ -62,9 +62,6 @@ Y = '\033[33m' # yellow
 B = '\033[34m' # blue
 P = '\033[35m' # purple
 
-#localServer = ''
-#print('localServer set as: {}'.format(localServer))
-
 class Channel:
     def __init__(self, name, params=None):
         self.name = name
@@ -363,10 +360,11 @@ class Server:
                         local_modules = [m.__name__ for m in localServer.modules]
                         for m in [m for m in remote_modules if m not in local_modules]:
                             missing_mods.append(m)
+                        ### Remote server is missing modules.
                     if missing_mods:
                         string = ', '.join(missing_mods)
-                        self._send(':{} ERROR :The following modules are missing on {}: {}'.format(localServer.sid, localServer.hostname, string))
-                        self.quit('Server is missing the following modules {}: {}'.format(string))
+                        self._send(':{} ERROR :they are missing modules: {}'.format(localServer.sid, string))
+                        self.quit('we are missing modules: {}'.format(string))
                         return
                 except:
                     pass
@@ -462,7 +460,7 @@ class Server:
 
     def quit(self, reason, silent=False, error=False, source=None):
         localServer = self.localServer
-        _print('Server QUIT self: {}'.format(self), server=localServer)
+        _print('Server QUIT self: {} :: reason: {}'.format(self, reason), server=localServer)
         self.recvbuffer = ''
         #print('Source: {}'.format(source))
         if self.uplink:
@@ -478,9 +476,12 @@ class Server:
 
             if not silent and self.hostname and self.socket:
                 if not self.eos and self not in localServer.linkrequester:
+                    msg = 'Link denied for server {}: {}'.format(self.hostname, reason)
                     _print('Surpress error message because {} is not done syncing and the link was not requested locally'.format(self), server=localServer)
                     #return
-                localServer.snotice('s', '{} to server {}: {}'.format('Unable to connect' if not self.eos else 'Lost connection', self.hostname, reason), local=True)
+                else:
+                    msg = '{} to server {}: {}'.format('Unable to connect' if not self.eos else 'Lost connection', self.hostname, reason)
+                localServer.snotice('s', msg, local=True)
             if self in localServer.linkrequester:
                 del localServer.linkrequester[self]
             self.eos = False

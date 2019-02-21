@@ -13,7 +13,6 @@ from handle.functions import _print
 
 def connectTo(self, localServer, name, autoLink=False):
     try:
-        localServer.pendingLinks.append(name.lower())
         host, port = localServer.conf['link'][name]['outgoing']['host'], localServer.conf['link'][name]['outgoing']['port']
         if host in ['127.0.0.1', '0.0.0.0', 'localhost'] and (port in localServer.conf['listen'] and localServer.conf['listen'][str(port)]['options'] == 'servers'):
             return
@@ -52,14 +51,14 @@ def connect(self, localServer, recv):
         self.send('NOTICE', '*** Server {} is not configured for linking.'.format(name))
         return
     server = list(filter(lambda s: s.hostname.lower() == name.lower(), localServer.servers))
+
     if server:
         server = server[0]
         if not server.eos and name.lower() in localServer.pendingLinks:
-            self.send('NOTICE', '*** Link to {} is currently being processed.'.format(name))
-            return
+            return localServer.notice(self, '*** Link to {} is currently being processed.'.format(name))
 
     if [server for server in set(localServer.servers) if server.hostname == name and server.eos]:
         self.send('NOTICE', '*** Already linked to {}.'.format(name))
         return
-
+    localServer.pendingLinks.append(name.lower())
     connectTo(self, localServer, name)

@@ -47,12 +47,12 @@ def protoctl(self, localServer, recv):
                     local_modes = localServer.chmodes_string.split(',')
                     missing_modes = []
                     for n in localServer.channel_modes:
-                        for m in [m for m in local_modes[n] if m not in remote_modes[n]]:
+                        for m in [m for m in remote_modes[n] if m not in local_modes[n]]:
                             missing_modes.append(m)
                             ### Deny link because mismatched modes.
                     if missing_modes:
-                        self._send(':{} ERROR :Server {} is missing the following channel modes: {}'.format(self.sid, self.hostname, ', '.join(missing_modes)))
-                        self.quit('Server is missing the following channel modes: {}'.format(', '.join(missing_modes)))
+                        self._send(':{} ERROR :they are missing channel modes: {}'.format(self.sid, ', '.join(missing_modes)))
+                        self.quit('we are missing channel modes: {}'.format(', '.join(missing_modes)))
                         return
 
             except Exception as ex:
