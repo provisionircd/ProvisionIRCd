@@ -481,6 +481,9 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                     elif m  == 'L':
                         channel.redirect = None
 
+                    elif m == 'P' and len(channel.users) == 0:
+                        localServer.channels.remove(channel)
+
                     channel.modes = channel.modes.replace(m, '')
                     tmodes.append(m)
 
