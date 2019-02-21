@@ -4,6 +4,7 @@ import os
 import sys
 
 import handle.handleModules as Modules
+from handle.functions import update_support
 
 path = os.path.abspath(__file__)
 dir_path = os.path.dirname(path)
@@ -27,7 +28,6 @@ def cmd_RELOADMOD(self, localServer, recv):
             modname = '/'.join(recv[1].split('/')[1:])
         except:
             pass
-        # file = file.split('.py')[:1][0]
         path_string = '{}'.format(rootpath)
         for x in range(0, recv[1].count('/')):
             path_string += '.{}'.format(recv[1].split('/')[x+1])
@@ -38,7 +38,7 @@ def cmd_RELOADMOD(self, localServer, recv):
         found_module = [module for module in localServer.modules if module.__name__ == modname]
         module = importlib.import_module(m)
         imp.reload(module)
-        if modname:
+        if modname and rootpath != 'cmds':
             if found_module:
                 module = found_module[0]
                 ### First, unload.
@@ -51,24 +51,7 @@ def cmd_RELOADMOD(self, localServer, recv):
                 #path = p+'/'+rootpath+'/'+modname+'.py'
                 Modules.LoadModule(localServer, modname, path)
 
-            already_seen = []
-            for m in list(localServer.commands):
-                pass
-                #if m[0] == 'modules':
-                #    localServer.commands.remove(m)
-
-            #for x in range(0, 10):
-            #    print('-')
-            for cmd in list(localServer.commands):
-                if cmd[0] in already_seen:
-                    #print('Found duplicate command: {}'.format(cmd[0]))
-                    #localServer.commands.remove(cmd)
-                    continue
-                already_seen.append(cmd[0])
-        jointhread = False
         if m == 'ircd':
-            #localServer.commands = []
-            #localServer.modules = {}
             try:
 
                 self.send('NOTICE', '*** Requesting core reload; also reloading essential handles.', direct=True)
@@ -83,21 +66,14 @@ def cmd_RELOADMOD(self, localServer, recv):
                 for c in cores:
                     module = importlib.import_module(c)
                     imp.reload(module)
-                #current = localServer.datahandler
-                #from handle.handleSockets import data_handler
-                #localServer.datahandler = data_handler(localServer)
-                #localServer.datahandler.start()
-                #jointhread = True
 
             except Exception as ex:
                 exc_type, exc_obj, exc_tb = sys.exc_info()
                 fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
                 e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
                 print(e)
+        update_support(localServer)
         self.send('NOTICE', '*** Module \'{}\' reloaded.'.format(recv[1].split('.py')[0]), direct=True)
-        #if jointhread:
-        #    current.running = False
-        #    localServer.datahandler.join()
 
     except Exception as ex:
         #exc_type, exc_obj, exc_tb = sys.exc_info()

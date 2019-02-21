@@ -20,10 +20,13 @@ def cap(self, localServer, recv):
 
     elif recv[1].lower() == 'req':
         self.sends_cap = True
-        cap = recv[2][1:].lower() if recv[2].startswith(':') else recv[2].lower()
-        if cap.lower() in localServer.caps and cap not in self.caplist:
-            self.caplist.append(cap)
-            self._send(':{} CAP {} ACK :{}'.format(localServer.hostname, self.nickname, cap))
+        caps = ' '.join(recv[2:])[1:].lower() if recv[2].startswith(':') else ' '.join(recv[2:]).lower()
+        print('caps: {}'.format(caps))
+        for cap in caps.split():
+            print(cap)
+            if cap.lower() in localServer.caps and cap not in self.caplist:
+                self.caplist.append(cap)
+                self._send(':{} CAP {} ACK :{}'.format(localServer.hostname, self.nickname, cap))
     elif recv[1].lower() == 'end':
         self.cap_end = True
         if not self.registered and self.nickname != '*' and self.ident:

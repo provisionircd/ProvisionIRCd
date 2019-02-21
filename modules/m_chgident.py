@@ -13,8 +13,8 @@ import sys
 
 @ircd.Modules.params(2)
 @ircd.Modules.req_modes('o')
-@ircd.Modules.commands('chghost')
-def chghost(self, localServer, recv):
+@ircd.Modules.commands('chgident')
+def chgident(self, localServer, recv):
     try:
         if type(self).__name__ == 'Server':
             source = self
@@ -30,15 +30,15 @@ def chghost(self, localServer, recv):
         if not target:
             return self.sendraw(401, '{} :No such nick'.format(recv[1]))
         target = target[0]
-        host = str(recv[2][:64]).strip()
+        ident = str(recv[2][:12]).strip()
         valid = 'abcdefghijklmnopqrstuvwxyz0123456789.-'
-        for c in str(host):
+        for c in str(ident):
             if c.lower() not in valid:
-                host = host.replace(c, '')
-        if host == target.cloakhost:
+                ident = ident.replace(c, '')
+        if ident == target.ident:
             return
-        target.setinfo(host, t='host', source=source)
-        localServer.snotice('s', '*** {} ({}@{}) used CHGHOST to change the host of {} to "{}"'.format(self.nickname, self.ident, self.hostname, target.nickname, target.cloakhost))
+        target.setinfo(ident, t='ident', source=source)
+        localServer.snotice('s', '*** {} ({}@{}) used CHGIDENT to change the ident of {} to "{}"'.format(self.nickname, self.ident, self.hostname, target.nickname, target.ident))
 
     except Exception as ex:
         exc_type, exc_obj, exc_tb = sys.exc_info()

@@ -167,6 +167,7 @@ def LoadModule(self, name, path):
             HookToCore(self, callables)
             self.modules[module] = callables
             name = module.__name__
+            update_support(self)
             #_print('Loaded {}'.format(name), server=self)
     except Exception as ex:
         exc_type, exc_obj, exc_tb = sys.exc_info()
