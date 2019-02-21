@@ -703,5 +703,11 @@ if __name__ == "__main__":
         if int(version) < 36:
             print('Python version 3.6 or higher is recommended due to better memory management.')
             time.sleep(1)
-        S = Server(conffile=conffile, forked=fork)
-        S.run()
+        try:
+            S = Server(conffile=conffile, forked=fork)
+            S.run()
+        except Exception as ex:
+            exc_type, exc_obj, exc_tb = sys.exc_info()
+            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+            e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
+            print(e)
