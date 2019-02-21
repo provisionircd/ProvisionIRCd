@@ -54,12 +54,30 @@ def protoctl(self, localServer, recv):
                         self._send(':{} ERROR :they are missing channel modes: {}'.format(self.sid, ', '.join(missing_modes)))
                         self.quit('we are missing channel modes: {}'.format(', '.join(missing_modes)))
                         return
+                elif cap == 'EXTBAN':
+                    remote_prefix = param[0]
+                    remote_ban_types = param.split(',')[1]
+                    local = [e for e in localServer.support if e.split('=')[0] == cap]
+                    local_prefix = local[0].split('=')[1][0]
+                    if remote_prefix != local_prefix:
+                        self._send(':{} ERROR :extban prefixes are not the same. We have: {} but they have: {}'.format(self.sid, remote_prefix, local_prefix))
+                        self.quit('extban prefixes are not the same. We have: {} but they have: {}'.format(local_prefix, remote_prefix))
+                        return
+                    local_ban_types = [e.split(',')[1] for e in localServer.support if e.split('=')[0] == cap][0]
+                    missing_ext_types = []
+                    for m in [m for m in remote_ban_types if m not in local_ban_types]:
+                        missing_ext_types.append(m)
+                    if missing_ext_types:
+                        self._send(':{} ERROR :they are missing ext bans: {}'.format(self.sid, ', '.join(missing_ext_types)))
+                        self.quit('we are missing ext bans: {}'.format(', '.join(missing_ext_types)))
+                        return
 
             except Exception as ex:
                 exc_type, exc_obj, exc_tb = sys.exc_info()
                 fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
                 e = '{}EXCEPTION: {} in file {} line {}: {}{}'.format(R, exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj, W)
                 _print(e, server=localServer)
+                self.quit(e)
 
             _print('{}Added PROTOCTL support for {} for server {}{}'.format(P, p, self, W), server=localServer)
 

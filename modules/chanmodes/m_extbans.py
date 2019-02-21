@@ -18,6 +18,7 @@ from handle.functions import _print, match
 rt = None
 
 ext_bans = 'TtCOa'
+prefix = '^'
 
 def checkExpiredBans(localServer):
     remove_bans = {}
@@ -71,7 +72,7 @@ def unload(self):
     global rt
     rt.stop()
 
-@ircd.Modules.support(('EXTBAN=~,'+str(ext_bans), True)) ### (support string, boolean if support must be sent to other servers)
+@ircd.Modules.support(('EXTBAN='+prefix+','+str(ext_bans), True)) ### (support string, boolean if support must be sent to other servers)
 @ircd.Modules.events('mode')
 def extbans(*args): ### Params: self, localServer, recv, tmodes, param, commandQueue
     if len(args) < 5:
@@ -106,7 +107,7 @@ def extbans(*args): ### Params: self, localServer, recv, tmodes, param, commandQ
             except:
                 paramcount += 1
                 continue
-            if rawParam[0] != '~':
+            if rawParam[0] != prefix:
                 paramcount += 1
                 continue
             if rawParam[1] not in ext_bans:

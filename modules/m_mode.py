@@ -189,6 +189,12 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
 
         keyset, limitset, redirectset = False, False, False
         global oper_override
+        local = [e for e in localServer.support if e.split('=')[0] == 'EXTBAN']
+        if local:
+            extban_prefix = local[0].split('=')[1][0]
+        else:
+            local = None
+
         ### Setting some mode level shit.
         ### +v = 1
         ### +h = 2
@@ -322,7 +328,7 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                     except:
                         paramcount += 1
                         continue
-                    if rawParam.startswith('~'): ### Save that for extbans.
+                    if rawParam.startswith(extban_prefix):
                         paramcount += 1
                         continue
                     mask = makeMask(localServer, rawParam)
