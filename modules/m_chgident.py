@@ -34,8 +34,8 @@ def chgident(self, localServer, recv):
         valid = 'abcdefghijklmnopqrstuvwxyz0123456789.-'
         for c in str(ident):
             if c.lower() not in valid:
-                ident = ident.replace(c, '')
-        if ident == target.ident:
+                ident = ident.replace(c, '').rstrip()
+        if ident == target.ident or not ident:
             return
         target.setinfo(ident, t='ident', source=source)
         localServer.snotice('s', '*** {} ({}@{}) used CHGIDENT to change the ident of {} to "{}"'.format(self.nickname, self.ident, self.hostname, target.nickname, target.ident))

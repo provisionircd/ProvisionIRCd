@@ -34,7 +34,7 @@ def hidejoin(self, localServer, channel):
     ### NoneType issues? Always make sure to return a tuple!
     overrides = []
     try:
-        if 'D' not in channel.modes or self.server != localServer:
+        if 'D' not in channel.modes:
             return (True, None, overrides)
         if self not in joins_showed[channel]:
             joins_showed[channel][self] = {}
@@ -47,6 +47,7 @@ def hidejoin(self, localServer, channel):
         broadcast = [user for user in channel.users if user.chlevel(channel) > 1]+[self]
         for user in broadcast:
             joins_showed[channel][self][user] = True
+        print('returning {}'.format(broadcast))
         return (True, broadcast, overrides) ### Bool 1: is the join allowed? Param 2: list of users to broadcast the join to.
 
     except Exception as ex:

@@ -35,7 +35,7 @@ def chghost(self, localServer, recv):
         for c in str(host):
             if c.lower() not in valid:
                 host = host.replace(c, '')
-        if host == target.cloakhost:
+        if host == target.cloakhost or not host:
             return
         target.setinfo(host, t='host', source=source)
         localServer.snotice('s', '*** {} ({}@{}) used CHGHOST to change the host of {} to "{}"'.format(self.nickname, self.ident, self.hostname, target.nickname, target.cloakhost))
