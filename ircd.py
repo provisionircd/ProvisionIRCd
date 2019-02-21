@@ -448,6 +448,7 @@ class Server:
                 fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
                 e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
                 _print(e, server=localServer)
+                self.quit(e)
 
     def chlevel(self, channel):
         return 10000

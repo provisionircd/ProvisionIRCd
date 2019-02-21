@@ -16,7 +16,7 @@ def cmd_pass(self, localServer, recv):
     if type(self).__name__ == 'User' and self.registered:
         return self.sendraw(462, ':You may not reregister')
 
-    self.linkpass = recv[-1][1:]
+    self.linkpass = recv[2][1:]
     _print('Password for {} set: {}'.format(self, self.linkpass), server=localServer)
     ip, port = self.socket.getpeername()
     ip2, port2 = self.socket.getsockname()

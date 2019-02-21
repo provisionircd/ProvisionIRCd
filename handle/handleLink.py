@@ -74,32 +74,33 @@ def syncChannels(localServer, newServer):
             data = ':{} TOPIC {} {} {} :{}'.format(localServer.sid, c.name, c.topic_author, c.topic_time, c.topic)
             newServer._send(data)
 
-def selfIntroduction(localServer, newServer):
+def selfIntroduction(localServer, newServer, outgoing=False):
     try:
         if newServer not in localServer.introducedTo:
-            if 'link' in localServer.conf and newServer.hostname in localServer.conf['link']:
+            if outgoing:
                 destPass = localServer.conf['link'][newServer.hostname]['pass']
-                newServer._send('PASS :{}'.format(destPass))
-                server_support = ' '.join(localServer.server_support)
-                newServer._send('PROTOCTL EAUTH={} SID={} {}'.format(localServer.hostname, localServer.sid, server_support))
-                newServer._send('PROTOCTL NOQUIT NICKv2 CLK SJOIN SJOIN2 UMODE2 VL SJ3 TKLEXT TKLEXT2 NICKIP ESVID EXTSWHOIS')
-                ### :version-sid
-                version = 'P{}-{}'.format(localServer.versionnumber.replace('.', ''), localServer.sid)
-                local_modules = [m.__name__ for m in localServer.modules]
-                modlist = []
-                for entry in local_modules:
-                    totlen = len(' '.join(modlist))
-                    if totlen >= 400:
-                        newServer._send('MODLIST :{}'.format(' '.join(modlist)))
-                        modlist = []
-                    modlist.append(entry)
-                if modlist:
+                newServer._send(':{} PASS :{}'.format(localServer.sid, destPass))
+            server_support = ' '.join(localServer.server_support)
+            newServer._send(':{} PROTOCTL EAUTH={} SID={} {}'.format(localServer.sid, localServer.hostname, localServer.sid, server_support))
+            newServer._send(':{} PROTOCTL NOQUIT NICKv2 CLK SJOIN SJOIN2 UMODE2 VL SJ3 TKLEXT TKLEXT2 NICKIP ESVID EXTSWHOIS'.format(localServer.sid))
+            ### :version-sid
+            version = 'P{}-{}'.format(localServer.versionnumber.replace('.', ''), localServer.sid)
+            local_modules = [m.__name__ for m in localServer.modules]
+            modlist = []
+            for entry in local_modules:
+                totlen = len(' '.join(modlist))
+                if totlen >= 400:
                     newServer._send('MODLIST :{}'.format(' '.join(modlist)))
-                newServer._send('SERVER {} 1 :{} {}'.format(localServer.hostname, version, localServer.name))
-            else:
-                newServer._send(':{} SID {} 1 {} :{}'.format(localServer.sid, localServer.hostname, localServer.sid, localServer.name))
-                _print('{}Introduced myself to {}. Expecting remote sync sequence...{}'.format(Y, newServer.hostname, W))
-            localServer.introducedTo.append(newServer)
+                    modlist = []
+                modlist.append(entry)
+            if modlist:
+                newServer._send('MODLIST :{}'.format(' '.join(modlist)))
+
+            newServer._send('SERVER {} 1 :{} {}'.format(localServer.hostname, version, localServer.name))
+            #else:
+            #    newServer._send(':{} SID {} 1 {} :{}'.format(localServer.sid, localServer.hostname, localServer.sid, localServer.name))
+            _print('{}Introduced myself to {}. Expecting remote sync sequence...{}'.format(Y, newServer.hostname, W))
+        localServer.introducedTo.append(newServer)
 
     except Exception as ex:
         exc_type, exc_obj, exc_tb = sys.exc_info()
@@ -235,10 +236,12 @@ class Link(threading.Thread):
             if self.origin or self.autoLink:
                 self.localServer.linkrequester[serv] = self.origin
 
-            serv._send('PASS :{}'.format(self.pswd))
-            serv._send('PROTOCTL NOQUIT NICKv2 SJOIN EXTSWHOIS CLK SJOIN2 UMODE2 VL SJ3 TKLEXT TKLEXT2 NICKIP ESVID')
+            selfIntroduction(self.localServer, serv, outgoing=True)
+            '''
+            serv._send(':{} PASS :{}'.format(self.localServer.sid, self.pswd))
             server_support = ' '.join(self.localServer.server_support)
             serv._send(':{} PROTOCTL EAUTH={} SID={} {}'.format(self.localServer.sid, self.localServer.hostname, self.localServer.sid, server_support))
+            serv._send(':{} PROTOCTL NOQUIT NICKv2 SJOIN EXTSWHOIS CLK SJOIN2 UMODE2 VL SJ3 TKLEXT TKLEXT2 NICKIP ESVID'.format(self.localServer.sid))
             ### Sending modlis.
             local_modules = [m.__name__ for m in self.localServer.modules]
             modlist = []
@@ -251,7 +254,7 @@ class Link(threading.Thread):
             if modlist:
                 serv._send('MODLIST :{}'.format(' '.join(modlist)))
                 serv._send(':{} SERVER {} 1 :{}'.format(self.localServer.sid, self.localServer.hostname, self.localServer.name))
-
+            '''
             if serv not in self.localServer.introducedTo:
                 self.localServer.introducedTo.append(serv)
 
@@ -262,7 +265,7 @@ class Link(threading.Thread):
             _print(e, server=self.localServer)
 
             if serv:
-                serv.quit('Auto connect timed out')
+                serv.quit(str(ex))
             if self.origin:
                 self.origin.send('NOTICE', '*** Error connecting to server {}[{}:{}]: {}'.format(self.name, self.host, self.port, ex))
             if self.is_ssl:

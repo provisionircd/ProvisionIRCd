@@ -26,17 +26,17 @@ def protoctl(self, localServer, recv):
     if not hasattr(self, 'protoctl'):
         self.protoctl = []
     try:
-        for p in [p for p in recv[1:] if p not in self.protoctl]:
+        for p in [p for p in recv[2:] if p not in self.protoctl]:
             try:
                 cap = p.split('=')[0]
                 param = None
                 self.protoctl.append(cap)
                 if '=' in p:
                     param = p.split('=')[1]
-                if cap == 'EAUTH':
+                if cap == 'EAUTH' and param:
                     self.hostname = param.split(',')[0]
                     _print('Hostname set from EAUTH: {}'.format(self.hostname), server=localServer)
-                elif cap == 'SID':
+                elif cap == 'SID' and param:
                     for server in [server for server in localServer.servers if server.sid == param and server != self]:
                         self._send(':{} ERROR :SID {} is already in use on that network'.format(localServer.sid, param))
                         self.quit('SID {} is already in use on that network'.format(param))
