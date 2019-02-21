@@ -97,7 +97,7 @@ def kick(self, localServer, recv, override=False):
         channel.users.remove(user)
         channel.usermodes.pop(user)
 
-        if len(channel.users) == 0:
+        if len(channel.users) == 0 and 'P' not in channel.modes:
             localServer.channels.remove(channel)
 
         localServer.new_sync(localServer, sourceServer, ':{} KICK {} {} :{}'.format(sourceID, channel.name, user.nickname, reason))

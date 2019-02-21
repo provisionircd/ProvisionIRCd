@@ -270,12 +270,13 @@ def part(self, localServer, recv, reason=None):
                 except Exception as ex:
                     _print(ex, server=localServer)
 
+
             self.channels.remove(channel)
             channel.usermodes.pop(self)
             channel.users.remove(self)
             if type(broadcastpart) != list:
                 broadcastpart = channel.users+[self]
-            if len(channel.users) == 0:
+            if len(channel.users) == 0 and 'P' not in channel.modes:
                 localServer.channels.remove(channel)
 
             self.broadcast(broadcastpart, 'PART {} {}'.format(channel.name, reason))

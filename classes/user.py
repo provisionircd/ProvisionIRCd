@@ -634,7 +634,7 @@ class User:
             for channel in list(self.channels):
                 channel.users.remove(self)
                 channel.usermodes.pop(self)
-                if len(channel.users) == 0:
+                if len(channel.users) == 0 and 'P' not in channel.modes:
                     localServer.channels.remove(channel)
                 self.channels.remove(channel)
 

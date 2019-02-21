@@ -285,7 +285,7 @@ def IPtoBase64(ip):
         s = ''
         for g in ip:
             s += "%X" % int(g)
-        result = binascii.unhexlify(s.encode('utf-8'))
+        result = binascii.unhexlify(s.rstrip().encode('utf-8'))
         binip = base64.b64encode(result)
         binip = binip.decode()
         return binip

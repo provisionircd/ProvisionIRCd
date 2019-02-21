@@ -60,6 +60,7 @@ channel_modes = {
                 "C": (2, "CTCPs are not allowed in the channel"),
                 "N": (4, "Nickchanges are not allowed in the channel"),
                 "O": (6, "Only IRCops can join"),
+                "P": (6, "Permanent channel"),
                 "Q": (4, "No kicks allowed"),
                 "R": (4, "You must be registered to join the channel"),
                 "T": (2, "Notices are not allowed in the channel"),
