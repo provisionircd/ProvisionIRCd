@@ -4,3 +4,8 @@ Not to be confused with the deprecated mSL version I wrote years ago.
 
 Edit conf/ircd.example.conf and save it as conf/ircd.conf.
 After you editted the confs, simply run ircd.py.
+
+
+For anyone interested, there is a live version running on irc.provisionweb.org. (port 6667 plain, 6697 TLS)
+You can oper up with /oper github betatest. Keep in mind that the server may be offline at any time.
+It is merely a dev/test server.
