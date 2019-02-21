@@ -12,6 +12,8 @@ import sys
 
 chmode = 'D'
 
+from handle.functions import _print
+
 parts_showed = {}
 joins_showed = {}
 
@@ -47,14 +49,13 @@ def hidejoin(self, localServer, channel):
         broadcast = [user for user in channel.users if user.chlevel(channel) > 1]+[self]
         for user in broadcast:
             joins_showed[channel][self][user] = True
-        print('returning {}'.format(broadcast))
         return (True, broadcast, overrides) ### Bool 1: is the join allowed? Param 2: list of users to broadcast the join to.
 
     except Exception as ex:
         exc_type, exc_obj, exc_tb = sys.exc_info()
         fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
         e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        print(e)
+        _print(e, server=localServer)
 
 @ircd.Modules.events('part')
 def hidepart(self, localServer, channel):
@@ -72,7 +73,7 @@ def hidepart(self, localServer, channel):
         exc_type, exc_obj, exc_tb = sys.exc_info()
         fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
         e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        print(e)
+        _print(e, server=localServer)
 
 @ircd.Modules.events('quit')
 def hidequit(self, localServer, reason):
@@ -91,7 +92,7 @@ def hidequit(self, localServer, reason):
         exc_type, exc_obj, exc_tb = sys.exc_info()
         fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
         e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        print(e)
+        _print(e, server=localServer)
 
 @ircd.Modules.events('mode')
 def unsetmode(*args):
@@ -105,7 +106,6 @@ def unsetmode(*args):
         channel = channel[0]
         if not hasattr(channel, 'delayjoins') or not channel.delayjoins:
             channel.delayjoins = []
-
         paramcount = 0
         action = ''
         for m in recv[1]:
@@ -127,7 +127,7 @@ def unsetmode(*args):
             if action in '+-' and 'D' in channel.modes and m in localServer.chstatus:
                 try:
                     p = recv[2:][paramcount].split(':')[0]
-                except Exception as ex:
+                except IndexError:
                     paramcount += 1
                     continue
 
@@ -149,13 +149,12 @@ def unsetmode(*args):
                             continue
                         if user.chlevel(channel) >= 2:
                             show_joins(delayed_user, channel, user)
-            paramcount += 1
 
     except Exception as ex:
         exc_type, exc_obj, exc_tb = sys.exc_info()
         fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
         e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        print(e)
+        _print(e, server=localServer)
 
 def show_joins(delayed_user, channel, user=None):
     if delayed_user not in joins_showed[channel]:
