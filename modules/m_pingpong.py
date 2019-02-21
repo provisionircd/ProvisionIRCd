@@ -17,32 +17,14 @@ from handle.functions import _print
 @ircd.Modules.params(1)
 @ircd.Modules.commands('ping')
 def ping(self, localServer, recv):
+    ### [':00B', 'PING', 'services.dev.provisionweb.org', 'dev.provisionweb.org']
     try:
         if type(self).__name__ == 'Server':
-            #source = self
-            if len(recv) == 2:
-                #print('This should never happen')
-                dest = list(filter(lambda s: s.sid == recv[1][1:] or s.hostname ==recv[1][1:], localServer.servers))[0].hostname
-                data = ':{} PONG {}'.format(localServer.sid,dest.hostname)
-                self._send(data)
-                return
-
-            dest = list(filter(lambda s: s.sid == recv[3] or s.hostname == recv[3], localServer.servers))
+            dest = list(filter(lambda s: s.sid == recv[3] or s.hostname == recv[3], localServer.servers+[localServer]))
             if not dest:
-                dest = localServer
-            else:
-                dest = dest[0]
-
-            if self not in dest.replyPing:
-                ### dest.eos will NOT work! So stop trying.
-                _print('Server {} is not done syncing to {} yet, not replying to PING...'.format(dest.hostname, self.hostname), server=localServer)
-                #if self not in localServer.syncDone:
-                    #werequest = False if self not in localServer.linkrequester else True # ???
-                    #_print('syncData() called from PING command... but why?', server=localServer)
-                    #syncData(localServer, self, serverIntroducer=None, selfRequest=False)
+                _print('Server {} requested a PING to unknown server {}'.format(self, recv[3]))
                 return
-
-            data = ':{} PONG {} {}'.format(dest.sid, dest.hostname,recv[2])
+            data = ':{} PONG {} {}'.format(dest[0].sid, dest[0].hostname, recv[2])
             self._send(data)
 
         else:
@@ -59,6 +41,5 @@ def ping(self, localServer, recv):
 def pong(self, localServer, recv):
     if type(self).__name__ == 'Server':
         ### Sent: :00B PONG services.dev.provisionweb.org dev.provisionweb.org
-        #print('PONG received for {}, ping reset.'.format(recv[0][1:]))
         source = list(filter(lambda s: s.sid == recv[0][1:] or s.hostname == recv[0][1:], localServer.servers))[0]
         source.ping = int(time.time())

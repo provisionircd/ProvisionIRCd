@@ -70,7 +70,7 @@ def cmdnick(self, localServer, recv, override=False, sanick=False):
 
         if 'Q' in localServer.tkl and not override:
             for entry in localServer.tkl['Q']:
-                if match(entry.lower(), nick.lower()):
+                if match(entry.split('@')[1].lower(), nick.lower()):
                     self.sendraw(432, '{} :Erroneous nickname ({})'.format(nick, localServer.tkl['Q'][entry]['reason']))
                     msg = '*** Q:Line Rejection -- Forbidden nick {} from client {} {}'.format(nick, self.ip, '[Current nick: {}]'.format(self.nickname) if self.nickname != '*' else '')
                     localServer.snotice('Q', msg)
@@ -93,7 +93,7 @@ def cmdnick(self, localServer, recv, override=False, sanick=False):
                 msg = '*** {} ({}@{}) has changed their nickname to {}'.format(self.nickname, self.ident, self.hostname, nick)
                 self.server.snotice('N', msg)
 
-            if sanick:
+            if sanick and type(sanick).__name__ == 'User':
                 snomsg = '*** {} ({}@{}) used SANICK to change nickname {} to {}'.format(sanick.nickname, sanick.ident, sanick.hostname, self.nickname, nick)
                 localServer.snotice('S', snomsg)
 

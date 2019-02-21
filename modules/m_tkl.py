@@ -72,7 +72,7 @@ def zline(self, localServer, recv):
             else:
                 expire = int(time.time()) + valid_expire(recv[1].replace('+', ''))
 
-        if len(recv[2].replace('*','')) <= 5 and ('@' in recv[2] or '*' in recv[2]):
+        if len(recv[2].replace('*', '')) <= 5 and ('@' in recv[2] or '*' in recv[2]):
             self.server.broadcast([self], 'NOTICE {} :*** Notice -- IP range is too small'.format(self.nickname))
             return
 

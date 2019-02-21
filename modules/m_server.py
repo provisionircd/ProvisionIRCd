@@ -31,8 +31,6 @@ def server(self, localServer, recv):
             #self.quit('Server already exists on this network')
             return
 
-        ### To accept additional servers, check to see if source server is already linked.
-        ### Servers introduced by the source do not require authentication.
         if not self.linkAccept and not self.eos:
             self.linkAccept = True
             tempName = ' '.join(recv).split(':')[-2]
@@ -58,7 +56,7 @@ def server(self, localServer, recv):
                     localServer.linkrequester[self].send('NOTICE', '*** {}'.format(msg))
                 self.quit('no matching link configuration1')
                 return
-            ### Assign the class.
+
             self.cls = localServer.conf['link'][self.hostname]['class']
             _print('{}Class: {}{}'.format(G, self.cls, W), server=localServer)
             if not self.cls:
@@ -95,8 +93,7 @@ def server(self, localServer, recv):
                 self.quit('no matching link configuration3')
                 return
 
-            ### Check for other missing caps.
-            if self.hostname != localServer.conf['settings']['ulines'] and self.hostname != localServer.conf['settings']['services']:
+            if self.hostname not in localServer.conf['settings']['ulines']:
                 for cap in [cap.split('=')[0] for cap in localServer.server_support]:
                     if cap in self.protoctl:
                         _print('Cap {} is supported by both parties'.format(cap), server=localServer)
@@ -108,22 +105,18 @@ def server(self, localServer, recv):
             selfIntroduction(localServer, self)
             data = ':{} SID {} 1 {} {}'.format(localServer.sid, self.hostname, self.sid, self.name)
             localServer.new_sync(localServer, self, data)
-            #selfIntroduction(localServer, self)
-            ###
-            for server in [server for server in localServer.servers if server.socket and server != self]:
-                hopcount = int(server.hopcount) + 1
+            for server in [server for server in localServer.servers if server.sid and server != self]:
                 sid = localServer.sid if server.socket else server.uplink.sid
-                data = ':{} SID {} {} {} :{}'.format(sid, server.hostname, hopcount, server.sid, server.name)
+                data = ':{} SID {} {} {} :{}'.format(sid, server.hostname, int(server.hopcount) + 1, server.sid, server.name)
                 self._send(data)
+            ''''
             _print('Introduced all direct links first, now additional servers', server=localServer)
             for server in [server for server in localServer.servers if not server.socket and server != self]:
                 hopcount = int(server.hopcount) + 1
                 sid = localServer.sid if server.socket else server.uplink.sid
                 data = ':{} SID {} {} {} :{}'.format(sid, server.hostname, hopcount, server.sid, server.name)
                 self._send(data)
-                #sync_users(self, localServer, sid)
-                ### Sync <server> users.
-                #print('Sending to {}: {}'.format(self, data))
+            '''
             syncData(localServer, self, None)
             return
 
@@ -158,7 +151,7 @@ def sid(self, localServer, recv):
             return
 
         from ircd import Server
-        newServer = Server(origin=localServer,serverLink=True)
+        newServer = Server(origin=localServer, serverLink=True)
 
         newServer.hostname = hostname
 
@@ -173,7 +166,6 @@ def sid(self, localServer, recv):
         _print('{}Introduced by: {} ({}) {}'.format(G, newServer.introducedBy.hostname, newServer.introducedBy.sid, W), server=localServer)
         _print('{}Uplinked to: {} ({}) {}'.format(G, newServer.uplink.hostname, newServer.uplink.sid, W), server=localServer)
         _print('{}Hopcount: {}{}'.format(G, newServer.hopcount, W), server=localServer)
-        ### How many hops do I need to reach newServer? == hopcount
 
         localServer.new_sync(localServer, self, ' '.join(recv))
 

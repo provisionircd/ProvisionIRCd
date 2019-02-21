@@ -601,7 +601,7 @@ class User:
 
             if error and self.socket and reason:
                 try:
-                    self.socket.send(bytes('ERROR :Closing link: [{}] ({})\r\n'.format(self.fullrealhost(), reason), 'utf-8'))
+                    self.socket.send(bytes('ERROR :Closing link: [{}] ({})\r\n'.format(self.hostname, reason), 'utf-8'))
                 except:
                     pass
 

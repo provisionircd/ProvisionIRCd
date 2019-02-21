@@ -18,7 +18,7 @@ from handle.functions import _print, match
 rt = None
 
 ext_bans = 'TtCOa'
-prefix = '^'
+prefix = '~'
 
 def checkExpiredBans(localServer):
     remove_bans = {}

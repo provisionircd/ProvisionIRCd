@@ -7,7 +7,16 @@
 
 import ircd
 
-@ircd.Modules.params(1)
+from handle.functions import _print
+
+W = '\033[0m'  # white (normal)
+R = '\033[31m' # red
+G = '\033[32m' # green
+Y = '\033[33m' # yellow
+B = '\033[34m' # blue
+P = '\033[35m' # purple
+
+@ircd.Modules.params(2)
 @ircd.Modules.req_modes('o')
 @ircd.Modules.req_flags('squit')
 @ircd.Modules.commands('squit')
@@ -15,28 +24,20 @@ def squit(self, localServer, recv):
     if type(self).__name__ == 'Server':
         source = [s for s in localServer.servers if s.sid == recv[0][1:]]
         if not source:
-            return
-        source = source[0]
-        server = list(filter(lambda s: (s.sid and s.hostname) and (s.sid.lower() == recv[2].lower() or s.hostname.lower() == recv[2].lower()) and s != localServer, localServer.servers))
-        if not server and server != localServer:
+            _print('{}ERROR: source for {} could not be found. Was it already removed?{}'.format(R, recv[0][1:], W))
+            source = self
+        else:
+            source = source[0]
+        server = list(filter(lambda s: s.sid.lower() == recv[2].lower() or s.hostname.lower() == recv[2].lower(), localServer.servers))
+        if not server:
+            print('{}ERROR: server for {} could not be found. Was it already removed?{}'.format(R, recv[2], W))
             return
         server = server[0]
-        for s in [server for server in localServer.servers if server.hostname != recv[0][1:] and server.hostname != recv[2]]:
-            if s.hostname == recv[2] or s.hostname == recv[0][1:]:
-                continue
-            # Notifying additional servers of netsplit.
-            try:
-                s._send(' '.join(recv))
-            except:
-                pass
-        print('Issuing squit with source {}'.format(source))
-        server.quit(' '.join(recv[3:]), noSquit=True, source=source)
+        localServer.new_sync(localServer, self, ' '.join(recv))
+        server.quit(' '.join(recv[3:]), source=source, squit=False)
         return
 
-    if len(recv) > 2:
-        reason = '[{}] {}'.format(self.nickname,' '.join(recv[2:]))
-    else:
-        reason = '[{}] no reason'.format(self.nickname)
+    reason = '[{}] {}'.format(self.nickname,' '.join(recv[2:]))
 
     name = recv[1]
 
@@ -52,5 +53,4 @@ def squit(self, localServer, recv):
 
     msg = '*** {} ({}@{}) used SQUIT command for {}: {}'.format(self.nickname, self.ident, self.hostname, server.hostname, reason)
     localServer.snotice('s', msg)
-
     server.quit(reason)

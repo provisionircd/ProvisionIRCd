@@ -224,10 +224,7 @@ class data_handler(threading.Thread):
                     if expire == '0':
                         continue
                     if int(time.time()) > expire:
-                        if t.lower() == 'q':
-                            mask = '* {}'.format(mask)
-                        else:
-                            mask = '{} {}'.format(mask.split('@')[0], mask.split('@')[1])
+                        mask = '{} {}'.format(mask.split('@')[0], mask.split('@')[1])
                         data = '- {} {}'.format(t, mask)
                         p = {'expire': True}
                         localServer.handle('tkl', data, params=p)
@@ -270,7 +267,7 @@ class data_handler(threading.Thread):
             conn_backlog = [user for user in localServer.users if user.socket and not user.registered]
             for user in conn_backlog:
                 totalIP = list(filter(lambda s: s.ip == user.ip, conn_backlog))
-                if len(totalIP) > 1:
+                if len(totalIP) > 2:
                     user.quit('Too many unknown connections from your IP')
                     continue
 

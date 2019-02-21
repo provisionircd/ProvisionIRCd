@@ -11,7 +11,7 @@ import sys
 
 from handle.functions import match, _print
 
-@ircd.Modules.params(1)
+@ircd.Modules.params(2)
 @ircd.Modules.req_modes('o')
 @ircd.Modules.req_flags('localkill|globalkill') ### Either flag will be accepted.
 @ircd.Modules.commands('kill', 'avadakedavra')

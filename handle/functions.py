@@ -51,10 +51,12 @@ class TKL:
             tkltype = data[0]
             if tkltype not in localServer.tkl:
                 localServer.tkl[tkltype] = {}
-
+            no_snotice = False
             ident = data[1]
+            if tkltype == 'Q' and data[1] == 'H':
+                no_snotice = True
             mask = data[2]
-            fullmask = '{}@{}'.format(ident, mask) if tkltype.lower() in 'gz' else mask
+            fullmask = '{}@{}'.format(ident, mask)
             setter = data[3].split('!')[0]
             expire = '0' if float(data[4]) == 0 else int(data[4])
             ctime = int(data[5])
@@ -68,8 +70,9 @@ class TKL:
             if user:
                 user = user[0]
 
-            if fullmask not in localServer.tkl[tkltype] or (fullmask in localServer.tkl[tkltype] and expire != localServer.tkl[tkltype][fullmask]['expire']):
-                msg = '*** {}TKL {} {} for {} by {} [{}] expires on: {}'.format('Global ' if tkltype in 'GZ' else '', tkltype, 'active' if fullmask not in localServer.tkl[tkltype] else 'updated', fullmask, setter, reason, 'never' if expire == '0' else d+' '+t)
+            if not no_snotice and (fullmask not in localServer.tkl[tkltype] or fullmask in localServer.tkl[tkltype] and expire != localServer.tkl[tkltype][fullmask]['expire']):
+                display_mask = fullmask.split('@')[1] if tkltype == 'Q' else fullmask
+                msg = '*** {}TKL {} {} for {} by {} [{}] expires on: {}'.format('Global ' if tkltype in 'GZ' else '', tkltype, 'active' if fullmask not in localServer.tkl[tkltype] else 'updated', display_mask, setter, reason, 'never' if expire == '0' else d+' '+t)
                 localServer.snotice('G', msg)
 
             if fullmask in localServer.tkl[tkltype]:
@@ -99,15 +102,15 @@ class TKL:
             tkltype = data[3]
             ident = data[4]
             mask = data[5]
-            fullmask = '{}@{}'.format(ident, mask) if tkltype.lower() in 'gz' else mask
-
+            fullmask = '{}@{}'.format(ident, mask)
             if fullmask not in localServer.tkl[tkltype] or not fullmask:
                 return
             date = '{} {}'.format(datetime.datetime.fromtimestamp(float(localServer.tkl[tkltype][fullmask]['ctime'])).strftime('%a %b %d %Y'), datetime.datetime.fromtimestamp(float(localServer.tkl[tkltype][fullmask]['ctime'])).strftime('%H:%M:%S %Z'))
             date = date.strip()
-
-            msg = '*** {}{}TKL {} {} removed (set by {} on {}) [{}]'.format('Expiring ' if expire else '','Global ' if tkltype in 'GZ' else '', tkltype, fullmask, localServer.tkl[tkltype][fullmask]['setter'], date, localServer.tkl[tkltype][fullmask]['reason'])
-            localServer.snotice('G', msg)
+            if tkltype == 'Q' and ident != 'H':
+                display_mask = fullmask.split('@')[1] if tkltype == 'Q' else fullmask
+                msg = '*** {}{}TKL {} {} removed (set by {} on {}) [{}]'.format('Expiring ' if expire else '', 'Global ' if tkltype in 'GZ' else '', tkltype, display_mask, localServer.tkl[tkltype][fullmask]['setter'], date, localServer.tkl[tkltype][fullmask]['reason'])
+                localServer.snotice('G', msg)
             del localServer.tkl[tkltype][fullmask]
             if tkltype in 'GZQ' and not expire:
                 data = ':{} TKL - {} {} {}'.format(localServer.sid, tkltype, ident, mask)

@@ -160,10 +160,7 @@ def syncData(localServer, newServer, serverIntroducer, selfRequest=True):
             for entry in localServer.tkl[type]:
                 if not localServer.tkl[type][entry]['global']:
                     continue
-                if type.lower() in 'gz':
-                    mask = '{} {}'.format(entry.split('@')[0], entry.split('@')[1])
-                elif type.lower() == 'q':
-                    mask = '* {}'.format(entry)
+                mask = '{} {}'.format(entry.split('@')[0], entry.split('@')[1])
                 setter = localServer.tkl[type][entry]['setter']
                 try:
                     source = list(filter(lambda s: s.hostname == setter, localServer.servers))
@@ -181,11 +178,7 @@ def syncData(localServer, newServer, serverIntroducer, selfRequest=True):
         _print(str(ex), server=localServer)
     _print('{}Server {} is done syncing to {}, sending EOS.{}'.format(Y, localServer.hostname, newServer.hostname, W), server=localServer)
     newServer._send(':{} EOS'.format(localServer.sid))
-    #for server in [server for server in localServer.servers if server != newServer and server.sid and server.introducedBy == newServer]:
-    #    _print('Sending also EOS from {} to {}'.format(server.hostname, newServer.hostname), server=localServer)
-    #    newServer._send(':{} EOS'.format(server.sid))
 
-    #00B NETINFO maxglobal currenttime protocolversion cloakhash networkname
     if newServer not in localServer.syncDone:
         cloakhash = localServer.conf['settings']['cloak-key']
         cloakhash = hashlib.md5(cloakhash.encode('utf-8')).hexdigest()
@@ -193,8 +186,8 @@ def syncData(localServer, newServer, serverIntroducer, selfRequest=True):
         newServer._send(data)
         localServer.syncDone.append(newServer)
 
-    _print('Sending PONG to {} (end of syncData)'.format(newServer.hostname), server=localServer)
-    newServer._send(':{} PONG {}'.format(localServer.sid, newServer.hostname))
+    #_print('Sending PONG to {} (end of syncData)'.format(newServer.hostname), server=localServer)
+    #newServer._send(':{} PONG {}'.format(localServer.sid, newServer.hostname))
     return
 
 class Link(threading.Thread):

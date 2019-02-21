@@ -459,11 +459,16 @@ class Server:
     def __repr__(self):
         return "<Server '{}:{}'>".format('*' if not hasattr(self, 'hostname') else self.hostname, '*' if not hasattr(self, 'sid') else self.sid)
 
-    def quit(self, reason, silent=False, error=False, source=None):
+    def quit(self, reason, silent=False, error=False, source=None, squit=True):
         localServer = self.localServer
         _print('Server QUIT self: {} :: reason: {}'.format(self, reason), server=localServer)
+        if self in localServer.servers:
+            _print('---------- Removing self {}'.format(self), server=localServer)
+            localServer.servers.remove(self)
+
         self.recvbuffer = ''
-        #print('Source: {}'.format(source))
+        #source = self.uplink if self.uplink else self
+        _print('Source: {}'.format(source), server=localServer)
         if self.uplink:
             _print('Server was uplinked to {}'.format(self.uplink), server=localServer)
         reason = reason[1:] if reason.startswith(':') else reason
@@ -473,13 +478,15 @@ class Server:
         try:
             if self.hostname and self.eos:
                 _print('{}Lost connection to remote server {}: {}{}'.format(R, self.hostname, reason, W), server=localServer)
-                localServer.new_sync(localServer, localServer, ':{} SQUIT {} :{}'.format(localServer.sid, self.hostname, reason))
+                if squit:
+                    skip = [self]
+                    if self.uplink:
+                        skip.append(self.uplink)
+                    localServer.new_sync(localServer, skip, ':{} SQUIT {} :{}'.format(localServer.sid, self.hostname, reason))
 
             if not silent and self.hostname and self.socket:
                 if not self.eos and self not in localServer.linkrequester:
                     msg = 'Link denied for server {}: {}'.format(self.hostname, reason)
-                    _print('Surpress error message because {} is not done syncing and the link was not requested locally'.format(self), server=localServer)
-                    #return
                 else:
                     msg = '{} to server {}: {}'.format('Unable to connect' if not self.eos else 'Lost connection', self.hostname, reason)
                 localServer.snotice('s', msg, local=True)
@@ -505,18 +512,16 @@ class Server:
                 user.quit('Unknown connection')
 
             additional_servers = [server for server in localServer.servers if server.introducedBy == self or server.uplink == self]
-            users = [user for user in localServer.users if user.server and (user.server == self or user.server in additional_servers or user.server.uplink == self)]
+            _print('Also quitting additional servers: {}'.format(additional_servers), server=localServer)
+            users = [user for user in localServer.users if user.server and (user.server == self or user.server in additional_servers)]
             for user in users:
                 server1 = self.hostname
                 server2 = source.hostname if source else localServer.hostname
                 user.quit('{} {}'.format(server1, server2), source=self)
 
             for server in additional_servers:
+                _print('---------- Quitting server {}'.format(server), server=localServer)
                 server.quit('{} {}'.format(self.hostname, source.hostname if source else localServer.hostname))
-
-            if self in localServer.servers:
-                _print('Removing server {}'.format(self), server=localServer)
-                localServer.servers.remove(self)
 
             if self.socket:
                 try:

@@ -118,7 +118,6 @@ def privmsg(self, localServer, recv, override=False, safe=False):
         for target in targets[:maxtargets]:
             sync = True
             if target[0] not in localServer.chantypes:
-                #_print('{} :: {}'.format(self, ' '.join(recv)), server=localServer)
                 user = list(filter(lambda u: u.nickname.lower() == target.lower() or u.uid.lower() == target.lower(), localServer.users))
 
                 if not user:
@@ -133,15 +132,16 @@ def privmsg(self, localServer, recv, override=False, safe=False):
 
                 ### Check for module events (private messages).
                 success = True
-                for callable in [callable for callable in localServer.events if callable[0].lower() == recv[0].lower()]:
-                    try:
-                        success = callable[1](self, localServer, user, msg, callable[2])
-                        if not success:
-                            break
-                    except Exception as ex:
-                        _print('Exception in {} :{}'.format(callable[2],ex), server=localServer)
-                if not success:
-                    continue
+                if type(self).__name__ == 'User':
+                    for callable in [callable for callable in localServer.events if callable[0].lower() == recv[0].lower()]:
+                        try:
+                            success = callable[1](self, localServer, user, msg, callable[2])
+                            if not success:
+                                break
+                        except Exception as ex:
+                            _print('Exception in {} :{}'.format(callable[2],ex), server=localServer)
+                    if not success:
+                        continue
 
                 if user.away:
                     self.sendraw(301, '{} :{}'.format(user.nickname, user.away))
@@ -152,7 +152,6 @@ def privmsg(self, localServer, recv, override=False, safe=False):
                     self._send(':{} PRIVMSG {} :{}'.format(self.fullmask(), user.nickname, msg))
 
                 if sync:
-                    #localServer.syncToServers(localServer, sourceServer, ':{} PRIVMSG {} :{}'.format(sourceID, user.nickname, msg))
                     localServer.new_sync(localServer, sourceServer, ':{} PRIVMSG {} :{}'.format(sourceID, user.nickname, msg))
 
             else:
@@ -171,7 +170,7 @@ def privmsg(self, localServer, recv, override=False, safe=False):
                         self.sendraw(404, '{} :No external messages'.format(channel.name))
                         continue
 
-                    if 'C' in channel.modes and msg[0] == '' and msg[-1] == '' and self.chlevel(channel) < 3 and not self.ocheck('o', 'override') and not override:
+                    if 'C' in channel.modes and msg[0] == '' and msg[-1] == '' and self.chlevel(channel) < 4 and not self.ocheck('o', 'override') and not override:
                         self.sendraw(404, '{} :CTCPs are not permitted in this channel'.format(channel.name))
                         continue
 
@@ -192,17 +191,16 @@ def privmsg(self, localServer, recv, override=False, safe=False):
 
                 ### Check for module events (channel messages).
                 success = True
-                for callable in [callable for callable in localServer.events if callable[0].lower() == recv[0].lower()]:
-                    ### (command, function, module)
-                    #localServer.modulename = callable[2].__name__
-                    try:
-                        success = callable[1](self, localServer, channel, msg, callable[2])
-                        if not success:
-                            break
-                    except Exception as ex:
-                        _print('Exception in {} :{}'.format(callable[2], ex), server=localServer)
-                if not success:
-                    continue
+                if type(self).__name__ == 'User':
+                    for callable in [callable for callable in localServer.events if callable[0].lower() == recv[0].lower()]:
+                        try:
+                            success = callable[1](self, localServer, channel, msg, callable[2])
+                            if not success:
+                                break
+                        except Exception as ex:
+                            _print('Exception in {} :{}'.format(callable[2], ex), server=localServer)
+                    if not success:
+                        continue
 
                 users = [user for user in channel.users if user != self]
                 self.broadcast(users, 'PRIVMSG {} :{}'.format(channel.name, msg))
@@ -212,14 +210,10 @@ def privmsg(self, localServer, recv, override=False, safe=False):
                 self.idle = int(time.time())
 
                 if sync:
-                    #localServer.syncToServers(localServer, sourceServer, ':{} PRIVMSG {} :{}'.format(sourceID, target, msg))
                     localServer.new_sync(localServer, sourceServer, ':{} PRIVMSG {} :{}'.format(sourceID, target, msg))
 
                 ### Check for module events (channel messages).
-                success = True
                 for callable in [callable for callable in localServer.events if callable[0].lower() == 'after_privmsg']:
-                    ### (command, function, module)
-                    #localServer.modulename = callable[2].__name__
                     try:
                         callable[1](self, localServer, channel, msg, callable[2])
                     except Exception as ex:

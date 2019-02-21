@@ -86,7 +86,8 @@ def show_stats(self, localServer, recv):
         elif recv[1] == 'G':
             for type in [type for type in localServer.tkl if type in 'GZQ']:
                 for mask in localServer.tkl[type]:
-                    self.sendraw(223, '{} {} {} {} {} :{}'.format(type, mask, int(localServer.tkl[type][mask]['expire'])-int(time.time()) if localServer.tkl[type][mask]['expire'] != '0' else '0', localServer.tkl[type][mask]['ctime'], localServer.tkl[type][mask]['setter'], localServer.tkl[type][mask]['reason']))
+                    display = mask.split('@')[1] if type == 'Q'  else mask
+                    self.sendraw(223, '{} {} {} {} {} :{}'.format(type, display, int(localServer.tkl[type][mask]['expire'])-int(time.time()) if localServer.tkl[type][mask]['expire'] != '0' else '0', localServer.tkl[type][mask]['ctime'], localServer.tkl[type][mask]['setter'], localServer.tkl[type][mask]['reason']))
 
         elif recv[1] == 'O':
             for oper in localServer.conf['opers']:
