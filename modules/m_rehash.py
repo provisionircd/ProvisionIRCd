@@ -14,7 +14,7 @@ from handle.handleConf import checkConf
 @ircd.Modules.req_flags('rehash')
 @ircd.Modules.commands('rehash')
 def rehash(self, localServer, recv):
-    msg = '*** {} ({}@{}) is rehashing the server configuration file...'.format(self.nickname, self.ident, self.hostname)
+    msg = '*** {} ({}@{}) is rehashing the server configuration file...'.format(self.nickname, self.ident, self.hostname, local=True)
     localServer.snotice('s', msg)
 
     if True:

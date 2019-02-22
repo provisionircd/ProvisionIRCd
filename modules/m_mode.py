@@ -26,7 +26,7 @@ commandQueue = []
 tmodes = []
 param = []
 
-maxmodes = 12
+maxmodes = 24
 channel_modes = {
 ### +v = 1
 ### +h = 2
@@ -42,13 +42,12 @@ channel_modes = {
                 },
             1: {
                 "k": (2, "User must give a key in order to join the channel", "<key>"),
-                "L": (4, "When the channel is full, redirect users to another channel (requires +l)", "<chan>"),
+                "L": (5, "When the channel is full, redirect users to another channel (requires +l)", "<chan>"),
                 },
             2: {
                 "l": (2, "Set a channel user limit", "[number]"),
                 },
             3: {
-                #"i": (2, "You need to be invited to join the channel"),
                 "m": (2, "Moderated channel, need +v or higher to talk"),
                 "n": (2, "No outside messages allowed"),
                 "j": (3, "Quits appear as parts"),
@@ -62,15 +61,15 @@ channel_modes = {
                 "O": (6, "Only IRCops can join"),
                 "P": (6, "Permanent channel"),
                 "Q": (4, "No kicks allowed"),
-                "R": (4, "You must be registered to join the channel"),
+                "R": (3, "You must be registered to join the channel"),
                 "T": (2, "Notices are not allowed in the channel"),
-                "V": (3, "Only channel ops can invite to the channel"),
+                "V": (3, "Invite is not permitted on the channel"),
                 },
     }
 maxlist = {}
-maxlist['b'] = 200
-maxlist['e'] = 200
-maxlist['I'] = 200
+maxlist['b'] = 500
+maxlist['e'] = 500
+maxlist['I'] = 500
 
 chmodes_string = ''
 for t in channel_modes:
@@ -111,7 +110,14 @@ user_modes = {
 
 def init(localServer):
     localServer.user_modes.update(user_modes)
-    localServer.channel_modes.update(channel_modes)
+    if not localServer.channel_modes:
+        localServer.channel_modes = channel_modes
+    else:
+        l = []
+        for k, v in localServer.channel_modes.items():
+            if k in channel_modes:
+                l.append((k, v))
+        localServer.channel_modes.update(l)
     localServer.chstatus = chstatus
     localServer.snomasks = 'cdfjkostzCFGNQS'
     localServer.chprefix = chprefix
@@ -188,7 +194,6 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                 if str(x) in '012' and m not in paramModes:
                     paramModes += m
 
-        keyset, limitset, redirectset = False, False, False
         global oper_override
         local = [e for e in localServer.support if e.split('=')[0] == 'EXTBAN']
         if local:
@@ -217,18 +222,12 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                 level = localServer.channel_modes[t][m][0]
                 modeLevel[m] = level
 
-        char_pos = 0
         for m in [m for m in recv[1] if m in chmodes+'+-']:
-            char_pos += 1
             if m == 'r' and type(self).__name__ != 'Server':
                 continue
-            temp_tmodes = ''.join(tmodes)
-            temp_param = ' '.join(param)
-            totalLength = len(temp_tmodes+' '+temp_param)
+            totalLength = len(''.join(tmodes)+' '+' '.join(param))
             if len(tmodes) > maxmodes or totalLength >= 400:
-                tmodes = ''.join(tmodes)
-                param = ' '.join(param)
-                modes = tmodes+' '+param
+                modes = ''.join(tmodes)+' '+' '.join(param)
                 self.broadcast(channel.users, 'MODE {} {}'.format(channel.name, modes), source=sourceUser)
                 if sync:
                     localServer.new_sync(localServer, sourceServer, ':{} MODE {} :{}'.format(displaySource, channel.name, modes if type(self).__name__ == 'User' else rawModes))
@@ -245,10 +244,9 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                 continue
             if not action:
                 action = '+'
-            for c in m:
-                if m not in '+-' and action != prevaction and ( (m in chmodes or m in localServer.chstatus) or (action == '-' and m in channel.modes) ):
-                    tmodes.append(action)
-                    prevaction = action
+            if m not in '+-' and action != prevaction and ( (m in chmodes or m in localServer.chstatus) or (action == '-' and m in channel.modes) ):
+                tmodes.append(action)
+                prevaction = action
 
             if m not in localServer.chstatus and m not in '+-':
                 if self.chlevel(channel) < modeLevel[m] and not self.ocheck('o', 'override'):
@@ -262,10 +260,10 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                 ###
                 ### SETTING CHANNEL MODES
                 ###
-                if m == 'l' and len(recv) > 2 and not limitset:
+                if m == 'l' and len(recv) > 2:
                     try:
                         p = recv[2:][paramcount]
-                    except Exception as ex:
+                    except IndexError:
                         continue
                     if not p.isdigit():
                         continue
@@ -274,7 +272,6 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                     if channel.limit == int(p):
                         continue
                     else:
-                        limitset = True
                         if m not in channel.modes:
                             channel.modes += m
                         tmodes.append(m)
@@ -283,14 +280,13 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         channel.limit = int(p)
                         continue
 
-                elif m == 'k' and not keyset:
+                elif m == 'k' and not channel.key:
                     try:
                         p = recv[2:][paramcount]
                     except Exception as ex:
                         continue
                     if channel.key == p:
                         continue
-                    keyset = True
                     if m not in channel.modes:
                         channel.modes += m
                     tmodes.append(m)
@@ -299,34 +295,29 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                     channel.key = p
                     continue
 
-                elif m == 'L':
-                    if 'l' not in channel.modes:
-                        paramcount += 1
+                elif m == 'L' and channel.limit:
+                    try:
+                        p = recv[2:][paramcount].split(',')[0]
+                    except IndexError:
                         continue
-                    if not redirectset:
-                        try:
-                            p = recv[2:][paramcount]
-                        except Exception as ex:
-                            continue
-                        if p[0] != '#':
-                            continue
-                        if channel.redirect == p or p.lower() == channel.name.lower():
-                            continue
-                        redirectset = True
-                        if m not in channel.modes:
-                            channel.modes += m
-                        tmodes.append(m)
-                        param.append(p)
-                        paramcount += 1
-                        channel.redirect = p
+                    if p[0] not in localServer.chantypes:
                         continue
+                    if channel.redirect == p or p.lower() == channel.name.lower():
+                        continue
+                    if m not in channel.modes:
+                        channel.modes += m
+                    tmodes.append(m)
+                    param.append(p)
+                    paramcount += 1
+                    channel.redirect = p
+                    continue
                 elif m == 'O':
                     if type(self).__name__ != 'Server' and 'o' not in self.modes:
                         continue
                 elif m in 'beI':
                     try:
                         rawParam = recv[2:][paramcount]
-                    except:
+                    except IndexError:
                         paramcount += 1
                         continue
                     if rawParam.startswith(extban_prefix):
@@ -334,61 +325,29 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         continue
                     mask = makeMask(localServer, rawParam)
                     if m == 'b':
-                        if mask not in channel.bans:
-                            if len(channel.bans) >= maxlist[m] and type(self).__name__ == 'User':
-                                self.sendraw(478, '{} {} :Channel ban list is full'.format(channel.name, mask))
-                                paramcount += 1
-                                continue
-                            try:
-                                setter = self.fullmask()
-                            except:
-                                setter = self.hostname
+                        data = channel.bans
+                        s = 'ban'
+                    elif m == 'e':
+                        data = channel.excepts
+                        s = 'excepts'
+                    elif m == 'I':
+                        data = channel.invex
+                        s = 'invex'
+                    if mask not in data:
+                        if len(data) >= maxlist[m] and type(self).__name__ == 'User':
+                            self.sendraw(478, '{} {} :Channel {} list is full'.format(channel.name, mask, s))
                             paramcount += 1
-                            tmodes.append(m)
-                            param.append(mask)
-                            channel.bans[mask] = {}
-                            channel.bans[mask]['setter'] = setter
-                            channel.bans[mask]['ctime'] = int(time.time())
                             continue
+                        try:
+                            setter = self.fullmask()
+                        except:
+                            setter = self.hostname
                         paramcount += 1
-                        continue
-                    if m == 'e':
-                        if mask not in channel.excepts:
-                            if len(channel.excepts) >= maxlist[m] and type(self).__name__ == 'User':
-                                self.sendraw(478, '{} {} :Channel excepts list is full'.format(channel.name, mask))
-                                paramcount += 1
-                                continue
-                            try:
-                                setter = self.fullmask()
-                            except:
-                                setter = self.hostname
-                            paramcount += 1
-                            tmodes.append(m)
-                            param.append(mask)
-                            channel.excepts[mask] = {}
-                            channel.excepts[mask]['setter'] = setter
-                            channel.excepts[mask]['ctime'] = int(time.time())
-                            continue
-                        paramcount += 1
-                        continue
-                    if m == 'I':
-                        if mask not in channel.invex:
-                            if len(channel.invex) >= maxlist[m] and type(self).__name__ == 'User':
-                                self.sendraw(478, '{} {} :Channel invex list is full'.format(channel.name, mask))
-                                paramcount += 1
-                                continue
-                            try:
-                                setter = self.fullmask()
-                            except:
-                                setter = self.hostname
-                            paramcount += 1
-                            tmodes.append(m)
-                            param.append(mask)
-                            channel.invex[mask] = {}
-                            channel.invex[mask]['setter'] = setter
-                            channel.invex[mask]['ctime'] = int(time.time())
-                            continue
-                        paramcount += 1
+                        tmodes.append(m)
+                        param.append(mask)
+                        data[mask] = {}
+                        data[mask]['setter'] = setter
+                        data[mask]['ctime'] = int(time.time())
                         continue
 
                 elif m in chstatus:
@@ -495,51 +454,21 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                     except:
                         continue
                     if m == 'b':
-                        if mask in channel.bans:
-                            param.append(mask)
-                            paramcount += 1
-                            del channel.bans[mask]
-                            tmodes.append(m)
-                            continue
-                        elif rawmask in channel.bans:
-                            param.append(rawmask)
-                            paramcount += 1
-                            del channel.bans[rawmask]
-                            tmodes.append(m)
-                            continue
-                        paramcount += 1
-                        continue
-                    if m == 'e':
-                        if mask in channel.excepts:
-                            param.append(mask)
-                            paramcount += 1
-                            del channel.excepts[mask]
-                            tmodes.append(m)
-                            continue
-                        elif rawmask in channel.excepts:
-                            param.append(rawmask)
-                            paramcount += 1
-                            del channel.excepts[rawmask]
-                            tmodes.append(m)
-                            continue
-                        paramcount += 1
-                        continue
-                    if m == 'I':
-                        if mask in channel.invex:
-                            param.append(mask)
-                            paramcount += 1
-                            del channel.invex[mask]
-                            tmodes.append(m)
-                            continue
-                        elif rawmask in channel.invex:
-                            param.append(rawmask)
-                            paramcount += 1
-                            del channel.invex[rawmask]
-                            tmodes.append(m)
-                            continue
-                        paramcount += 1
-                        continue
-
+                        data = channel.bans
+                    elif m == 'e':
+                        data = channel.excepts
+                    elif m == 'I':
+                        data = channel.invex
+                    if mask in channel.bans:
+                        del data[mask]
+                        param.append(mask)
+                        tmodes.append(m)
+                    elif rawmask in data:
+                        del data[rawmask]
+                        param.append(rawmask)
+                        tmodes.append(m)
+                    paramcount += 1
+                    continue
                 elif m in chstatus:
                     timed = False
                     # -qaohv

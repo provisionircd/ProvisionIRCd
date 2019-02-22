@@ -19,7 +19,7 @@ chantypes = '#+&'
 chanlen = 33
 
 def init(localServer):
-    ### Other modules also require this information, like /privmsg and notice
+    ### Other modules also require this information, like /privmsg and /notice
     localServer.chantypes = chantypes
 
 W = '\033[0m'  # white (normal)

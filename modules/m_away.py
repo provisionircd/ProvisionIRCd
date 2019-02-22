@@ -9,7 +9,7 @@ import ircd
 
 from handle.functions import checkSpamfilter
 
-awaylen = 160
+awaylen = 307
 
 @ircd.Modules.support('AWAYLEN='+str(awaylen))
 @ircd.Modules.support('WATCHOPTS=A')

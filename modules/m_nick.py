@@ -78,7 +78,7 @@ def cmdnick(self, localServer, recv, override=False, sanick=False):
 
         users = [self]
         for channel in self.channels:
-            if 'N' in channel.modes and self.chlevel(channel) < 3 and not self.ocheck('o', 'override') and not override:
+            if 'N' in channel.modes and self.chlevel(channel) < 5 and not self.ocheck('o', 'override') and not override:
                 return self.sendraw(447, ':{} Nick changes are not allowed on this channel'.format(channel.name))
 
             for user in channel.users:

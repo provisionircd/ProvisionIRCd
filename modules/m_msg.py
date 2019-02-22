@@ -170,7 +170,7 @@ def privmsg(self, localServer, recv, override=False, safe=False):
                         self.sendraw(404, '{} :No external messages'.format(channel.name))
                         continue
 
-                    if 'C' in channel.modes and msg[0] == '' and msg[-1] == '' and self.chlevel(channel) < 4 and not self.ocheck('o', 'override') and not override:
+                    if 'C' in channel.modes and msg[0] == '' and msg[-1] == '' and self.chlevel(channel) < 5 and not self.ocheck('o', 'override') and not override:
                         self.sendraw(404, '{} :CTCPs are not permitted in this channel'.format(channel.name))
                         continue
 
@@ -182,7 +182,7 @@ def privmsg(self, localServer, recv, override=False, safe=False):
                         self.sendraw(404, '{} :Cannot send to channel (+b ~T)'.format(channel.name))
                         continue
 
-                    if checkMatch(self, 'b', 'replace', channel, msg) and self.chlevel(channel) < 4 and not self.ocheck('o', 'override') and not override:
+                    if checkMatch(self, 'b', 'replace', channel, msg) and self.chlevel(channel) < 5 and not self.ocheck('o', 'override') and not override:
                         msg = checkMatch(self, 'b', 'replace', channel, msg)
 
                 if '^' in self.modes:
@@ -227,7 +227,7 @@ def privmsg(self, localServer, recv, override=False, safe=False):
 
 
 @ircd.Modules.commands('notice')
-def notice(self, localServer, recv, override=False):
+def notice(self, localServer, recv, override=False, s_sync=True):
     try:
         if type(self).__name__ == 'Server':
             sourceServer = self
@@ -252,17 +252,14 @@ def notice(self, localServer, recv, override=False):
         elif len(recv) < 3:
             return self.sendraw(412, ':No text to send')
 
-        targets = recv[1].split(',')
-
         global msg
         msg = ' '.join(recv[2:])
 
         if type(self).__name__ == 'User':
             self.flood_penalty += len(msg) * 100
 
-        for target in targets[:maxtargets]:
+        for target in recv[1].split(',')[:maxtargets]:
             sync = True
-
             if target[0] == '$' and sourceServer != localServer:
                 server = list(filter(lambda s: s.hostname.lower() == target[1:].lower(), localServer.servers+[localServer]))[0]
                 if server == localServer:
@@ -305,7 +302,7 @@ def notice(self, localServer, recv, override=False):
                     self.sendraw(404, '{} :No external messages'.format(channel.name))
                     continue
 
-                if 'T' in channel.modes and self.chlevel(channel) < 3 and not self.ocheck('o', 'override') and not override:
+                if 'T' in channel.modes and self.chlevel(channel) < 5 and not self.ocheck('o', 'override') and not override:
                     self.sendraw(404, '{} :NOTICEs are not permitted in this channel'.format(channel.name))
                     continue
 
@@ -317,7 +314,7 @@ def notice(self, localServer, recv, override=False):
                 if type(self).__name__ == 'User':
                     self.idle = int(time.time())
 
-                if sync:
+                if sync and s_sync:
                     localServer.new_sync(localServer, sourceServer, ':{} NOTICE {} :{}'.format(sourceID, target, msg))
                     #localServer.syncToServers(localServer, sourceServer, ':{} NOTICE {} :{}'.format(sourceID, target, msg))
     except Exception as ex:

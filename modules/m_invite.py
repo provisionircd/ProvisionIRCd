@@ -7,6 +7,7 @@
 
 import ircd
 from handle.functions import _print
+from modules.m_joinpart import checkMatch
 import time
 
 @ircd.Modules.params(2)
@@ -16,13 +17,14 @@ import time
 @ircd.Modules.commands('invite')
 def invite(self, localServer, recv, override=False):
     try:
-        ### This should be at the start of every command, where source = where the commsnd came from.
         if type(self).__name__ == 'Server':
             override = True
-            originServer = self
+            sourceServer = self
 
             self = list(filter(lambda u: u.uid == recv[0][1:], localServer.users))[0]
             recv = recv[1:]
+        else:
+            sourceServer = self.server
 
         oper_override = False
 
@@ -69,18 +71,30 @@ def invite(self, localServer, recv, override=False):
         channel.invites[user]['ctime'] = int(time.time())
         channel.invites[user]['override'] = True if (self.ocheck('o', 'override') or self.chlevel(channel) >= 3) else False
         if oper_override:
-            localServer.snotice('s', '*** OperOverride by {} ({}@{}) with INVITE {} {}'.format(self.nickname, self.ident, self.hostname, user.nickname, channel.name))
+            s = ''
+            if checkMatch(user, localServer, 'b', channel):
+                s = ' [Overriding +b]'
+            elif 'i' in channel.modes:
+                s = ' [Overriding +i]'
+            elif 'l' in channel.modes and len(channel.users) >= channel.limit:
+                s = ' [Overriding +l]'
+            elif 'k' in channel.modes:
+                s = ' [Overriding +k]'
+            elif 'R' in channel.modes and 'r' not in user.modes:
+                s = ' [Overriding +R]'
+            elif 'z' in channel.modes and 'z' not in user.modes:
+                s = ' [Overriding +z]'
+            localServer.snotice('s', '*** OperOverride by {} ({}@{}) with INVITE {} {}{}'.format(self.nickname, self.ident, self.hostname, user.nickname, channel.name, s))
 
         self.broadcast([user], 'INVITE {} {}'.format(user.nickname, channel.name))
 
         self.sendraw(341, '{} {}'.format(user.nickname, channel.name))
 
-        ### Old token: *
         data = ':{} INVITE {} {}'.format(self.uid, user.nickname, channel.name)
 
-        #for u in [u for u in channel.users if u.chlevel(channel) >= 3]:
-        localServer.handle('NOTICE', '{} :{} ({}@{}) invited {} to join the channel'.format(channel.name, self.nickname, self.ident, self.hostname, user.nickname))
+        p = {'s_sync': False}
+        localServer.handle('NOTICE', '{} :{} ({}@{}) invited {} to join the channel'.format(channel.name, self.nickname, self.ident, self.hostname, user.nickname), params=p)
 
-        localServer.syncToServers(localServer, self.server, data)
+        localServer.new_sync(localServer, sourceServer, data)
     except Exception as ex:
         _print(ex, server=localServer)
