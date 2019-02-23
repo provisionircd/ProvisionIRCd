@@ -35,3 +35,8 @@ def eos(self, localServer, recv):
     if source.hostname.lower() in localServer.pendingLinks:
         localServer.pendingLinks.remove(source.hostname.lower())
     source.eos = True
+    if source in localServer.sync_queue:
+        for e in localServer.sync_queue[source]:
+            _print('Sending queued data to {}: {}'.format(source, e), server=localServer)
+            localServer.new_sync(localServer, source, e)
+        del localServer.sync_queue[source]

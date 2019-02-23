@@ -117,6 +117,7 @@ class Server:
                 self.datahandler = None
                 self.localServer = self
                 self.linkRequests = {}
+                self.sync_queue = {}
 
                 self.creationtime = int(time.time())
 
@@ -205,7 +206,10 @@ class Server:
         for server in [server for server in localServer.servers if server.socket and server not in skip]:
             #print('New sync to {}: {}'.format(server, data))
             if not server.eos:
-                _print('{}Not sycing to {} because it is in the middle of link procedure: {}{}'.format(R2, server, data, W), server=self.localServer)
+                if server not in localServer.sync_queue:
+                    localServer.sync_queue[server] = []
+                localServer.sync_queue.append(data)
+                _print('{}Added to {} sync queue because they are not done syncing: {}{}'.format(R2, server, data, W), server=self.localServer)
                 continue
             server._send(data)
 

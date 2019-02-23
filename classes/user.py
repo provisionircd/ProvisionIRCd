@@ -504,8 +504,8 @@ class User:
             binip = IPtoBase64(self.ip)
 
             data = '{} {} {} {} {} {} 0 +{} {} {} {} :{}'.format(self.nickname, self.server.hopcount, self.signon, self.ident, self.hostname, self.uid, self.modes, self.cloakhost, self.cloakhost, binip, self.realname)
-
             self.server.new_sync(self.server, self.server, ':{} UID {}'.format(self.server.sid, data))
+
             modes = []
             for mode in self.server.conf['settings']['modesonconnect']:
                 if mode in self.server.user_modes and mode not in 'oqrzS':
