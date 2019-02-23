@@ -57,8 +57,7 @@ class data_handler(threading.Thread):
                         if type(s).__name__ == 'User':
                             s.flood_safe = False
                     except Exception as ex:
-                        #_print(ex, server=localServer)
-                        s.quit('Write error: Connection reset by peer: {}'.format(str(ex)))
+                        s.quit('Write error: {}'.format(str(ex)))
                         continue
 
             for s in read:
@@ -73,7 +72,6 @@ class data_handler(threading.Thread):
                         conn, addr = s.accept()
                         conn_backlog = [user for user in localServer.users if user.socket and not user.registered]
                         _print('Accepting client on {} -- fd: {}, with IP {}'.format(s, conn.fileno(), addr[0]), server=localServer)
-                        #print('conn_backlog: {}'.format(len(conn_backlog)))
                         if len(conn_backlog) > 100:
                             _print('Current connection backlog is >{}, so not allowing any more connections for now. Bye.'.format(len(conn_backlog)), server=localServer)
                             conn.close()
@@ -206,7 +204,7 @@ class data_handler(threading.Thread):
                 try:
                     user.socket.send(bytes('PING :{}\r\n'.format(localServer.hostname), 'utf-8'))
                 except OSError as ex:
-                    user.quit('Write error: Connection reset by peer: {}'.format(str(ex)))
+                    user.quit('Write error: {}'.format(str(ex)))
             # Ping timeouts
             users = (user for user in localServer.users if user.socket and time.time() - user.ping > 180.0)
             for user in users:
@@ -312,7 +310,7 @@ class data_handler(threading.Thread):
                 try:
                     server.socket.send(bytes(':{} PING {} {}\r\n'.format(localServer.sid, localServer.hostname, server.hostname), 'utf-8'))
                 except OSError as ex:
-                    server.quit('Write error: Connection reset by peer: {}'.format(str(ex)))
+                    server.quit('Write error: {}'.format(str(ex)))
 
             # Ping timeouts
             for server in (server for server in localServer.servers if server.hostname and server.socket and time.time() - server.ping >= 120.0):
@@ -323,7 +321,7 @@ class data_handler(threading.Thread):
                 is_silent = False if server.socket else True
                 server.quit('Server registration timed out', silent=is_silent)
 
-        _print('data_handler loop broke! This should only happen if you reload the core.', server=localServer)
+        _print('data_handler loop broke! This should only happen if you reload the core, or after /restart.', server=localServer)
 
 def read_socket(localServer, sock):
     if sock.cls:
@@ -341,7 +339,7 @@ def read_socket(localServer, sock):
         return
 
     if not recv:
-        sock.quit('Read error: no data received from socket')
+        sock.quit('Read error')
         return
 
     sock.recvbuffer += recv

@@ -28,6 +28,7 @@ def who(self, localServer, recv):
             flags = recv[2]
 
         for user in localServer.users:
+            chan = '*'
             show, flagmatch = False, False
             ### Let's see if we have a match
             for m in mask.split(','):
@@ -37,6 +38,7 @@ def who(self, localServer, recv):
                 chan_match = list(filter(lambda c: c.name.lower() == m.lower() and user in c.users, localServer.channels))
                 if chan_match:
                     show = True
+                    chan = chan_match[0].name
 
                 ### Now we filter out by flag. Flags have higher piority.
                 if flags:
@@ -85,9 +87,7 @@ def who(self, localServer, recv):
             if user in who:
                 continue
             who.append(user)
-            if not user.channels:
-                chan = '*'
-            else:
+            if user.channels and chan == '*':
                 channel = None
                 ### Assign a channel.
                 for c in user.channels:
