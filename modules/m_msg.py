@@ -14,72 +14,7 @@ import os
 import sys
 import re
 
-msg = ''
-
 maxtargets = 20
-
-def char_repeat(string, char, amount):
-    for word in [word for word in string.split(' ') if '://' not in word and 'www.' not in word]: ### Excluding urls.
-        if char == '*':
-            for c in 'abcdefghijklmnopqrstuwvwxyz,.?!1234567890:':
-                if word.lower().count(c.lower()) >= int(amount):
-                    return True
-        else:
-            if word.count(char.lower()) >= int(amount):
-                return True
-    return False
-
-def checkMatch(self, type, action, channel, msg):
-    if type == 'b':
-        replaceDone, did_replace = False, False
-        tempMsg = msg
-        regex = re.compile('\x1d|\x1f|\x02|\x12|\x0f|\x16|\x03(?:\d{1,2}(?:,\d{1,2})?)?', re.UNICODE)
-        for ban in [ban for ban in channel.bans if ban[:2] == '~T' and ban.split(':')[1] == action]:
-            m = ban.split(':', 2)[2]
-            m = regex.sub('', m)
-            rep_char_block = None
-            try:
-                int(ban.split(':')[3]) > 0
-                rep_char_block = ban.split(':')[3]
-            except:
-                pass
-            if action == 'block':
-                char = m.split(':')[0]
-                if rep_char_block and char_repeat(msg, char, rep_char_block):
-                    return True
-                block = match(m.lower(), msg.lower()) or m.lower() in msg.lower().split()
-                if not rep_char_block and block:
-                    return True
-            if action == 'replace':
-                ### This just works, so don't mess it up.
-                m = ban.split(':', 2)[2]
-                if m.startswith(':'):
-                    search = ':'+m.split(':')[1]
-                    replaceWith = m.split(':', 2)[2]
-                else:
-                    search = m.split(':')[0]
-                    if m.split(':')[1] != '':
-                        replaceWith = m.split(':')[1]
-                    else:
-                        replaceWith = ':'+m.split(':', 2)[2]
-                for word in msg.split():
-                    word = regex.sub('', word)
-                    tempWord = word.lower()
-                    if match(search.lower(),tempWord) or search.lower() == tempWord:
-                        temp = search.replace('*', '')
-                        if word.isupper():
-                            temp = temp.upper()
-                            did_replace = True
-                            replaceWith = replaceWith.upper()
-                        elif not word.islower():
-                            temp = re.search(temp, word, flags=re.IGNORECASE).group()
-                        did_replace = True
-                        tempMsg = tempMsg.replace(temp, replaceWith)
-                if did_replace:
-                    replaceDone = True
-
-        if replaceDone:
-            return tempMsg
 
 @ircd.Modules.support('MAXTARGETS='+str(maxtargets))
 @ircd.Modules.commands('privmsg', 'zegding')
@@ -109,7 +44,6 @@ def privmsg(self, localServer, recv, override=False, safe=False):
 
         targets = recv[1].split(',')
 
-        global msg
         msg = ' '.join(recv[2:]).rstrip()
 
         if type(self).__name__ == 'User':
@@ -130,19 +64,16 @@ def privmsg(self, localServer, recv, override=False, safe=False):
                 if user.server == localServer:
                     sync = False
 
-                ### Check for module events (private messages).
-                success = True
                 if type(self).__name__ == 'User':
-                    for callable in [callable for callable in localServer.events if callable[0].lower() == recv[0].lower()]:
+                    for callable in [callable for callable in localServer.events if callable[0].lower() == 'pre_usermsg']:
                         try:
-                            success = callable[1](self, localServer, user, msg, callable[2])
-                            if not success:
+                            msg = callable[1](self, localServer, user, msg, callable[2])
+                            if not msg:
                                 break
                         except Exception as ex:
                             _print('Exception in {} :{}'.format(callable[2],ex), server=localServer)
-                    if not success:
+                    if not msg:
                         continue
-
                 if user.away:
                     self.sendraw(301, '{} :{}'.format(user.nickname, user.away))
 
@@ -150,6 +81,13 @@ def privmsg(self, localServer, recv, override=False, safe=False):
                 self.idle = int(time.time())
                 if 'echo-message' in self.caplist:
                     self._send(':{} PRIVMSG {} :{}'.format(self.fullmask(), user.nickname, msg))
+
+                if type(self).__name__ == 'User':
+                    for callable in [callable for callable in localServer.events if callable[0].lower() == 'usermsg']:
+                        try:
+                            callable[1](self, localServer, user, msg, callable[2])
+                        except Exception as ex:
+                            _print('Exception in {} :{}'.format(callable[2],ex), server=localServer)
 
                 if sync:
                     localServer.new_sync(localServer, sourceServer, ':{} PRIVMSG {} :{}'.format(sourceID, user.nickname, msg))
@@ -178,28 +116,20 @@ def privmsg(self, localServer, recv, override=False, safe=False):
                         self.sendraw(404, '{} :Cannot send to channel (+m)'.format(channel.name))
                         continue
 
-                    if checkMatch(self, 'b', 'block', channel, msg) and self.chlevel(channel) < 3 and not self.ocheck('o', 'override') and not override:
-                        self.sendraw(404, '{} :Cannot send to channel (+b ~T)'.format(channel.name))
-                        continue
-
-                    if checkMatch(self, 'b', 'replace', channel, msg) and self.chlevel(channel) < 5 and not self.ocheck('o', 'override') and not override:
-                        msg = checkMatch(self, 'b', 'replace', channel, msg)
-
                 if '^' in self.modes:
                     self.sendraw(404, '{} :You are invisible on channel {}'.format(channel.name, channel.name))
                     continue
 
                 ### Check for module events (channel messages).
-                success = True
                 if type(self).__name__ == 'User':
-                    for callable in [callable for callable in localServer.events if callable[0].lower() == recv[0].lower()]:
+                    for callable in [callable for callable in localServer.events if callable[0].lower() == 'pre_chanmsg']:
                         try:
-                            success = callable[1](self, localServer, channel, msg, callable[2])
-                            if not success:
+                            msg = callable[1](self, localServer, channel, msg, callable[2])
+                            if not msg:
                                 break
                         except Exception as ex:
                             _print('Exception in {} :{}'.format(callable[2], ex), server=localServer)
-                    if not success:
+                    if not msg:
                         continue
 
                 users = [user for user in channel.users if user != self]
@@ -213,7 +143,7 @@ def privmsg(self, localServer, recv, override=False, safe=False):
                     localServer.new_sync(localServer, sourceServer, ':{} PRIVMSG {} :{}'.format(sourceID, target, msg))
 
                 ### Check for module events (channel messages).
-                for callable in [callable for callable in localServer.events if callable[0].lower() == 'after_privmsg']:
+                for callable in [callable for callable in localServer.events if callable[0].lower() == 'chanmsg']:
                     try:
                         callable[1](self, localServer, channel, msg, callable[2])
                     except Exception as ex:

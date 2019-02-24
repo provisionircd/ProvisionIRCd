@@ -9,9 +9,11 @@ import ircd
 import time
 import os
 import sys
+import re
 from threading import Timer
 
 from modules.m_mode import makeMask
+from modules.m_joinpart import checkMatch
 
 from handle.functions import _print, match
 
@@ -19,6 +21,76 @@ rt = None
 
 ext_bans = 'TtCOa'
 prefix = '~'
+
+
+def checkExtMatch(type, action, channel, msg):
+    try:
+        if type == 'b':
+            replaceDone, did_replace = False, False
+            tempMsg = msg
+            regex = re.compile('\x1d|\x1f|\x02|\x12|\x0f|\x16|\x03(?:\d{1,2}(?:,\d{1,2})?)?', re.UNICODE)
+            for ban in [ban for ban in channel.bans if ban[:2] == '~T' and ban.split(':')[1] == action]:
+                m = ban.split(':', 2)[2]
+                m = regex.sub('', m)
+                rep_char_block = None
+                try:
+                    int(ban.split(':')[3]) > 0
+                    rep_char_block = ban.split(':')[3]
+                except:
+                    pass
+                if action == 'block':
+                    char = m.split(':')[0]
+                    if rep_char_block and char_repeat(msg, char, rep_char_block):
+                        return True
+                    block = match(m.lower(), msg.lower()) or m.lower() in msg.lower().split()
+                    if not rep_char_block and block:
+                        return True
+                if action == 'replace':
+                    ### This just works, so don't mess it up.
+                    m = ban.split(':', 2)[2]
+                    if m.startswith(':'):
+                        search = ':'+m.split(':')[1]
+                        replaceWith = m.split(':', 2)[2]
+                    else:
+                        search = m.split(':')[0]
+                        if m.split(':')[1] != '':
+                            replaceWith = m.split(':')[1]
+                        else:
+                            replaceWith = ':'+m.split(':', 2)[2]
+                    for word in msg.split():
+                        word = regex.sub('', word)
+                        tempWord = word.lower()
+                        if match(search.lower(),tempWord) or search.lower() == tempWord:
+                            temp = search.replace('*', '')
+                            if word.isupper():
+                                temp = temp.upper()
+                                did_replace = True
+                                replaceWith = replaceWith.upper()
+                            elif not word.islower():
+                                temp = re.search(temp, word, flags=re.IGNORECASE).group()
+                            did_replace = True
+                            tempMsg = tempMsg.replace(temp, replaceWith)
+                    if did_replace:
+                        replaceDone = True
+
+            if replaceDone:
+                return tempMsg
+    except Exception as ex:
+        exc_type, exc_obj, exc_tb = sys.exc_info()
+        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
+        print(e)
+
+def char_repeat(string, char, amount):
+    for word in [word for word in string.split(' ') if '://' not in word and 'www.' not in word]: ### Excluding urls.
+        if char == '*':
+            for c in 'abcdefghijklmnopqrstuwvwxyz,.?!1234567890:':
+                if word.lower().count(c.lower()) >= int(amount):
+                    return True
+        else:
+            if word.count(char.lower()) >= int(amount):
+                return True
+    return False
 
 def checkExpiredBans(localServer):
     remove_bans = {}
@@ -61,8 +133,6 @@ class RepeatedTimer(object):
     def stop(self):
         self._timer.cancel()
         self.is_running = False
-
-from modules.m_joinpart import checkMatch
 
 def init(self):
     global rt
@@ -193,7 +263,7 @@ def extbans(*args): ### Params: self, localServer, recv, tmodes, param, commandQ
         e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
         _print(e, server=localServer)
 
-@ircd.Modules.events('join')
+@ircd.Modules.events('pre_join')
 def join(self, localServer, channel):
     try:
         overrides = []
@@ -205,15 +275,28 @@ def join(self, localServer, channel):
                 banChan = b.split(':')[1]
                 ison_banchan = [chan for chan in localServer.channels if chan.name.lower() == banChan.lower() and self in chan.users]
                 if (banChan.lower() == channel.name.lower() or ison_banchan) and not invite_override and not checkMatch(self, localServer, 'e', channel):
-                    self.sendraw(474, '{} :Cannot join channel (+b1)'.format(channel.name))
+                    self.sendraw(474, '{} :Cannot join channel (+b)'.format(channel.name))
                     return (False, None, overrides)
 
             for b in [b for b in c.bans if b[:2] == '~C']:
                 banChan = b.split(':')[1]
                 ison_banchan = [chan for chan in localServer.channels if chan.name.lower() == banChan.lower() and self in chan.users]
                 if (banChan.lower() == channel.name.lower() or ison_banchan) and not invite_override and not checkMatch(self, localServer, 'e', channel):
-                    self.sendraw(474, '{} :Cannot join channel (+b2)'.format(channel.name))
+                    self.sendraw(474, '{} :Cannot join channel (+b)'.format(channel.name))
                     return (False, None, overrides)
+
+        for b in [b for b in channel.bans if b[:2] == '~t' and not invite_override and not checkMatch(self, localServer, 'e', channel)]:
+            mask = b.split(':')[2]
+            ban = 0
+            if (match(mask, '{}!{}@{}'.format(self.nickname, self.ident, self.hostname))):
+                ban = 1
+            if (match(mask, '{}!{}@{}'.format(self.nickname, self.ident, self.ip))):
+                ban = 1
+            if (match(mask, '{}!{}@{}'.format(self.nickname, self.ident, self.cloakhost))):
+                ban = 1
+            if ban:
+                self.sendraw(474, '{} :Cannot join channel (+b)'.format(channel.name))
+                return (False, None, overrides)
 
         for i in channel.invex:
             if i.startswith('~O'):
@@ -235,7 +318,7 @@ def join(self, localServer, channel):
             if b.startswith('~a'):
                 account = b.split(':')[1]
                 if ('r' in self.modes and (hasattr(self, 'svid') and match(account, self.svid))) and 'b' not in overrides:
-                    self.sendraw(474, '{} :Cannot join channel (+b3)'.format(channel.name))
+                    self.sendraw(474, '{} :Cannot join channel (+b)'.format(channel.name))
                     return (False, None, overrides)
 
         return (True, None, overrides)
@@ -245,3 +328,13 @@ def join(self, localServer, channel):
         fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
         e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
         _print(e, server=localServer)
+
+
+@ircd.Modules.events('pre_chanmsg')
+def pre_chanmsg(self, localServer, channel, msg, module):
+    if checkExtMatch('b', 'block', channel, msg) and self.chlevel(channel) < 3 and not self.ocheck('o', 'override'):
+        self.sendraw(404, '{} :Cannot send to channel (+b ~T)'.format(channel.name))
+        return 0
+    if checkExtMatch('b', 'replace', channel, msg) and self.chlevel(channel) < 5 and not self.ocheck('o', 'override'):
+        msg = checkExtMatch('b', 'replace', channel, msg)
+    return msg

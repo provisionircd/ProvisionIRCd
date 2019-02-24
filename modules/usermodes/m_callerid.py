@@ -14,32 +14,30 @@ from handle.functions import _print
 
 @ircd.Modules.user_modes('g', 0, 'Only users in your accept-list can message you') ### ('mode', 0, 1 or 2 for normal user, oper or server, 'Mode description')
 @ircd.Modules.support('CALLERID')
-@ircd.Modules.events('privmsg')
-def umode_g(self, localServer, target, msg, module):
-    if type(target).__name__ != 'User' or 'o' in self.modes: ### Opers can bypass.
-        return True
-    if not hasattr(target, 'caller_id_accept'):
-        target.caller_id_accept = []
-    if not hasattr(target, 'caller_id_queue'):
-        target.caller_id_queue = []
-    if 'g' in target.modes:
-        accept_lower = [x.lower() for x in target.caller_id_accept]
+@ircd.Modules.events('pre_usermsg')
+def umode_g(self, localServer, user, msg, module):
+    if not hasattr(user, 'caller_id_accept'):
+        user.caller_id_accept = []
+    if not hasattr(user, 'caller_id_queue'):
+        user.caller_id_queue = []
+    if 'g' in user.modes:
+        accept_lower = [x.lower() for x in user.caller_id_accept]
         if self.nickname.lower() not in accept_lower:
-            self.sendraw(716, '{} :is in +g mode'.format(target.nickname))
+            self.sendraw(716, '{} :is in +g mode'.format(user.nickname))
             ### Send below raw only once per minute max.
-            self.sendraw(717, '{} :has been informed of your request, awaiting reply'.format(target.nickname))
+            self.sendraw(717, '{} :has been informed of your request, awaiting reply'.format(user.nickname))
         if not hasattr(self, 'targnotify'):
             self.targnotify = {}
         if self.nickname.lower() not in accept_lower:
             ### Block message.
-            if (target in self.targnotify and int(time.time()) - self.targnotify[target] > 60) or target not in self.targnotify:
-                target.sendraw(718, '{} {}@{} :is messaging you, and you have umode +g.'.format(self.nickname, self.ident, self.cloakhost if 'x' in self.modes else self.hostname))
-                self.targnotify[target] = int(time.time())
-            if target.server == localServer:
+            if (user in self.targnotify and int(time.time()) - self.targnotify[user] > 60) or user not in self.targnotify:
+                user.sendraw(718, '{} {}@{} :is messaging you, and you have umode +g.'.format(self.nickname, self.ident, self.cloakhost if 'x' in self.modes else self.hostname))
+                self.targnotify[user] = int(time.time())
+            if user.server == localServer:
                 queue = (self.fullmask(), time.time()*10, msg)
-                target.caller_id_queue.append(queue)
-                return False
-    return True
+                user.caller_id_queue.append(queue)
+                return 0
+    return msg
 
 @ircd.Modules.params(1)
 @ircd.Modules.commands('accept')

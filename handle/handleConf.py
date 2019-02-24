@@ -278,7 +278,7 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
             return
 
         if 'modules' in tempconf:
-            #localServer.events = [] # Uncomment this if you encounter issues with events not getting unhooked.
+            localServer.events = [] # Uncomment this if you encounter issues with events not getting unhooked.
             for m in dict(localServer.modules):
                 #_print('Unloading module {}'.format(m.__name__), server=localServer)
                 Modules.UnloadModule(localServer, m.__name__)

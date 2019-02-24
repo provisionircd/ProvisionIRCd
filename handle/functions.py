@@ -220,17 +220,22 @@ def update_support(localServer):
                     param = r.split('=')[1]
                 if support == 'CHANMODES':
                     param = localServer.chmodes_string
+                if support == 'PREFIX':
+                    param = localServer.chprefix_string
+                if support == 'MAXLIST':
+                    param = localServer.maxlist_string
                 if support not in localServer.support:
                     string = '{}{}'.format(support, '={}'.format(param) if param else '')
                     localServer.support.append(string)
                 if server_support:
                     localServer.server_support.append(string)
-
     if hasattr(localServer, 'chprefix'):
+        #print('-')
         chprefix_string = ''
         first = '('
         second = ''
         for key in localServer.chprefix:
+            #print('Prefix: {}'.format(key))
             first += key
             second += localServer.chprefix[key]
         first += ')'

@@ -31,6 +31,7 @@ import atexit
 import handle.handleConf
 from handle.handleLink import Link as link
 import handle.handleModules as Modules
+from collections import OrderedDict
 #from OpenSSL import SSL
 
 path = os.path.abspath(__file__)
@@ -118,7 +119,6 @@ class Server:
                 self.localServer = self
                 self.linkRequests = {}
                 self.sync_queue = {}
-
                 self.creationtime = int(time.time())
 
                 self.versionnumber = '1.1'
@@ -135,6 +135,87 @@ class Server:
                 self.hostcache = {}
                 self.throttle = {}
                 self.tkl = {}
+                self.user_modes = {
+                    "i": (0, "User does not show up in outside /who"),
+                    "o": (2, "IRC Operator"),
+                    "x": (0, "Hides real host with cloaked host"),
+                    "q": (1, "Protected on all channels"),
+                    "r": (2, "Identifies the nick as being logged in"),
+                    "s": (1, "Can receive server notices"),
+                    "z": (2, "User is using a secure connection"),
+                    "H": (1, "Hide IRCop status"),
+                    "S": (2, "Marks the client as a network service"),
+                }
+                self.channel_modes = {
+                ### +v = 1
+                ### +h = 2
+                ### +o = 3
+                ### +a = 4
+                ### +q = 5
+                ### oper = 6
+                ### server = 7
+                            0: {
+                                "b": (2, "Bans the given hostmask from the channel", "<nick!ident@host>"),
+                                "e": (2, "Users matching an except can go through channel bans", "<nick!ident@host>"),
+                                "I": (2, "Matching users can go through channel mode +i", "<nick!ident@host>"),
+                                },
+                            1: {
+                                "k": (2, "User must give a key in order to join the channel", "<key>"),
+                                "L": (5, "When the channel is full, redirect users to another channel (requires +l)", "<chan>"),
+                                },
+                            2: {
+                                "l": (2, "Set a channel user limit", "[number]"),
+                                },
+                            3: {
+                                "m": (2, "Moderated channel, need +v or higher to talk"),
+                                "n": (2, "No outside messages allowed"),
+                                "j": (3, "Quits appear as parts"),
+                                "p": (3, "Private channel"),
+                                "r": (7, "Channel is registered"),
+                                "s": (3, "Channel is secret"),
+                                "t": (3, "Only +h or higher can change topic"),
+                                "z": (3, "Requires SSL to join the channel"),
+                                "C": (2, "CTCPs are not allowed in the channel"),
+                                "N": (4, "Nickchanges are not allowed in the channel"),
+                                "O": (6, "Only IRCops can join"),
+                                "P": (6, "Permanent channel"),
+                                "Q": (4, "No kicks allowed"),
+                                "R": (3, "You must be registered to join the channel"),
+                                "T": (2, "Notices are not allowed in the channel"),
+                                "V": (3, "Invite is not permitted on the channel"),
+                                },
+                        }
+                chmodes_string = ''
+                for t in self.channel_modes:
+                    for m in self.channel_modes[t]:
+                        chmodes_string += m
+                    chmodes_string += ','
+                self.chmodes_string = chmodes_string[:-1]
+                self.snomasks = 'cdfjkostzCFGNQS'
+                self.chstatus = 'yqaohv'
+                self.chprefix = OrderedDict(
+                                    [
+                                    ('y', '!'),
+                                    ('q', '~'),
+                                    ('a', '&'),
+                                    ('o', '@'),
+                                    ('h', '%'),
+                                    ('v', '+')
+                                    ])
+                self.chprefix = OrderedDict(self.chprefix)
+                chprefix_string = ''
+                first = '('
+                second = ''
+                for key in self.chprefix:
+                    first += key
+                    second += self.chprefix[key]
+                first += ')'
+                self.chprefix_string = '{}{}'.format(first, second)
+                self.maxlist = {}
+                self.maxlist['b'] = 500
+                self.maxlist['e'] = 500
+                self.maxlist['I'] = 500
+                self.maxlist_string = 'b:{},e:{},I:{}'.format(self.maxlist['b'], self.maxlist['e'], self.maxlist['I'])
 
                 handle.handleConf.checkConf(self, None, self.confdir, self.conffile)
 
@@ -656,40 +737,6 @@ if __name__ == "__main__":
     parser.add_argument('--mkpasswd', help='Generate bcrypt password')
     args = parser.parse_args()
 
-    '''
-    signals = {
-            signal.SIGABRT: 'signal.SIGABRT',
-            signal.SIGALRM: 'signal.SIGALRM',
-            signal.SIGBUS: 'signal.SIGBUS',
-            signal.SIGCHLD: 'signal.SIGCHLD',
-            signal.SIGCONT: 'signal.SIGCONT',
-            signal.SIGFPE: 'signal.SIGFPE',
-            signal.SIGHUP: 'signal.SIGHUP',
-            signal.SIGILL: 'signal.SIGILL',
-            signal.SIGINT: 'signal.SIGINT',
-            signal.SIGPIPE: 'signal.SIGPIPE',
-            signal.SIGPOLL: 'signal.SIGPOLL',
-            signal.SIGPROF: 'signal.SIGPROF',
-            signal.SIGQUIT: 'signal.SIGQUIT',
-            signal.SIGSEGV: 'signal.SIGSEGV',
-            signal.SIGSYS: 'signal.SIGSYS',
-            signal.SIGTERM: 'signal.SIGTERM',
-            signal.SIGTRAP: 'signal.SIGTRAP',
-            signal.SIGTSTP: 'signal.SIGTSTP',
-            signal.SIGTTIN: 'signal.SIGTTIN',
-            signal.SIGTTOU: 'signal.SIGTTOU',
-            signal.SIGURG: 'signal.SIGURG',
-            signal.SIGUSR1: 'signal.SIGUSR1',
-            signal.SIGUSR2: 'signal.SIGUSR2',
-            signal.SIGVTALRM: 'signal.SIGVTALRM',
-            signal.SIGXCPU: 'signal.SIGXCPU',
-            signal.SIGXFSZ: 'signal.SIGXFSZ',
-            }
-
-    for num in signals:
-        #print('Checking {}'.format(signals[num]))
-        signal.signal(num, handler)
-    '''
     global conffile
     if not args.conf:
         conffile = 'ircd.conf'

@@ -93,21 +93,24 @@ class data_handler(threading.Thread):
                             server_cert = '../ssl/server.cert.pem'
                             server_key = '../ssl/server.key.pem'
                             ca_certs = '../ssl/curl-ca-bundle.crt'
-                            '''
-                            conn = ssl.wrap_socket(conn,
-                                                    server_side=True,
-                                                    certfile=server_cert, keyfile=server_key, ca_certs=ca_certs,
-                                                    suppress_ragged_eofs=True,
-                                                    #cert_reqs=ssl.CERT_OPTIONAL,
-                                                    ciphers='HIGH'
-                                                    )
-                            '''
-                            sslctx = ssl.SSLContext(ssl.PROTOCOL_TLS)
-                            sslctx.load_cert_chain(certfile=server_cert, keyfile=server_key)
-                            sslctx.load_default_certs(purpose=ssl.Purpose.CLIENT_AUTH)
-                            sslctx.load_verify_locations(cafile=ca_certs)
-                            sslctx.verify_mode = ssl.CERT_NONE
-                            conn = sslctx.wrap_socket(conn, server_side=True)
+                            version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
+                            if int(version) >= 36:
+                                sslctx = ssl.SSLContext(ssl.PROTOCOL_TLS)
+                                sslctx.load_cert_chain(certfile=server_cert, keyfile=server_key)
+                                sslctx.load_default_certs(purpose=ssl.Purpose.CLIENT_AUTH)
+                                sslctx.load_verify_locations(cafile=ca_certs)
+                                sslctx.verify_mode = ssl.CERT_NONE
+                                conn = sslctx.wrap_socket(conn, server_side=True)
+
+                            else:
+                                conn = ssl.wrap_socket(conn,
+                                                        server_side=True,
+                                                        certfile=server_cert, keyfile=server_key, ca_certs=ca_certs,
+                                                        suppress_ragged_eofs=True,
+                                                        #cert_reqs=ssl.CERT_OPTIONAL,
+                                                        ciphers='HIGH'
+                                                        )
+
 
                             try:
                                 fp = conn.getpeercert(True)

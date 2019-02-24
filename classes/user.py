@@ -120,6 +120,9 @@ class User:
                         d = DNSBLCheck(self.server, self, self.ip)
                         d.start()
 
+                TKL.check(self, self.server, self, 'z')
+                TKL.check(self, self.server, self, 'Z')
+
                 self.registered = False
                 self.signon = int(time.time())
                 throttleTreshhold = int(self.server.conf['settings']['throttle'].split(':')[0])
@@ -149,9 +152,6 @@ class User:
                 self.validping = False
                 self.server.totalcons += 1
 
-                TKL.check(self, self.server, self, 'z')
-                TKL.check(self, self.server, self, 'Z')
-
                 if self.ssl and self.socket:
                     try:
                         fp = self.socket.getpeercert()
@@ -179,10 +179,10 @@ class User:
                 else:
                     self._send(':{} NOTICE AUTH :*** Host resolution is disabled, using IP ({})'.format(self.server.hostname, self.ip))
 
-                self.cloakhost = cloak(self.server, self.hostname)
-
                 TKL.check(self, self.server, self, 'g')
                 TKL.check(self, self.server, self, 'G')
+
+                self.cloakhost = cloak(self.server, self.hostname)
 
             else:
                 try:
@@ -579,7 +579,7 @@ class User:
             if not sourceServer.socket and sourceServer.uplink:
                 sourceServer = sourceServer.uplink
             #_print('User {} quit, sourceServer: {}'.format(self, sourceServer), server=localServer)
-            for callable in [callable for callable in localServer.events if callable[0].lower() == 'quit']:
+            for callable in [callable for callable in localServer.events if callable[0].lower() == 'pre_quit']:
                 try:
                     ### 'quit' event will return a tuple: (success, broadcast)
                     ### broadcast is a list of all users to broadcast to.
@@ -650,6 +650,12 @@ class User:
                     self.socket.shutdown(socket.SHUT_WR)
                 except:
                     self.socket.close()
+
+            for callable in [callable for callable in localServer.events if callable[0].lower() == 'quit']:
+                try:
+                    callable[1](self, localServer, reason)
+                except Exception as ex:
+                    _print('Exception in module: {}: {}'.format(callable[2], ex), server=localServer)
 
             del self
 

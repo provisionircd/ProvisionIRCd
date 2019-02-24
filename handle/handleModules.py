@@ -99,7 +99,6 @@ def HookToCore(self, callables):
                         _print('Channel (user)-mode {} already exists.'.format(m), server=self)
                         continue
                     if cls and cls.lower() == 'user':
-                        #chstatus = ''.join(self.chmodes.split(',')[4])
                         self.chstatus += m[0]
                         ### Adding prefix to core.
                         found_prefix = [p for p in self.chprefix if self.chprefix[p] == prefix]
@@ -120,8 +119,8 @@ def HookToCore(self, callables):
 
                     chmodes_string = ''
                     for t in self.channel_modes:
-                        for m in self.channel_modes[t]:
-                            chmodes_string += m
+                        for n in self.channel_modes[t]:
+                            chmodes_string += n
                         chmodes_string += ','
                     self.chmodes_string = chmodes_string[:-1]
 
@@ -148,8 +147,9 @@ def HookToCore(self, callables):
             hooks.append(callable)
             for event in [event for event in callable.events]:
                 info = (event, callable, module)
-                self.events.append(info)
-                #_print('Hooked event {} to core'.format(info), server=self)
+                if info not in self.events:
+                    self.events.append(info)
+                    #_print('Hooked event {} to core'.format(info), server=self)
 
     except Exception as ex:
         exc_type, exc_obj, exc_tb = sys.exc_info()
@@ -244,6 +244,7 @@ def UnloadModule(self, name):
                         info = (event, function, module)
                         function.events.remove(event)
                         if info in self.events:
+                            #_print('Removed event {}'.format(info), server=self)
                             self.events.remove(info)
                         else:
                             _print('REMOVE ERROR: Unable to remove event {}: not found in events list'.format(info), server=self)

@@ -27,102 +27,6 @@ tmodes = []
 param = []
 
 maxmodes = 24
-channel_modes = {
-### +v = 1
-### +h = 2
-### +o = 3
-### +a = 4
-### +q = 5
-### oper = 6
-### server = 7
-            0: {
-                "b": (2, "Bans the given hostmask from the channel", "<nick!ident@host>"),
-                "e": (2, "Users matching an except can go through channel bans", "<nick!ident@host>"),
-                "I": (2, "Matching users can go through channel mode +i", "<nick!ident@host>"),
-                },
-            1: {
-                "k": (2, "User must give a key in order to join the channel", "<key>"),
-                "L": (5, "When the channel is full, redirect users to another channel (requires +l)", "<chan>"),
-                },
-            2: {
-                "l": (2, "Set a channel user limit", "[number]"),
-                },
-            3: {
-                "m": (2, "Moderated channel, need +v or higher to talk"),
-                "n": (2, "No outside messages allowed"),
-                "j": (3, "Quits appear as parts"),
-                "p": (3, "Private channel"),
-                "r": (7, "Channel is registered"),
-                "s": (3, "Channel is secret"),
-                "t": (3, "Only +h or higher can change topic"),
-                "z": (3, "Requires SSL to join the channel"),
-                "C": (2, "CTCPs are not allowed in the channel"),
-                "N": (4, "Nickchanges are not allowed in the channel"),
-                "O": (6, "Only IRCops can join"),
-                "P": (6, "Permanent channel"),
-                "Q": (4, "No kicks allowed"),
-                "R": (3, "You must be registered to join the channel"),
-                "T": (2, "Notices are not allowed in the channel"),
-                "V": (3, "Invite is not permitted on the channel"),
-                },
-    }
-maxlist = {}
-maxlist['b'] = 500
-maxlist['e'] = 500
-maxlist['I'] = 500
-
-chmodes_string = ''
-for t in channel_modes:
-    for m in channel_modes[t]:
-        chmodes_string += m
-    chmodes_string += ','
-chmodes_string = chmodes_string[:-1]
-
-chstatus = 'yqaohv'
-chprefix = {
-                    'y': '!',
-                    'q': '~',
-                    'a': '&',
-                    'o': '@',
-                    'h': '%',
-                    'v': '+'
-                    }
-chprefix_string = ''
-first = '('
-second = ''
-for key in chprefix:
-    first += key
-    second += chprefix[key]
-first += ')'
-chprefix_string = '{}{}'.format(first, second)
-
-user_modes = {
-        "i": (0, "User does not show up in outside /who"),
-        "o": (2, "IRC Operator"),
-        "x": (0, "Hides real host with cloaked host"),
-        "q": (1, "Protected on all channels"),
-        "r": (2, "Identifies the nick as being logged in"),
-        "s": (1, "Can receive server notices"),
-        "z": (2, "User is using a secure connection"),
-        "H": (1, "Hide IRCop status"),
-        "S": (2, "Marks the client as a network service"),
-    }
-
-def init(localServer):
-    localServer.user_modes.update(user_modes)
-    if not localServer.channel_modes:
-        localServer.channel_modes = channel_modes
-    else:
-        l = []
-        for k, v in localServer.channel_modes.items():
-            if k in channel_modes:
-                l.append((k, v))
-        localServer.channel_modes.update(l)
-    localServer.chstatus = chstatus
-    localServer.snomasks = 'cdfjkostzCFGNQS'
-    localServer.chprefix = chprefix
-    localServer.chmodes_string = chmodes_string
-    localServer.maxlist = maxlist ### Other modules, like extbans, require this information.
 
 def makeMask(localServer, data):
     nick, ident, host = '', '', ''
@@ -334,7 +238,7 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         data = channel.invex
                         s = 'invex'
                     if mask not in data:
-                        if len(data) >= maxlist[m] and type(self).__name__ == 'User':
+                        if len(data) >= localServer.maxlist[m] and type(self).__name__ == 'User':
                             self.sendraw(478, '{} {} :Channel {} list is full'.format(channel.name, mask, s))
                             paramcount += 1
                             continue
@@ -459,7 +363,7 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         data = channel.excepts
                     elif m == 'I':
                         data = channel.invex
-                    if mask in channel.bans:
+                    if mask in data:
                         del data[mask]
                         param.append(mask)
                         tmodes.append(m)
@@ -552,9 +456,9 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
         _print(e, server=localServer)
 
 @ircd.Modules.params(1)
-@ircd.Modules.support(('CHANMODES='+str(chmodes_string), True)) ### (support string, boolean if support must be sent to other servers)
-@ircd.Modules.support('MAXLIST=b:{},e:{},I:{}'.format(maxlist['b'], maxlist['e'], maxlist['I']))
-@ircd.Modules.support('PREFIX='+str(chprefix_string))
+@ircd.Modules.support(('CHANMODES=', True)) ### (support string, boolean if support must be sent to other servers)
+@ircd.Modules.support('MAXLIST=')
+@ircd.Modules.support('PREFIX=')
 @ircd.Modules.support('MODES='+str(maxmodes))
 @ircd.Modules.commands('mode')
 def mode(self, localServer, recv, override=False, handleParams=None):
@@ -845,6 +749,13 @@ def chgumode(self, localServer, recv, override, sourceServer=None, sourceUser=No
                 #target.server._send(':{} MODE {} :{}'.format(displaySource, target.nickname, modes))
             else:
                 localServer.new_sync(localServer, sourceServer, ':{} UMODE2 {}'.format(target.uid, modes))
+
+            for callable in [callable for callable in localServer.events if callable[0].lower() == 'umode']:
+                try:
+                    callable[1](self, localServer, modes)
+                except Exception as ex:
+                    _print('Exception in {}: {}'.format(callable[2], ex), server=localServer)
+
             #localServer.syncToServers(localServer, self.server, ':{} UMODE2 {}'.format(target.uid, modes))
         if 's' in modes or showsno:
             self.sendraw(8, 'Server notice mask (+{})'.format(target.snomasks))

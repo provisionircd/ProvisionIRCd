@@ -18,9 +18,7 @@ def names(self, localServer, recv, override=False):
 
     channel = channel[0]
     success, exclude = True, []
-    for callable in [callable for callable in localServer.events if callable[0].lower() == recv[0].lower()]:
-        ### (command, function, module) <--- why did I put module in this tuple? It still remains a mystery.
-        #localServer.modulename = callable[2].__name__
+    for callable in [callable for callable in localServer.events if callable[0].lower() == 'pre_names']:
         try:
             success, exclude = callable[1](self, localServer, channel)
         except Exception as ex:

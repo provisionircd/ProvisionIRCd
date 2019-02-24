@@ -16,7 +16,7 @@ kicklen = 307
 @ircd.Modules.params(2)
 @ircd.Modules.support('KICKLEN='+str(kicklen))
 @ircd.Modules.commands('kick')
-def kick(self, localServer, recv, override=False):
+def kick(self, localServer, recv, override=False, sync=True):
     try:
         oper_override = False
         if type(self).__name__ == 'Server':
@@ -80,7 +80,7 @@ def kick(self, localServer, recv, override=False):
             reason = reason[1:]
         reason = reason[:kicklen]
         success = True
-        for callable in [callable for callable in localServer.events if callable[0].lower() == recv[0].lower()]:
+        for callable in [callable for callable in localServer.events if callable[0].lower() == 'pre_kick']:
             try:
                 success = callable[1](self, localServer, user, channel, reason)
                 if not success:
@@ -100,7 +100,18 @@ def kick(self, localServer, recv, override=False):
         if len(channel.users) == 0 and 'P' not in channel.modes:
             localServer.channels.remove(channel)
 
-        localServer.new_sync(localServer, sourceServer, ':{} KICK {} {} :{}'.format(sourceID, channel.name, user.nickname, reason))
+        for callable in [callable for callable in localServer.events if callable[0].lower() == 'kick']:
+            try:
+                success = callable[1](self, localServer, user, channel, reason)
+                if not success:
+                    break
+            except Exception as ex:
+                _print('Exception in module {}: {}'.format(callable[2], ex), server=localServer)
+        if not success:
+            return
+
+        if sync:
+            localServer.new_sync(localServer, sourceServer, ':{} KICK {} {} :{}'.format(sourceID, channel.name, user.nickname, reason))
 
     except Exception as ex:
         exc_type, exc_obj, exc_tb = sys.exc_info()

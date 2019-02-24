@@ -120,7 +120,6 @@ def syncUsers(localServer, newServer):
                     ip = '*'
                 hopcount = str(u.server.hopcount + 1)
                 data = ':{} UID {} {} {} {} {} {} 0 +{} {} {} {} :{}'.format(server.sid, u.nickname, hopcount, u.signon, u.ident, u.hostname, u.uid, u.modes, u.cloakhost, u.cloakhost, ip, u.realname)
-                _print('<<< {}'.format(data), server=localServer)
                 newServer._send(data)
                 if u.fingerprint:
                     data = 'MD client {} certfp :{}'.format(u.uid, u.fingerprint)

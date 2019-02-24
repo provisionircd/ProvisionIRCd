@@ -135,7 +135,7 @@ def join(self, localServer, recv, override=False, skipmod=None, sourceServer=Non
             success = True
             broadcastjoin = None
             overrides = []
-            for callable in [callable for callable in localServer.events if callable[0].lower() == recv[0].lower() and callable[2] != skipmod]:
+            for callable in [callable for callable in localServer.events if callable[0].lower() == 'pre_'+recv[0].lower() and callable[2] != skipmod]:
                 try:
                     success, temp_broadcastjoin, overrides = callable[1](self, localServer, channel)
                     if type(temp_broadcastjoin) == list and broadcastjoin is None:
@@ -216,7 +216,7 @@ def join(self, localServer, recv, override=False, skipmod=None, sourceServer=Non
             ### Check for module events (after join)
             success = True
             broadcastjoin = channel.users+[self]
-            for callable in [callable for callable in localServer.events if callable[0].lower() == 'after_join' and callable[2] != skipmod]:
+            for callable in [callable for callable in localServer.events if callable[0].lower() == recv[0].lower() and callable[2] != skipmod]:
                 try:
                     callable[1](self, localServer, channel)
                 except Exception as ex:
@@ -264,7 +264,7 @@ def part(self, localServer, recv, reason=None):
                 return
 
             broadcastpart = channel.users+[self]
-            for callable in [callable for callable in localServer.events if callable[0].lower() == recv[0].lower()]:
+            for callable in [callable for callable in localServer.events if callable[0].lower() == 'pre_'+recv[0].lower()]:
                 try:
                     success, broadcastpart = callable[1](self, localServer, channel)
                 except Exception as ex:

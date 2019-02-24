@@ -19,19 +19,19 @@ joins_showed = {}
 
 ### Types: 0 = mask, 1 = require param, 2 = optional param, 3 = no param, 4 = special user channel-mode.
 @ircd.Modules.channel_modes(chmode, 3, 3, 'Delay join message until the user speaks') ### ('mode', type, level, 'Mode description', class 'user' or None, prefix, 'param desc')
-@ircd.Modules.events('privmsg')
+@ircd.Modules.events('pre_chanmsg')
 def showjoin(self, localServer, channel, msg, module):
     if 'D' not in channel.modes:
-        return True
+        return msg
     if self in channel.delayjoins:
         channel.delayjoins.remove(self)
         broadcast = [user for user in channel.users if user not in joins_showed[channel][self] and user != self]
         self.broadcast(broadcast, 'JOIN :{}'.format(channel.name))
         for user in broadcast:
             joins_showed[channel][self][user] = True
-    return True
+    return msg
 
-@ircd.Modules.events('join')
+@ircd.Modules.events('pre_join')
 def hidejoin(self, localServer, channel):
     ### NoneType issues? Always make sure to return a tuple!
     overrides = []
@@ -57,12 +57,12 @@ def hidejoin(self, localServer, channel):
         e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
         _print(e, server=localServer)
 
-@ircd.Modules.events('part')
+@ircd.Modules.events('pre_part')
 def hidepart(self, localServer, channel):
     if 'D' not in channel.modes:
         return (True, None)
     try:
-        broadcast = [user for user in channel.users if user in joins_showed[channel][self] and user not in parts_showed[channel][self]]
+        broadcast = [user for user in channel.users if user in joins_showed[channel][self] and (self in parts_showed[channel] and user not in parts_showed[channel][self])]
         for user in broadcast:
             parts_showed[channel][self][user] = True
             del joins_showed[channel][self][user]
@@ -75,7 +75,7 @@ def hidepart(self, localServer, channel):
         e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
         _print(e, server=localServer)
 
-@ircd.Modules.events('quit')
+@ircd.Modules.events('pre_quit')
 def hidequit(self, localServer, reason):
     try:
         broadcast = None
@@ -175,7 +175,7 @@ def show_parts(delayed_user, channel):
         if user in joins_showed[channel][delayed_user]:
             del joins_showed[channel][delayed_user][user]
 
-@ircd.Modules.events('kick')
+@ircd.Modules.events('pre_kick')
 def kick(self, localServer, user, channel, reason):
     if 'D' not in channel.modes:
         return True
@@ -185,7 +185,7 @@ def kick(self, localServer, user, channel, reason):
         del joins_showed[channel][user]
     return True
 
-@ircd.Modules.events('names')
+@ircd.Modules.events('pre_names')
 def names(self, localServer, channel):
     exclude = []
     if 'D' in channel.modes:
