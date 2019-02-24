@@ -184,8 +184,6 @@ def UnloadModule(self, name):
             if m == name:
                 if hasattr(module, 'unload'):
                     getattr(module, 'unload')(self)
-                #for index in range(0, len(self.modules[module])):
-                #    print('{} index {}: {}'.format(name, index, self.modules[module][index]))
                 for function in [function for function in self.modules[module][0] if hasattr(function, 'commands')]:
                     for cmd in list(function.commands):
                         function.commands.remove(cmd)

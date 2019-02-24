@@ -728,6 +728,7 @@ def chgumode(self, localServer, recv, override, sourceServer=None, sourceUser=No
                                 localServer.new_sync(localServer, sourceServer, data)
 
                         target.opermodes = ''
+                        self.operaccount = None
 
                     if m not in modes:
                         modes.append(m)
@@ -752,14 +753,14 @@ def chgumode(self, localServer, recv, override, sourceServer=None, sourceUser=No
 
             for callable in [callable for callable in localServer.events if callable[0].lower() == 'umode']:
                 try:
-                    callable[1](self, localServer, modes)
+                    callable[1](target, localServer, modes)
                 except Exception as ex:
                     _print('Exception in {}: {}'.format(callable[2], ex), server=localServer)
 
             #localServer.syncToServers(localServer, self.server, ':{} UMODE2 {}'.format(target.uid, modes))
         if 's' in modes or showsno:
-            self.sendraw(8, 'Server notice mask (+{})'.format(target.snomasks))
             localServer.new_sync(localServer, sourceServer, ':{} BV +{}'.format(target.uid, target.snomasks))
+            target.sendraw(8, 'Server notice mask (+{})'.format(target.snomasks))
 
         if unknown:
             self.sendraw(501, 'Mode{} \'{}\' not found'.format('s' if len(unknown) > 1 else '', ''.join(unknown)))

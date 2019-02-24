@@ -19,5 +19,5 @@ def zilence_z(self, localServer, channel, msg, module):
     self.sendraw(404, '{} :You cannot speak (+z)'.format(channel.name))
     return 0
 
-def unload(self):
-    self.chstatus = re.sub(chmode, '', self.chstatus)
+def unload(localServer):
+    localServer.chstatus = re.sub(chmode, '', localServer.chstatus)
