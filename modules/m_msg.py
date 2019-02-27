@@ -65,9 +65,9 @@ def privmsg(self, localServer, recv, override=False, safe=False):
                     sync = False
 
                 if type(self).__name__ == 'User':
-                    for callable in [callable for callable in localServer.events if callable[0].lower() == 'pre_usermsg']:
+                    for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_usermsg']:
                         try:
-                            msg = callable[1](self, localServer, user, msg, callable[2])
+                            msg = callable[3](self, localServer, user, msg)
                             if not msg:
                                 break
                         except Exception as ex:
@@ -77,20 +77,21 @@ def privmsg(self, localServer, recv, override=False, safe=False):
                 if user.away:
                     self.sendraw(301, '{} :{}'.format(user.nickname, user.away))
 
-                self.broadcast([user], 'PRIVMSG {} :{}'.format(user.nickname, msg))
-                self.idle = int(time.time())
-                if 'echo-message' in self.caplist:
-                    self._send(':{} PRIVMSG {} :{}'.format(self.fullmask(), user.nickname, msg))
 
                 if type(self).__name__ == 'User':
+                    self.broadcast([user], 'PRIVMSG {} :{}'.format(user.nickname, msg))
+                    self.idle = int(time.time())
+                    if 'echo-message' in self.caplist:
+                        self._send(':{} PRIVMSG {} :{}'.format(self.fullmask(), user.nickname, msg))
                     for callable in [callable for callable in localServer.events if callable[0].lower() == 'usermsg']:
                         try:
-                            callable[1](self, localServer, user, msg, callable[2])
+                            callable[2](self, localServer, user, msg)
                         except Exception as ex:
                             _print('Exception in {} :{}'.format(callable[2],ex), server=localServer)
 
                 if sync:
-                    localServer.new_sync(localServer, sourceServer, ':{} PRIVMSG {} :{}'.format(sourceID, user.nickname, msg))
+                    data = ':{} PRIVMSG {} :{}'.format(sourceID, user.nickname, msg)
+                    localServer.new_sync(localServer, sourceServer, data)
 
             else:
                 channel = [channel for channel in localServer.channels if channel.name.lower() == target.lower()]
@@ -116,15 +117,11 @@ def privmsg(self, localServer, recv, override=False, safe=False):
                         self.sendraw(404, '{} :Cannot send to channel (+m)'.format(channel.name))
                         continue
 
-                if '^' in self.modes:
-                    self.sendraw(404, '{} :You are invisible on channel {}'.format(channel.name, channel.name))
-                    continue
-
-                ### Check for module events (channel messages).
+                ### Check for module hooks (channel messages).
                 if type(self).__name__ == 'User':
-                    for callable in [callable for callable in localServer.events if callable[0].lower() == 'pre_chanmsg']:
+                    for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_chanmsg']:
                         try:
-                            msg = callable[1](self, localServer, channel, msg, callable[2])
+                            msg = callable[2](self, localServer, channel, msg)
                             if not msg:
                                 break
                         except Exception as ex:
@@ -134,7 +131,7 @@ def privmsg(self, localServer, recv, override=False, safe=False):
 
                 users = [user for user in channel.users if user != self]
                 self.broadcast(users, 'PRIVMSG {} :{}'.format(channel.name, msg))
-                if 'echo-message' in self.caplist:
+                if type(self).__name__ == 'User' and 'echo-message' in self.caplist:
                     self._send(':{} PRIVMSG {} :{}'.format(self.fullmask(), channel.name, msg))
 
                 self.idle = int(time.time())
@@ -142,10 +139,10 @@ def privmsg(self, localServer, recv, override=False, safe=False):
                 if sync:
                     localServer.new_sync(localServer, sourceServer, ':{} PRIVMSG {} :{}'.format(sourceID, target, msg))
 
-                ### Check for module events (channel messages).
-                for callable in [callable for callable in localServer.events if callable[0].lower() == 'chanmsg']:
+                ### Check for module hooks (channel messages).
+                for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'chanmsg']:
                     try:
-                        callable[1](self, localServer, channel, msg, callable[2])
+                        callable[2](self, localServer, channel, msg)
                     except Exception as ex:
                         _print('Exception in {} :{}'.format(callable[2], ex), server=localServer)
 
