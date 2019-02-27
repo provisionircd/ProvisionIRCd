@@ -41,13 +41,15 @@ def LoadModules(self):
 
 def HookToCore(self, callables):
     try:
-        ### Tuple: callables, channel_modes, user_modes, events, req_modes, req_flags, req_class, commands, params, support, module
+        ### Tuple: callables, channel_modes, user_modes, events, req_modes, req_flags, req_class, commands, params, support, hooks, module
         hooks = []
         channel_modes = callables[1]
         user_modes = callables[2]
         events = callables[3]
         commands = callables[7]
-        module = callables[10]
+        module_hooks = callables[10]
+        #print('HOOKS: {}'.format(hooks))
+        module = callables[11]
 
         for callable in [callable for callable in commands if callable not in hooks]:
             hooks.append(callable)
@@ -140,16 +142,28 @@ def HookToCore(self, callables):
                 self.user_modes[mode] = (level, desc)
                 #_print('Hooked user mode {} to core (level: {}, desc: {})'.format(mode, level, desc), server=self)
 
+
+
         ### This does not really needed to be "hooked" here. Just loop over the callables to check if there's an event.
         ### callables, channel_modes, user_modes, events, req_modes, req_flags, req_class, commands, params, module
         hooks = []
         for callable in [callable for callable in events if callable not in hooks]:
             hooks.append(callable)
             for event in [event for event in callable.events]:
+                #print('Event: {}'.format(event))
                 info = (event, callable, module)
                 if info not in self.events:
                     self.events.append(info)
                     #_print('Hooked event {} to core'.format(info), server=self)
+
+        hooks = []
+        for callable in [callable for callable in module_hooks if callable not in hooks]:
+            hooks.append(callable)
+            for h in [h for h in callable.hooks if h]:
+                #print(callable)
+                info = (h[0], h[1], callable, module)
+                self.hooks.append(info)
+                _print('Hooked hook {} to core'.format(info), server=self)
 
     except Exception as ex:
         exc_type, exc_obj, exc_tb = sys.exc_info()
@@ -246,11 +260,26 @@ def UnloadModule(self, name):
                             self.events.remove(info)
                         else:
                             _print('REMOVE ERROR: Unable to remove event {}: not found in events list'.format(info), server=self)
+                for function in [function for function in self.modules[module][10] if hasattr(function, 'hooks')]:
+                    for h in list(function.hooks):
+                        info = (h[0], h[1], function, module)
+                        function.hooks.remove(h)
+                        if info in self.hooks:
+                            _print('Removed hook {}'.format(info), server=self)
+                            self.hooks.remove(info)
+                        else:
+                            _print('REMOVE ERROR: Unable to remove hook {}: not found in events list'.format(info), server=self)
+
 
                 ### Leftover events.
                 for e in [e for e in list(self.events) if e[2] == module]:
                    _print('REMOVE ERROR: Event {} was not properly removed (or added double). Removing now.'.format(e), server=self)
                    self.events.remove(e)
+
+                ### Leftover hooks.
+                for h in [h for h in list(self.hooks) if h[2] == module]:
+                   _print('REMOVE ERROR: Hook {} was not properly removed (or added double). Removing now.'.format(h), server=self)
+                   self.hooks.remove(h)
 
                 for function in [function for function in self.modules[module][4] if hasattr(function, 'req_modes')]:
                     for a in list(function.req_modes):
@@ -279,6 +308,7 @@ def FindCallables(module):
     commands = []
     params = [] # For commands.
     support = []
+    hooks = []
     for i in itervalues(vars(module)):
         if callable(i):
             callables.append(i)
@@ -300,7 +330,9 @@ def FindCallables(module):
                 params.append(i)
             if hasattr(i, 'support'):
                 support.append(i)
-    info = callables, channel_modes, user_modes, events, req_modes, req_flags, req_class, commands, params, support, module
+            if hasattr(i, 'hooks'):
+                hooks.append(i)
+    info = callables, channel_modes, user_modes, events, req_modes, req_flags, req_class, commands, params, support, hooks, module
     return info
 
 def commands(*command_list):
@@ -325,14 +357,6 @@ def user_modes(*args):
         if not hasattr(function, "user_modes"):
             function.user_modes = []
         function.user_modes.append(args)
-        return function
-    return add_attribute
-
-def events(*command_list):
-    def add_attribute(function):
-        if not hasattr(function, "events"):
-            function.events = []
-        function.events.extend(command_list)
         return function
     return add_attribute
 
@@ -377,3 +401,75 @@ def support(*support):
         function.support.extend(support)
         return function
     return add_attribute
+
+def events(*command_list):
+    def add_attribute(function):
+        if not hasattr(function, "events"):
+            function.events = []
+        function.events.extend(command_list)
+        return function
+    return add_attribute
+
+
+import inspect
+all_hooks = [
+            'pre_local_join',
+            'local_join',
+            'pre_remote_join',
+            'remote_join',
+            'pre_local_part',
+            'local_part',
+            'pre_remote_part',
+            'remote_part',
+            'pre_local_kick',
+            'local_kick',
+            'pre_remote_kick',
+            'remote_kick',
+            'pre_local_quit',
+            'pre_quit',
+            'pre_chanmsg',
+            'chanmsg',
+            'pre_usermsg',
+            'usermsg',
+            'pre_local_chanmode',
+            'local_chanmode',
+            'pre_remote_chanmode',
+            'remote_chanmode',
+            'pre_local_connect',
+            'modechar_add',
+            'modechar_del',
+            'local_connect',
+            'remote_connect',
+            'welcome',
+            ]
+
+class hooks:
+
+    def test_hook(*h):
+        d = inspect.stack()[0][3]
+        def add(function):
+            if not hasattr(function, "hooks"):
+                function.hooks = []
+            function.hooks.extend((d, h))
+            return function
+        return add
+    '''
+    def pre_chanmode(*h):
+        d = inspect.stack()[0][3]
+        def add(function):
+            info = (function, d, *h)
+            function.hooks = info
+            return function
+        return add
+    '''
+    for hook in all_hooks:
+        exec("""def {}(*h):
+            d = inspect.stack()[0][3]
+            if h:
+                h = h[0]
+            def add(function):
+                if not hasattr(function, "hooks"):
+                    function.hooks = []
+                function.hooks.extend([(d, h)])
+                return function
+            return add""".format(hook))

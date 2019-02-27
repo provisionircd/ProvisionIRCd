@@ -19,6 +19,6 @@ def mkpasswd(self, localServer, recv):
         return localServer.notice(self, '*** Given password is too short.')
 
     self.flood_penalty += 10000
-    hashed = bcrypt.hashpw(recv[1].encode('utf-8'),bcrypt.gensalt(10)).decode('utf-8')
+    hashed = bcrypt.hashpw(recv[1].encode('utf-8'), bcrypt.gensalt(10)).decode('utf-8')
     localServer.notice(self, '*** Hashed ({}): {}'.format(recv[1], hashed))
 

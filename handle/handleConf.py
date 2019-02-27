@@ -271,20 +271,22 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
                     localServer.excepts[type].append(entry)
 
         ### Checking optional modules.
-        localServer.modules = {}
-        localServer.commands = []
+        #localServer.modules = {}
+        #localServer.commands = []
+        #localServer.hooks = []
         if 'modules' not in tempconf:
             conferr('You don\'t seem to have any modules loaded. ProvisionIRCd will not function without them.')
             return
 
         if 'modules' in tempconf:
-            localServer.events = [] # Uncomment this if you encounter issues with events not getting unhooked.
-            for m in dict(localServer.modules):
+            #localServer.events = [] # Uncomment this if you encounter issues with events not getting unhooked.
+            #for m in dict(localServer.modules):
                 #_print('Unloading module {}'.format(m.__name__), server=localServer)
-                Modules.UnloadModule(localServer, m.__name__)
+                #Modules.UnloadModule(localServer, m.__name__)
             #Modules.LoadCommands(localServer)
             modules = Modules.ListModules(localServer)
-            for m in [m for m in modules if m in tempconf['modules']]:
+            local_modules = [m.__name__ for m in localServer.modules]
+            for m in [m for m in modules if m in tempconf['modules'] and m not in local_modules]:
                 #print(m)
                 try:
                     Modules.LoadModule(localServer, m, modules[m])

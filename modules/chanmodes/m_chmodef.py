@@ -23,6 +23,11 @@ def checkExpiredFloods(localServer):
     ### Checking for timed-out flood protection.
     channels = (channel for channel in localServer.channels if 'f' in channel.modes and 'm' in channel.chmodef)
     for chan in channels:
+        if chan.chmodef['m']['action'] == 'm' and 'm' in chan.modes:
+            if chan.chmodef['m']['actionSet'] and int(time.time()) - chan.chmodef['m']['actionSet'] > chan.chmodef['m']['duration']*60:
+                localServer.handle('MODE', '{} -m'.format(chan.name))
+                chan.chmodef['m']['actionSet'] = None
+
         for user in (user for user in chan.users if user in dict(chan.messageQueue)):
             if time.time() - chan.messageQueue[user]['ctime'] > chan.chmodef['m']['time']:
                 #print('Resetting flood for {} on {}'.format(user,chan))
@@ -45,11 +50,11 @@ def checkExpiredFloods(localServer):
 
 class RepeatedTimer(object):
     def __init__(self, interval, function, *args, **kwargs):
-        self._timer     = None
-        self.interval   = interval
-        self.function   = function
-        self.args       = args
-        self.kwargs     = kwargs
+        self._timer = None
+        self.interval = interval
+        self.function = function
+        self.args = args
+        self.kwargs = kwargs
         self.is_running = False
         self.start()
 
@@ -69,13 +74,8 @@ class RepeatedTimer(object):
         self._timer.cancel()
         self.is_running = False
 
-@ircd.Modules.events('chanmsg')
-def msg(*args):
-    if len(args) < 3:
-        return
-    self = args[0]
-    localServer = args[1]
-    channel = args[2]
+@ircd.Modules.hooks.chanmsg()
+def msg(self, localServer, channel, msg):
     if 'f' in channel.modes and 'm' in channel.chmodef and self.chlevel(channel) < 3 and not self.ocheck('o', 'override'):
         if self not in channel.messageQueue:
             channel.messageQueue[self] = {}
@@ -89,6 +89,9 @@ def msg(*args):
                 duration = channel.chmodef['m']['duration']
                 localServer.handle('MODE', '{} +b ~t:{}:*@{}'.format(channel.name, duration, self.cloakhost))
                 localServer.handle('KICK', '{} {} :Flood! Limit is {} messages in {} seconds.'.format(channel.name, self.uid, channel.chmodef['m']['amount'], channel.chmodef['m']['time']), params=p)
+            elif channel.chmodef['m']['action'] == 'm':
+                localServer.handle('MODE', '{} +m'.format(channel.name))
+                channel.chmodef['m']['actionSet'] = int(time.time())
             del channel.messageQueue[self]
 
 @ircd.Modules.commands('helpop')
@@ -103,15 +106,16 @@ Example: +f 3:j:10:R:5 (3 joins in 10 sec, sets channel to +R for 5 minutes)
 -
 Example: +f 3:m:10 (3 messages in 10 sec, default action is kick)
 Example: +f 5:m:3:b:1 (5 messages in 3 sec, will ban/kick for 1 minute)
+Example: +f 10:m:5:m:2 (10 messages in 5 sec, will set +m for 2 minutes)
 """
     for x in s.split('\n'):
         self.sendraw(292, ':'+x)
     self.sendraw(292, ':-')
     return
 
-@ircd.Modules.events('join')
+@ircd.Modules.hooks.local_join()
 def join(self, localServer, channel):
-    if 'f' in channel.modes and 'j' in channel.chmodef and self.server == localServer and not self.ocheck('o', 'override'):
+    if 'f' in channel.modes and 'j' in channel.chmodef and not self.ocheck('o', 'override'):
         r = int(round(time.time() * 1000))
         channel.joinQueue[r] = {}
         channel.joinQueue[r]['ctime'] = int(time.time())
@@ -123,41 +127,31 @@ def join(self, localServer, channel):
                 localServer.handle('MODE', '{} +R'.format(channel.name))
             channel.chmodef['j']['actionSet'] = int(time.time())
 
+@ircd.Modules.hooks.modechar_del()
+def mode_del(channel, mode):
+    if mode == 'i':
+        channel.joinQueue = {}
+    if mode == 'm':
+        channel.messageQueue = {}
+
 ### Types: 0 = mask, 1 = require param, 2 = optional param, 3 = no param, 4 = special user channel-mode.
 @ircd.Modules.channel_modes('f', 2, 3, 'Set flood protection for your channel', None, None, '[params]') ### ('mode', type, level, 'Mode description', class 'user' or None, prefix, 'param desc')
-@ircd.Modules.events('mode')
-def chmodeF(*args): ### Params: self, localServer, recv, tmodes, param, commandQueue
-    if len(args) < 4:
-        return
+@ircd.Modules.hooks.pre_local_chanmode()
+@ircd.Modules.hooks.pre_remote_chanmode()
+def addmode(self, localServer, channel, modes, params, modebuf, parambuf):
     try:
-        self = args[0]
-        localServer = args[1]
-        recv = args[2]
-        tmodes = args[3]
-        param = args[4]
-        channel = channel = list(filter(lambda c: c.name.lower() == recv[0].lower(), localServer.channels))
-        if not channel:
-            return
-        channel = channel[0]
-        ### Format: +f [amount:type:secs][action:duration] --- duration is in minutes.
-
-        ### Example: +f 3:j:10 (3 join in 10 sec, default is +i for 1 minute)
-        ### Example: +f 3:j:10:i:2 (3 joins in 10 sec, sets channel to +i for 2 minutes)
-        ### Example: +f 3:j:10:R:5 (3 joins in 10 sec, sets channel to +R for 5 minutes)
-
-        ### Example: +f 3:m:10 (3 messages in 10 sec, default action is kick)
-        ### Example: +f 5:m:3:b:1 (5 messages in 3 sec, will ban/kick for 1 minute)
-
         floodTypes = 'jm'
 
         paramcount = 0
         action = ''
-        for m in recv[1]:
+        for m in modes:
             if m in '+-':
                 action = m
+                if not modebuf and m == '+':
+                    modebuf.append(m)
                 continue
             try:
-                p = recv[2:][paramcount]
+                p = params[paramcount]
             except:
                 paramcount += 1
                 continue
@@ -215,10 +209,6 @@ def chmodeF(*args): ### Params: self, localServer, recv, tmodes, param, commandQ
                 ### All is good, set the mode.
                 amount = int(p.split(':')[0])
                 secs = int(p.split(':')[2])
-                #print('Current action: {}'.format(channel.chmodef[type]['action']))
-                #print('New action: {}'.format(fAction))
-                #print('Current duration: {}'.format(channel.chmodef[type]['duration']))
-                #print('New duration: {}'.format(duration))
                 if 'f' in channel.modes and type in channel.chmodef:
                     #print('Updating current protection from {}'.format(channel.chmodef))
                     if amount == channel.chmodef[type]['amount'] and secs == channel.chmodef[type]['time'] and fAction == channel.chmodef[type]['action'] and duration == channel.chmodef[type]['duration']:
@@ -227,9 +217,7 @@ def chmodeF(*args): ### Params: self, localServer, recv, tmodes, param, commandQ
                         continue
                     del channel.chmodef[type]
                 if fAction:
-                    #print('fAction: {}'.format(fAction))
                     ### We have an action, check if it is valid.
-                    #print('Checking alternative action')
                     if type == 'm' and fAction not in ['m', 'b']:
                         ### Invalid action, reverting to default.
                         fAction = None
@@ -270,8 +258,8 @@ def chmodeF(*args): ### Params: self, localServer, recv, tmodes, param, commandQ
                 #print('Success! Returning {}'.format(p))
                 if m not in channel.modes:
                     channel.modes += m
-                tmodes.append(m)
-                param.append(p)
+                modebuf.append(m)
+                parambuf.append(p)
                 paramcount += 1
 
     except Exception as ex:
@@ -282,7 +270,7 @@ def chmodeF(*args): ### Params: self, localServer, recv, tmodes, param, commandQ
 
 def init(self):
     global rt
-    rt = RepeatedTimer(1, checkExpiredFloods, self) # it auto-starts, no need of rt.start()
+    rt = RepeatedTimer(1, checkExpiredFloods, self)
     for chan in [chan for chan in self.channels]:
         if not hasattr(chan, 'chmodef'):
             chan.chmodef = {}

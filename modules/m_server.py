@@ -117,7 +117,9 @@ def server(self, localServer, recv):
                 data = ':{} SID {} {} {} :{}'.format(sid, server.hostname, hopcount, server.sid, server.name)
                 self._send(data)
             '''
-            syncData(localServer, self, None)
+            ### Only send this if we are the one requesting the link.
+            if hasattr(self, 'outgoing') and self.outgoing:
+                syncData(localServer, self)
             return
 
     except Exception as ex:

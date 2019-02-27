@@ -16,7 +16,6 @@ def modules(self, localServer, recv):
             info = ' '.join(m.__doc__.split('\n'))
         for c in localServer.commands:
             if c[5] == m:
-                print('Module {} is a command'.format(m))
                 cmds += '{}'.format(', ' if cmds else '') + '/'+c[0]
         #if cmds:
         #    info = '{}{}'.format(info if info else '', '(Command: {})'.format(cmds))

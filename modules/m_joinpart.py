@@ -67,7 +67,7 @@ def join(self, localServer, recv, override=False, skipmod=None, sourceServer=Non
     try:
         """Syntax: /JOIN <channel> [key]
         Joins a given channel with optional [key]."""
-
+        hook = 'local_join'
         if type(self).__name__ == 'Server':
             if not sourceServer:
                 sourceServer = self
@@ -76,6 +76,7 @@ def join(self, localServer, recv, override=False, skipmod=None, sourceServer=Non
             #self = source[0]
             recv = recv[1:]
             override = True
+            hook = 'remote_join'
         elif not sourceServer:
             sourceServer = self.server
 
@@ -135,9 +136,9 @@ def join(self, localServer, recv, override=False, skipmod=None, sourceServer=Non
             success = True
             broadcastjoin = None
             overrides = []
-            for callable in [callable for callable in localServer.events if callable[0].lower() == 'pre_'+recv[0].lower() and callable[2] != skipmod]:
+            for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_'+hook and callable[3] != skipmod]:
                 try:
-                    success, temp_broadcastjoin, overrides = callable[1](self, localServer, channel)
+                    success, temp_broadcastjoin, overrides = callable[2](self, localServer, channel)
                     if type(temp_broadcastjoin) == list and broadcastjoin is None:
                         broadcastjoin = temp_broadcastjoin
                     if not success:
@@ -216,9 +217,9 @@ def join(self, localServer, recv, override=False, skipmod=None, sourceServer=Non
             ### Check for module events (after join)
             success = True
             broadcastjoin = channel.users+[self]
-            for callable in [callable for callable in localServer.events if callable[0].lower() == recv[0].lower() and callable[2] != skipmod]:
+            for callable in [callable for callable in localServer.hooks if callable[0].lower() == hook and callable[3] != skipmod]:
                 try:
-                    callable[1](self, localServer, channel)
+                    callable[2](self, localServer, channel)
                 except Exception as ex:
                     _print('Exception in {}: {}'.format(callable[2], ex), server=localServer)
     except Exception as ex:
@@ -232,10 +233,12 @@ def join(self, localServer, recv, override=False, skipmod=None, sourceServer=Non
 def part(self, localServer, recv, reason=None):
     try:
         if type(self).__name__ == 'Server':
+            hook = 'remote_part'
             sourceServer = self
             self = list(filter(lambda u: u.uid == recv[0][1:] or u.nickname == recv[0][1:], localServer.users))[0]
             recv = recv[1:]
         else:
+            hook = 'local_part'
             sourceServer = self.server
 
         if not reason:
@@ -264,9 +267,9 @@ def part(self, localServer, recv, reason=None):
                 return
 
             broadcastpart = channel.users+[self]
-            for callable in [callable for callable in localServer.events if callable[0].lower() == 'pre_'+recv[0].lower()]:
+            for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_'+hook]:
                 try:
-                    success, broadcastpart = callable[1](self, localServer, channel)
+                    success, broadcastpart = callable[2](self, localServer, channel)
                 except Exception as ex:
                     _print(ex, server=localServer)
 
@@ -280,6 +283,13 @@ def part(self, localServer, recv, reason=None):
                 localServer.channels.remove(channel)
 
             self.broadcast(broadcastpart, 'PART {} {}'.format(channel.name, reason))
+
+            broadcastpart = channel.users+[self]
+            for callable in [callable for callable in localServer.hooks if callable[0].lower() == hook]:
+                try:
+                    callable[2](self, localServer, channel)
+                except Exception as ex:
+                    _print(ex, server=localServer)
 
             if channel.name[0] != '&':
                 localServer.new_sync(localServer, sourceServer, ':{} PART {} {}'.format(self.uid, channel.name, reason))

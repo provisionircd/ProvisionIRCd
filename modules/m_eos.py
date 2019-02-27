@@ -8,6 +8,7 @@
 import ircd
 
 from handle.functions import _print
+from handle.handleLink import syncData
 
 W  = '\033[0m'  # white (normal)
 R  = '\033[31m' # red
@@ -40,3 +41,7 @@ def eos(self, localServer, recv):
             _print('Sending queued data to {}: {}'.format(source, e), server=localServer)
             localServer.new_sync(localServer, source, e)
         del localServer.sync_queue[source]
+
+    if not hasattr(self, 'outgoing') or not self.outgoing:
+        ### They requested the link, let us sync data now.
+        syncData(localServer, self)

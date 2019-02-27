@@ -29,13 +29,17 @@ def uid(self, localServer, recv):
             params.append(p)
         if nick.lower() in [user.nickname.lower() for user in localServer.users] and not self.eos:
             user = list(filter(lambda c: c.nickname.lower() == nick.lower(), localServer.users))[0]
-            _print('{}WARNING: user {} already found on {}{}'.format(R, user.nickname, user.server.hostname, W), server=localServer)
-            localUserClass = list(filter(lambda c: c.nickname.lower() == nick.lower() and c.server.hostname == localServer.hostname, localServer.users))[0]
-            localTS = int(localUserClass.signon)
-            remoteTS = int(recv[4])
-            if remoteTS <= localTS:
-                _print('{}Local user {} disconnected from local server.{}'.format(R, localUserClass.nickname, W), server=localServer)
-                localUserClass.quit('Local Nick Collision', silent=True)
+            if not user.server:
+                _print('Quitting {} because their server could not be found (UID)'.format(user), server=localServer)
+                user.quit('Unknown connection')
+            else:
+                _print('{}WARNING: user {} already found on {}{}'.format(R, user.nickname, user.server.hostname, W), server=localServer)
+                localUserClass = list(filter(lambda c: c.nickname.lower() == nick.lower() and c.server.hostname == localServer.hostname, localServer.users))[0]
+                localTS = int(localUserClass.signon)
+                remoteTS = int(recv[4])
+                if remoteTS <= localTS:
+                    _print('{}Local user {} disconnected from local server.{}'.format(R, localUserClass.nickname, W), server=localServer)
+                    localUserClass.quit('Local Nick Collision', silent=True)
 
         u = ircd.User(self, serverClass=localServer, params=params)
 

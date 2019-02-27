@@ -198,6 +198,7 @@ class User:
                     self.uid = params[7]
                     server = list(filter(lambda s: s.sid == params[0][1:], self.localServer.servers))
                     if not server:
+                        _print('Quitting {} because their server does not exist'.format(self), server=self.localServer)
                         self.quit('Unknown connection')
                         return
                     self.server = server[0]
@@ -476,6 +477,11 @@ class User:
                 self.server.maxgusers = len(self.server.users)
                 if self.server.maxgusers % 10 == 0:
                     self.server.snotice('s', '*** New global user record: {}'.format(self.server.maxgusers))
+            for callable in [callable for callable in self.server.hooks if callable[0].lower() == 'welcome']:
+                try:
+                    callable[2](self, self.server)
+                except Exception as ex:
+                    _print('Exception in module: {}: {}'.format(callable[2], ex), server=self.server)
 
             self.sendraw('001', ':Welcome to the {} IRC Network {}!{}@{}'.format(self.server.name, self.nickname, self.ident, self.hostname))
             self.sendraw('002', ':Your host is {}, running version {}'.format(self.server.hostname, self.server.version))
@@ -579,12 +585,13 @@ class User:
             if not sourceServer.socket and sourceServer.uplink:
                 sourceServer = sourceServer.uplink
             #_print('User {} quit, sourceServer: {}'.format(self, sourceServer), server=localServer)
-            for callable in [callable for callable in localServer.events if callable[0].lower() == 'pre_quit']:
+            hook = 'pre_local_quit' if self.server == localServer else 'pre_remote_quit'
+            for callable in [callable for callable in localServer.hooks if callable[0].lower() == hook]:
                 try:
                     ### 'quit' event will return a tuple: (success, broadcast)
                     ### broadcast is a list of all users to broadcast to.
                     ### This is useful for modules like m_delayjoin which modifies that list.
-                    success, broadcast = callable[1](self, localServer, reason)
+                    success, broadcast = callable[2](self, localServer, reason)
                 except Exception as ex:
                     _print('Exception in module: {}: {}'.format(callable[2], ex), server=localServer)
 
@@ -651,9 +658,10 @@ class User:
                 except:
                     self.socket.close()
 
-            for callable in [callable for callable in localServer.events if callable[0].lower() == 'quit']:
+            hook = 'local_quit' if self.server == localServer else 'remote_quit'
+            for callable in [callable for callable in localServer.events if callable[0].lower() == hook]:
                 try:
-                    callable[1](self, localServer, reason)
+                    callable[2](self, localServer, reason)
                 except Exception as ex:
                     _print('Exception in module: {}: {}'.format(callable[2], ex), server=localServer)
 

@@ -24,7 +24,8 @@ def ping(self, localServer, recv):
             if not dest:
                 _print('Server {} requested a PING to unknown server {}'.format(self, recv[3]))
                 return
-            data = ':{} PONG {} {}'.format(dest[0].sid, dest[0].hostname, recv[2])
+            ### Old: data = ':{} PONG {} {}'.format(dest[0].sid, dest[0].hostname, recv[2])
+            data = ':{} PONG {} {}'.format(localServer.sid, dest[0].hostname, recv[2])
             self._send(data)
 
         else:

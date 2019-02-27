@@ -143,32 +143,19 @@ def unload(self):
     rt.stop()
 
 @ircd.Modules.support(('EXTBAN='+prefix+','+str(ext_bans), True)) ### (support string, boolean if support must be sent to other servers)
-@ircd.Modules.events('mode')
-def extbans(*args): ### Params: self, localServer, recv, tmodes, param, commandQueue
-    if len(args) < 5:
-        return
+@ircd.Modules.hooks.pre_local_chanmode()
+@ircd.Modules.hooks.pre_remote_chanmode()
+def extbans(self, localServer, channel, modes, params, modebuf, parambuf):
     try:
-        self = args[0]
-        localServer = args[1]
-        recv = args[2]
-        tmodes = args[3]
-        param = args[4]
-        commandQueue = args[5]
-        channel = channel = list(filter(lambda c: c.name.lower() == recv[0].lower(), localServer.channels))
-        if not channel:
-            return
-        channel = channel[0]
         paramcount = 0
         action = ''
 
-        for m in recv[1]:
+        for m in modes:
             if m in '+-':
                 action = m
                 continue
-            if m in localServer.channel_modes[3]:
-                continue
             try:
-                rawParam = recv[2:][paramcount]
+                rawParam = params[paramcount]
             except:
                 paramcount += 1
                 continue
@@ -251,8 +238,8 @@ def extbans(*args): ### Params: self, localServer, recv, tmodes, param, commandQ
             if c is not None:
                 paramcount += 1
                 if action == '+' and rawParam not in c:
-                    tmodes.append(m)
-                    param.append(rawParam)
+                    modebuf.append(m)
+                    parambuf.append(rawParam)
                     c[rawParam] = {}
                     c[rawParam]['setter'] = setter
                     c[rawParam]['ctime'] = int(time.time())
@@ -263,7 +250,8 @@ def extbans(*args): ### Params: self, localServer, recv, tmodes, param, commandQ
         e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
         _print(e, server=localServer)
 
-@ircd.Modules.events('pre_join')
+@ircd.Modules.hooks.pre_local_join()
+@ircd.Modules.hooks.pre_remote_join()
 def join(self, localServer, channel):
     try:
         overrides = []
@@ -330,8 +318,8 @@ def join(self, localServer, channel):
         _print(e, server=localServer)
 
 
-@ircd.Modules.events('pre_chanmsg')
-def pre_chanmsg(self, localServer, channel, msg, module):
+@ircd.Modules.hooks.pre_chanmsg()
+def pre_chanmsg(self, localServer, channel, msg):
     if checkExtMatch('b', 'block', channel, msg) and self.chlevel(channel) < 3 and not self.ocheck('o', 'override'):
         self.sendraw(404, '{} :Cannot send to channel (+b ~T)'.format(channel.name))
         return 0

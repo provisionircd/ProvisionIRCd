@@ -140,20 +140,17 @@ def syncUsers(localServer, newServer):
         e = '{}EXCEPTION: {} in file {} line {}: {}{}'.format(R, exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj,W)
         _print(e, server=localServer)
 
-def syncData(localServer, newServer, serverIntroducer, selfRequest=True):
+def syncData(localServer, newServer, selfRequest=True):
     if selfRequest:
         _print('{}Local server requested the link.{}'.format(Y, W), server=localServer)
     else:
         _print('{}Remote server requested the link.{}'.format(Y, W), server=localServer)
-
-    #selfIntroduction(localServer, newServer)
 
     if localServer.users:
         syncUsers(localServer, newServer)
     if localServer.channels:
         syncChannels(localServer, newServer)
 
-    ### Sync global TKL. I think I should move this up a bit.
     try:
         for type in localServer.tkl:
             for entry in localServer.tkl[type]:
@@ -224,29 +221,13 @@ class Link(threading.Thread):
             serv.hostname = self.name
             serv.ip = self.host
             serv.port = self.port
+            serv.outgoing = True
             # Requesting and authing link to remote server.
             if self.origin or self.autoLink:
                 self.localServer.linkrequester[serv] = self.origin
 
             selfIntroduction(self.localServer, serv, outgoing=True)
-            '''
-            serv._send(':{} PASS :{}'.format(self.localServer.sid, self.pswd))
-            server_support = ' '.join(self.localServer.server_support)
-            serv._send(':{} PROTOCTL EAUTH={} SID={} {}'.format(self.localServer.sid, self.localServer.hostname, self.localServer.sid, server_support))
-            serv._send(':{} PROTOCTL NOQUIT NICKv2 SJOIN EXTSWHOIS CLK SJOIN2 UMODE2 VL SJ3 TKLEXT TKLEXT2 NICKIP ESVID'.format(self.localServer.sid))
-            ### Sending modlis.
-            local_modules = [m.__name__ for m in self.localServer.modules]
-            modlist = []
-            for entry in local_modules:
-                totlen = len(' '.join(modlist))
-                if totlen >= 400:
-                    serv._send('MODLIST :{}'.format(' '.join(modlist)))
-                    modlist = []
-                modlist.append(entry)
-            if modlist:
-                serv._send('MODLIST :{}'.format(' '.join(modlist)))
-                serv._send(':{} SERVER {} 1 :{}'.format(self.localServer.sid, self.localServer.hostname, self.localServer.name))
-            '''
+
             if serv not in self.localServer.introducedTo:
                 self.localServer.introducedTo.append(serv)
 

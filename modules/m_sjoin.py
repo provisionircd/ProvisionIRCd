@@ -92,7 +92,7 @@ def sjoin(self, localServer, recv):
 
             userClass = list(filter(lambda c: c.nickname.lower() == membernick.lower() or c.uid == membernick, localServer.users))
             if not userClass:
-                _print('{}ERROR: could not fetch userclass for remote user {}. Looks like the user did not sync correctly. Maybe nick collision?{}'.format(R, membernick, W), server=localServer)
+                _print('{}ERROR: could not fetch userclass for remote user {}. Looks like the user did not sync correctly. Maybe nick collision, or remote leftover from a netsplit.{}'.format(R, membernick, W), server=localServer)
                 continue
 
             userClass = userClass[0]

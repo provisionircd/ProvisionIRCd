@@ -112,13 +112,14 @@ class Server:
                 self.commands = []
                 self.modules = {}
                 self.events = []
+                self.hooks = []
                 self.user_modes = {}
                 self.channel_modes = {}
                 self.validconf = False
                 self.datahandler = None
                 self.localServer = self
                 self.linkRequests = {}
-                self.sync_queue = {}
+                self.sync_queue = []
                 self.creationtime = int(time.time())
 
                 self.versionnumber = '1.1'
@@ -276,23 +277,29 @@ class Server:
         return self.socket.fileno()
 
     def new_sync(self, localServer, skip, data):
-        if type(skip) != list:
-            skip = [skip]
-        for t in [t for t in skip if type(t).__name__ != 'Server']:
-            _print('{}HALT: wrong source type in new_sync(): {} with data: {}{}'.format(R2, t, data, W), server=self.localServer)
-            return
-        if data.split()[1] in ['UID', 'SID']:
-            data = data.split()
-            data = '{} {} {}'.format(' '.join(data[:3]), str(int(data[3]) + 1), ' '.join(data[4:]))
-        for server in [server for server in localServer.servers if server.socket and server not in skip]:
-            #print('New sync to {}: {}'.format(server, data))
-            if not server.eos:
-                if server not in localServer.sync_queue:
-                    localServer.sync_queue[server] = []
-                localServer.sync_queue.append(data)
-                _print('{}Added to {} sync queue because they are not done syncing: {}{}'.format(R2, server, data, W), server=self.localServer)
-                continue
-            server._send(data)
+        try:
+            if type(skip) != list:
+                skip = [skip]
+            for t in [t for t in skip if type(t).__name__ != 'Server']:
+                _print('{}HALT: wrong source type in new_sync(): {} with data: {}{}'.format(R2, t, data, W), server=self.localServer)
+                return
+            if data.split()[1] in ['UID', 'SID']:
+                data = data.split()
+                data = '{} {} {}'.format(' '.join(data[:3]), str(int(data[3]) + 1), ' '.join(data[4:]))
+            for server in [server for server in localServer.servers if server.socket and server not in skip]:
+                #print('New sync to {}: {}'.format(server, data))
+                if not server.eos:
+                    if server not in localServer.sync_queue:
+                        localServer.sync_queue[server] = []
+                    localServer.sync_queue.append(data)
+                    _print('{}Added to {} sync queue because they are not done syncing: {}{}'.format(R2, server, data, W), server=self.localServer)
+                    continue
+                server._send(data)
+        except Exception as ex:
+            exc_type, exc_obj, exc_tb = sys.exc_info()
+            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+            e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
+            _print(e)
 
     def syncToServers(self, localServer, sourceServers, data):
         if type(sourceServers) != list:
@@ -396,13 +403,14 @@ class Server:
 
     def _send(self, data):
         if not data:
+            _print('No data in _send', server=self.localServer)
             return
         if self.socket:
             self.sendbuffer += data + '\r\n'
             ignore = ['PRIVMSG', 'NOTICE']
             try:
                 if data.split()[0] != 'PONG' and data.split()[1] != 'PONG':
-                    if len(data) > 1 and data.split()[1] not in set(ignore):
+                    if len(data) > 1 and data.split()[1] not in ignore:
                         #pass
                         _print('{}{} <<<-- {}{}'.format(B, self.hostname if self.hostname != '' else self, data, W), server=self.localServer)
             except:

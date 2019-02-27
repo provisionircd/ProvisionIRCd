@@ -20,6 +20,7 @@ def kick(self, localServer, recv, override=False, sync=True):
     try:
         oper_override = False
         if type(self).__name__ == 'Server':
+            hook = 'remote_kick'
             override = True
             sourceServer = self
             S = recv[0][1:]
@@ -31,6 +32,7 @@ def kick(self, localServer, recv, override=False, sync=True):
             else:
                 sourceID = self.sid
         else:
+            hook = 'local_kick'
             sourceServer = self.server
             sourceID = self.uid
 
@@ -80,9 +82,9 @@ def kick(self, localServer, recv, override=False, sync=True):
             reason = reason[1:]
         reason = reason[:kicklen]
         success = True
-        for callable in [callable for callable in localServer.events if callable[0].lower() == 'pre_kick']:
+        for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_'+hook]:
             try:
-                success = callable[1](self, localServer, user, channel, reason)
+                success = callable[2](self, localServer, user, channel, reason)
                 if not success:
                     break
             except Exception as ex:
@@ -100,7 +102,7 @@ def kick(self, localServer, recv, override=False, sync=True):
         if len(channel.users) == 0 and 'P' not in channel.modes:
             localServer.channels.remove(channel)
 
-        for callable in [callable for callable in localServer.events if callable[0].lower() == 'kick']:
+        for callable in [callable for callable in localServer.events if callable[0].lower() == hook]:
             try:
                 success = callable[1](self, localServer, user, channel, reason)
                 if not success:
