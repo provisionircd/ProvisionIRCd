@@ -263,16 +263,13 @@ def part(self, localServer, recv, reason=None):
 
             channel = channel[0]
 
-            if self not in channel.users:
-                return
-
             broadcastpart = channel.users+[self]
             for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_'+hook]:
                 try:
                     success, broadcastpart = callable[2](self, localServer, channel)
                 except Exception as ex:
+                    _print('Exception in module: {}: {}'.format(callable[2], ex), server=localServer)
                     _print(ex, server=localServer)
-
 
             self.channels.remove(channel)
             channel.usermodes.pop(self)

@@ -50,7 +50,6 @@ def server(self, localServer, recv):
             _print('{}Hopcount for {} set: {}{}'.format(G, self, self.hopcount, W), server=localServer)
             _print('{}SID for {} set: {}{}'.format(G, self, self.sid, W), server=localServer)
 
-
             ip, port = self.socket.getpeername()
             ip2, port2 = self.socket.getsockname()
             if self.hostname not in localServer.conf['link']:

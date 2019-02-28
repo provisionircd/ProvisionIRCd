@@ -280,7 +280,6 @@ class Server:
         try:
             if type(skip) != list:
                 skip = [skip]
-            print('New sync skipping: {}'.format(skip))
             for t in [t for t in skip if type(t).__name__ != 'Server']:
                 _print('{}HALT: wrong source type in new_sync(): {} with data: {}{}'.format(R2, t, data, W), server=self.localServer)
                 return

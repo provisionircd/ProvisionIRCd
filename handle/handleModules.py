@@ -143,7 +143,6 @@ def HookToCore(self, callables):
                 #_print('Hooked user mode {} to core (level: {}, desc: {})'.format(mode, level, desc), server=self)
 
 
-
         ### This does not really needed to be "hooked" here. Just loop over the callables to check if there's an event.
         ### callables, channel_modes, user_modes, events, req_modes, req_flags, req_class, commands, params, module
         hooks = []

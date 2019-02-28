@@ -592,7 +592,7 @@ class User:
                     ### broadcast is a list of all users to broadcast to.
                     ### This is useful for modules like m_delayjoin which modifies that list.
                     success, broadcast = callable[2](self, localServer, reason)
-                    print('Broadcast set as {} from module {}'.format(broadcast, callable))
+                    _print('Broadcast set as {} from module {}'.format(broadcast, callable), server=localServer)
                 except Exception as ex:
                     _print('Exception in module: {}: {}'.format(callable[2], ex), server=localServer)
 
@@ -633,7 +633,7 @@ class User:
                 broadcast = []
                 for channel in self.channels:
                     for user in channel.users:
-                        if user not in set(broadcast) and user != self:
+                        if user not in broadcast and user != self:
                             broadcast.append(user)
 
             if self.nickname != '*' and self.ident != '' and reason:
