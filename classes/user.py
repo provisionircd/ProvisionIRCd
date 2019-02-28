@@ -198,7 +198,7 @@ class User:
                     self.uid = params[7]
                     server = list(filter(lambda s: s.sid == params[0][1:], self.localServer.servers))
                     if not server:
-                        _print('Quitting {} because their server does not exist'.format(self), server=self.localServer)
+                        _print('Quitting {} because their server does not exist'.format(self.nickname), server=self.localServer)
                         self.quit('Unknown connection')
                         return
                     self.server = server[0]

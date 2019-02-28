@@ -30,6 +30,10 @@ def server(self, localServer, recv):
             _print('Server {} already exists on this network2'.format(recv[2]), server=localServer)
             #self.quit('Server already exists on this network')
             return
+        if not self.sid:
+            _print('Direct link with {} denied because their SID is unknown to me'.format(recv[2]), server=localServer)
+            self.quit('No SID received')
+            return
 
         if not self.linkAccept and not self.eos:
             self.linkAccept = True
@@ -44,6 +48,8 @@ def server(self, localServer, recv):
             _print('{}Hostname for {} set: {}{}'.format(G, self, self.hostname, W), server=localServer)
             _print('{}Server name for {} set: {}{}'.format(G, self, self.name, W), server=localServer)
             _print('{}Hopcount for {} set: {}{}'.format(G, self, self.hopcount, W), server=localServer)
+            _print('{}SID for {} set: {}{}'.format(G, self, self.sid, W), server=localServer)
+
 
             ip, port = self.socket.getpeername()
             ip2, port2 = self.socket.getsockname()
