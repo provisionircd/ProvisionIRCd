@@ -58,6 +58,7 @@ def privmsg(self, localServer, recv, override=False, safe=False):
                     self.sendraw(401, '{} :No such nick'.format(target))
                     continue
                 user = user[0]
+
                 if type(self).__name__ == 'User' and checkSpamfilter(self, localServer, user.nickname, 'private', msg):
                     continue
 
@@ -76,7 +77,6 @@ def privmsg(self, localServer, recv, override=False, safe=False):
                         continue
                 if user.away:
                     self.sendraw(301, '{} :{}'.format(user.nickname, user.away))
-
 
                 if type(self).__name__ == 'User':
                     self.broadcast([user], 'PRIVMSG {} :{}'.format(user.nickname, msg))
