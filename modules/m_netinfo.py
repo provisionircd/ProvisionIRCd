@@ -60,7 +60,6 @@ def netinfo(self, localServer, recv):
 
         if cloakhash.split(':')[1] != hashlib.md5(localServer.conf['settings']['cloak-key'].encode('utf-8')).hexdigest():
             localServer.snotice('s', '*** (warning) Network wide cloak keys are not the same! This will affect channel bans and must be fixed!', local=True)
-            #localServer.snotice('s', '*** ( info ) A simple rehash will do fine.')
 
     if not source.netinfo:
         source.netinfo = True
@@ -79,4 +78,4 @@ def netinfo(self, localServer, recv):
         msg = '*** (link) {}Link {} -> {}[@{}.{}] successfully established'.format(string, localServer.hostname, source.hostname, ip, port)
         localServer.snotice('s', msg, local=True)
 
-    localServer.syncToServers(localServer, self, ' '.join(recv))
+    localServer.new_sync(localServer, self, ' '.join(recv))

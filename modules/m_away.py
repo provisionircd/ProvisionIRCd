@@ -49,4 +49,4 @@ def away(self, localServer, recv, override=False):
             user._send(':{} AWAY {}'.format(self.fullmask(), '{}'.format(':'+self.away if self.away else '')))
             updated.append(user)
 
-    localServer.syncToServers(localServer, sourceServer, data)
+    localServer.new_sync(localServer, sourceServer, data)

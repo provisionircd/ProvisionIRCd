@@ -22,7 +22,6 @@ rt = None
 ext_bans = 'TtCOa'
 prefix = '~'
 
-
 def checkExtMatch(type, action, channel, msg):
     try:
         if type == 'b':
@@ -92,6 +91,7 @@ def char_repeat(string, char, amount):
                 return True
     return False
 
+@ircd.Modules.hooks.loop()
 def checkExpiredBans(localServer):
     remove_bans = {}
     for chan in localServer.channels:
@@ -107,40 +107,6 @@ def checkExpiredBans(localServer):
         bans = ' '.join(remove_bans[chan])
         tmodes = 'b'*len(remove_bans[chan])
         localServer.handle('MODE', '{} -{} {} 0'.format(chan.name, tmodes, bans))
-
-class RepeatedTimer(object):
-    def __init__(self, interval, function, *args, **kwargs):
-        self._timer = None
-        self.interval = interval
-        self.function = function
-        self.args = args
-        self.kwargs = kwargs
-        self.is_running = False
-        self.start()
-
-    def _run(self):
-        self.is_running = False
-        self.start()
-        self.function(*self.args, **self.kwargs)
-
-    def start(self):
-        if not self.is_running:
-            self._timer = Timer(self.interval, self._run)
-            self._timer.daemon = True
-            self._timer.start()
-            self.is_running = True
-
-    def stop(self):
-        self._timer.cancel()
-        self.is_running = False
-
-def init(self):
-    global rt
-    rt = RepeatedTimer(1, checkExpiredBans, self)
-
-def unload(self):
-    global rt
-    rt.stop()
 
 @ircd.Modules.support(('EXTBAN='+prefix+','+str(ext_bans), True)) ### (support string, boolean if support must be sent to other servers)
 @ircd.Modules.hooks.pre_local_chanmode()
@@ -251,7 +217,6 @@ def extbans(self, localServer, channel, modes, params, modebuf, parambuf):
         _print(e, server=localServer)
 
 @ircd.Modules.hooks.pre_local_join()
-@ircd.Modules.hooks.pre_remote_join()
 def join(self, localServer, channel):
     try:
         overrides = []

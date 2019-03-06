@@ -14,11 +14,11 @@ import ircd
 def jump(self, localServer, recv):
     if type(self).__name__ == 'Server':
         source = list(filter(lambda u: u.uid == recv[0][1:] or u.nickname == recv[0][1:], localServer.users))[0]
-        originServer = self
+        sourceServer = self
         recv = recv[1:]
     else:
         source = self
-        originServer = self.server
+        sourceServer = self.server
 
     target = list(filter(lambda c: c.nickname.lower() == recv[1].lower() or c.uid.lower() == recv[1].lower(), localServer.users))
     if not target:
@@ -50,4 +50,4 @@ def jump(self, localServer, recv):
     #target._send(data)
     target.sendraw('010', '{} {}'.format(server,port))
     data = ':{} {}'.format(source.uid,' '.join(recv))
-    localServer.syncToServers(localServer,originServer,data)
+    localServer.new_sync(localServer, sourceServer, data)

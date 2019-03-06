@@ -24,13 +24,13 @@ def squit(self, localServer, recv):
     if type(self).__name__ == 'Server':
         source = [s for s in localServer.servers if s.sid == recv[0][1:]]
         if not source:
-            _print('{}ERROR: source for {} could not be found. Was it already removed?{}'.format(R, recv[0][1:], W))
+            _print('{}ERROR: source for SID {} could not be found. Was it already removed?{}'.format(R, recv[0][1:], W), server=localServer)
             source = self
         else:
             source = source[0]
         server = list(filter(lambda s: s.sid.lower() == recv[2].lower() or s.hostname.lower() == recv[2].lower(), localServer.servers))
         if not server:
-            print('{}ERROR: server for {} could not be found. Was it already removed?{}'.format(R, recv[2], W))
+            _print('{}ERROR: server for {} could not be found. Was it already removed?{}'.format(R, recv[2], W), server=localServer)
             return
         server = server[0]
         localServer.new_sync(localServer, self, ' '.join(recv))

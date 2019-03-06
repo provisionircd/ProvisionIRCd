@@ -110,19 +110,11 @@ def server(self, localServer, recv):
             selfIntroduction(localServer, self)
             data = ':{} SID {} 1 {} {}'.format(localServer.sid, self.hostname, self.sid, self.name)
             localServer.new_sync(localServer, self, data)
-            for server in [server for server in localServer.servers if server.sid and server != self]:
+            for server in [server for server in localServer.servers if server.sid and server != self and server.eos]:
                 sid = localServer.sid if server.socket else server.uplink.sid
                 data = ':{} SID {} {} {} :{}'.format(sid, server.hostname, int(server.hopcount) + 1, server.sid, server.name)
                 self._send(data)
-            ''''
-            _print('Introduced all direct links first, now additional servers', server=localServer)
-            for server in [server for server in localServer.servers if not server.socket and server != self]:
-                hopcount = int(server.hopcount) + 1
-                sid = localServer.sid if server.socket else server.uplink.sid
-                data = ':{} SID {} {} {} :{}'.format(sid, server.hostname, hopcount, server.sid, server.name)
-                self._send(data)
-            '''
-            ### Only send this if we are the one requesting the link.
+
             if hasattr(self, 'outgoing') and self.outgoing:
                 syncData(localServer, self)
             return
@@ -149,6 +141,10 @@ def sid(self, localServer, recv):
         for server in [server for server in localServer.servers if server.sid == sid and server != self]:
             self._send(':{} ERROR :SID {} is already in use on that network'.format(localServer.sid, sid))
             self.quit('SID {} is already in use on that network'.format(sid))
+            return
+        for server in [server for server in localServer.servers if server.hostname.lower() == hostname.lower() and server != self]:
+            self._send(':{} ERROR :Hostname {} is already in use on that network'.format(localServer.sid, hostname))
+            self.quit('Server {} is already in use on that network'.format(hostname))
             return
 
         hopcount = int(recv[3])

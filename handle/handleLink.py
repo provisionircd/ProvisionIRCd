@@ -108,9 +108,11 @@ def selfIntroduction(localServer, newServer, outgoing=False):
         e = '{}EXCEPTION: {} in file {} line {}: {}{}'.format(R, exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj,W)
         _print(e, server=localServer)
 
-def syncUsers(localServer, newServer):
+def syncUsers(localServer, newServer, local_only):
     try:
-        totalServers = [localServer]+localServer.servers
+        totalServers = [localServer]
+        if not local_only:
+            totalServers.extend(localServer.servers)
         for server in [server for server in totalServers if server != newServer and server.introducedBy != newServer and newServer.introducedBy != server and server not in newServer.syncDone and newServer.socket]:
             newServer.syncDone.append(server)
             _print('{}Syncing info from {} to {}{}'.format(Y, server.hostname, newServer.hostname, W), server=localServer)
@@ -140,14 +142,14 @@ def syncUsers(localServer, newServer):
         e = '{}EXCEPTION: {} in file {} line {}: {}{}'.format(R, exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj,W)
         _print(e, server=localServer)
 
-def syncData(localServer, newServer, selfRequest=True):
+def syncData(localServer, newServer, selfRequest=True, local_only=False):
     if selfRequest:
         _print('{}Local server requested the link.{}'.format(Y, W), server=localServer)
     else:
         _print('{}Remote server requested the link.{}'.format(Y, W), server=localServer)
 
     if localServer.users:
-        syncUsers(localServer, newServer)
+        syncUsers(localServer, newServer, local_only=local_only)
     if localServer.channels:
         syncChannels(localServer, newServer)
 
@@ -182,8 +184,11 @@ def syncData(localServer, newServer, selfRequest=True):
         newServer._send(data)
         localServer.syncDone.append(newServer)
 
-    #_print('Sending PONG to {} (end of syncData)'.format(newServer.hostname), server=localServer)
-    #newServer._send(':{} PONG {}'.format(localServer.sid, newServer.hostname))
+    if (not hasattr(newServer, 'outgoing') or not newServer.outgoing):
+        newServer._send(':{} PONG {} {}'.format(localServer.sid, newServer.hostname, localServer.hostname))
+    else:
+        newServer._send(':{} PING {} {}'.format(localServer.sid, localServer.hostname, newServer.hostname))
+
     return
 
 class Link(threading.Thread):
@@ -213,8 +218,6 @@ class Link(threading.Thread):
             if self.is_ssl:
                 self.socket = ssl.wrap_socket(self.socket)
                 _print('Wrapped outgoing socket {} in SSL'.format(self.socket), server=self.localServer)
-            self.socket.settimeout(5)
-            self.socket.connect((self.host, self.port))
 
             from ircd import Server
             serv = Server(origin=self.localServer, serverLink=True, sock=self.socket, is_ssl=self.is_ssl)
@@ -226,6 +229,8 @@ class Link(threading.Thread):
             if self.origin or self.autoLink:
                 self.localServer.linkrequester[serv] = self.origin
 
+            self.socket.settimeout(5)
+            self.socket.connect((self.host, self.port))
             selfIntroduction(self.localServer, serv, outgoing=True)
 
             if serv not in self.localServer.introducedTo:
@@ -242,7 +247,7 @@ class Link(threading.Thread):
             if self.origin:
                 self.origin.send('NOTICE', '*** Error connecting to server {}[{}:{}]: {}'.format(self.name, self.host, self.port, ex))
             if self.is_ssl:
-                self.origin.send('NOTICE', '*** Make sure SSL is enabled on both ends and ports are listening for SSL connections'.format(self.name, self.host, self.port, ex))
+                self.origin.send('NOTICE', '*** Make sure SSL is enabled on both ends and ports are listening for SSL connections.'.format(self.name, self.host, self.port, ex))
         finally:
             if self.name.lower() in self.localServer.pendingLinks:
                 self.localServer.pendingLinks.remove(self.name.lower())

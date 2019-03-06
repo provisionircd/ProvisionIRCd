@@ -146,19 +146,22 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         action = m
                         continue
                     if action == '+':
-                        hook = 'modechar_add'
+                        thook = 'modechar_add'
                     elif action == '-':
-                        hook = 'modechar_del'
-                    for callable in [callable for callable in localServer.hooks if callable[0].lower() == hook]:
+                        thook = 'modechar_del'
+                    for callable in [callable for callable in localServer.hooks if callable[0].lower() == thook]:
                         try:
                             callable[2](channel, m)
                         except Exception as ex:
                             _print('Exception in {}: {}'.format(callable[2], ex), server=localServer)
 
-                modes = ''.join(tmodes)+' '+' '.join(param)
-                self.broadcast(channel.users, 'MODE {} {}'.format(channel.name, modes), source=sourceUser)
+                all_modes = ''.join(tmodes)+' '+' '.join(param)
+                if oper_override and type(self).__name__ != 'Server':
+                    sourceServer.snotice('s', '*** OperOverride by {} ({}@{}) with MODE {} {}'.format(sourceUser.nickname, sourceUser.ident, sourceUser.hostname, channel.name, all_modes))
+
+                self.broadcast(channel.users, 'MODE {} {}'.format(channel.name, all_modes), source=sourceUser)
                 if sync:
-                    localServer.new_sync(localServer, sourceServer, ':{} MODE {} :{}'.format(displaySource, channel.name, modes if type(self).__name__ == 'User' else rawModes))
+                    localServer.new_sync(localServer, sourceServer, ':{} MODE {} :{}'.format(displaySource, channel.name, all_modes if type(self).__name__ == 'User' else rawModes))
 
                 for callable in [callable for callable in localServer.hooks if callable[0].lower() == hook]:
                     try:
@@ -475,6 +478,20 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
             sync = False
         if len(tmodes) > 1:
 
+            for m in modes:
+                if m in '+-':
+                    action = m
+                    continue
+                if action == '+':
+                    thook = 'modechar_add'
+                elif action == '-':
+                    thook = 'modechar_del'
+                for callable in [callable for callable in localServer.hooks if callable[0].lower() == thook]:
+                    try:
+                        callable[2](channel, m)
+                    except Exception as ex:
+                        _print('Exception in {}: {}'.format(callable[2], ex), server=localServer)
+
             if oper_override and type(self).__name__ != 'Server':
                 sourceServer.snotice('s', '*** OperOverride by {} ({}@{}) with MODE {} {}'.format(sourceUser.nickname, sourceUser.ident, sourceUser.hostname, channel.name, all_modes))
             localServer.new_sync(localServer, sourceServer, ':{} MODE {} :{}'.format(displaySource, channel.name, all_modes if type(self).__name__ == 'User' else rawModes))
@@ -489,20 +506,6 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
             for callable in [callable for callable in localServer.hooks if callable[0].lower() == hook]:
                 try:
                     callable[2](self, localServer, channel, modes, param)
-                except Exception as ex:
-                    _print('Exception in {}: {}'.format(callable[2], ex), server=localServer)
-
-        for m in modes:
-            if m in '+-':
-                action = m
-                continue
-            if action == '+':
-                hook = 'modechar_add'
-            elif action == '-':
-                hook = 'modechar_del'
-            for callable in [callable for callable in localServer.hooks if callable[0].lower() == hook]:
-                try:
-                    callable[2](channel, m)
                 except Exception as ex:
                     _print('Exception in {}: {}'.format(callable[2], ex), server=localServer)
 
@@ -782,7 +785,6 @@ def chgumode(self, localServer, recv, override, sourceServer=None, sourceUser=No
                                 target.swhois.remove(target.operswhois)
                             data = ':{} SWHOIS {} :'.format(localServer.sid, target.uid)
                             localServer.new_sync(localServer, sourceServer, data)
-                            #localServer.syncToServers(localServer, target.server, data)
                             for line in target.swhois:
                                 data = ':{} SWHOIS {} :{}'.format(localServer.sid, target.uid, line)
                                 localServer.new_sync(localServer, sourceServer, data)
@@ -817,14 +819,12 @@ def chgumode(self, localServer, recv, override, sourceServer=None, sourceUser=No
                 except Exception as ex:
                     _print('Exception in {}: {}'.format(callable[2], ex), server=localServer)
 
-            #localServer.syncToServers(localServer, self.server, ':{} UMODE2 {}'.format(target.uid, modes))
         if 's' in modes or showsno:
             localServer.new_sync(localServer, sourceServer, ':{} BV +{}'.format(target.uid, target.snomasks))
             target.sendraw(8, 'Server notice mask (+{})'.format(target.snomasks))
 
         if unknown:
             self.sendraw(501, 'Mode{} \'{}\' not found'.format('s' if len(unknown) > 1 else '', ''.join(unknown)))
-
 
     except Exception as ex:
         exc_type, exc_obj, exc_tb = sys.exc_info()

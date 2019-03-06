@@ -17,15 +17,9 @@ def names(self, localServer, recv, override=False):
         return self.sendraw(401, '{} :No such channel'.format(recv[1]))
 
     channel = channel[0]
-    success, exclude = True, []
-    for callable in [callable for callable in localServer.events if callable[0].lower() == 'pre_names']:
-        try:
-            success, exclude = callable[1](self, localServer, channel)
-        except Exception as ex:
-            _print(ex, server=localServer)
 
     users = []
-    for user in [user for user in channel.users if user not in exclude]:
+    for user in channel.users:
         if 'i' in user.modes and (self not in channel.users and not self.ocheck('o', 'override') and not override):
             continue
         if '^' in user.modes:
@@ -33,6 +27,17 @@ def names(self, localServer, recv, override=False):
                 continue
             else:
                 users.append('!'+user.nickname)
+            continue
+
+        ### Check module hooks for visible_in_channel()
+        visible = 1
+        if user != self:
+            for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'visible_in_channel']:
+                try:
+                    visible = callable[2](self, localServer, user, channel)
+                except Exception as ex:
+                    _print('Exception in module: {}: {}'.format(callable[2], ex), server=localServer)
+        if not visible:
             continue
 
         prefix = ''

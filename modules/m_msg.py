@@ -129,9 +129,9 @@ def privmsg(self, localServer, recv, override=False, safe=False):
                     if not msg:
                         continue
 
-                users = [user for user in channel.users if user != self]
+                users = [user for user in channel.users if user != self and 'd' not in user.modes]
                 self.broadcast(users, 'PRIVMSG {} :{}'.format(channel.name, msg))
-                if type(self).__name__ == 'User' and 'echo-message' in self.caplist:
+                if type(self).__name__ == 'User' and 'echo-message' in self.caplist and 'd' not in self.modes:
                     self._send(':{} PRIVMSG {} :{}'.format(self.fullmask(), channel.name, msg))
 
                 self.idle = int(time.time())

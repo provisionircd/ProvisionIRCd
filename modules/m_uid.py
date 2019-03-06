@@ -27,26 +27,32 @@ def uid(self, localServer, recv):
         params = []
         for p in recv:
             params.append(p)
-        if nick.lower() in [user.nickname.lower() for user in localServer.users] and not self.eos:
-            user = list(filter(lambda c: c.nickname.lower() == nick.lower(), localServer.users))[0]
+        for user in [user for user in localServer.users if user.nickname.lower() == nick.lower()]:
+            _print('Found double user in UID: {}'.format(user), server=localServer)
             if not user.server:
                 _print('Quitting {} because their server could not be found (UID)'.format(user), server=localServer)
-                user.quit('Unknown connection')
-            else:
-                _print('{}WARNING: user {} already found on {}{}'.format(R, user.nickname, user.server.hostname, W), server=localServer)
-                localUserClass = list(filter(lambda c: c.nickname.lower() == nick.lower() and c.server.hostname == localServer.hostname, localServer.users))[0]
+                user.quit('Unknown or corrupted connection with the same nick')
+                continue
+            _print('{}WARNING: user {} already found on the network{}'.format(R, user, W), server=localServer)
+            localUserClass = list(filter(lambda c: c.nickname.lower() == user.nickname.lower() and c.server.hostname == localServer.hostname, localServer.users))
+            if localUserClass:
+                localUserClass = localUserClass[0]
                 localTS = int(localUserClass.signon)
                 remoteTS = int(recv[4])
                 if remoteTS <= localTS:
-                    _print('{}Local user {} disconnected from local server.{}'.format(R, localUserClass.nickname, W), server=localServer)
+                    _print('{}Local user {} disconnected from local server.{}'.format(R, localUserClass, W), server=localServer)
                     localUserClass.quit('Local Nick Collision', silent=True)
+                else:
+                    user.quit('Remote Nick Collision', silent=True)
 
+        _print('Creating local class for remote user', server=localServer)
         u = ircd.User(self, serverClass=localServer, params=params)
 
         TKL.check(self, localServer, u, 'Z')
         TKL.check(self, localServer, u, 'K')
 
         cmd = ' '.join(recv)
+
         localServer.new_sync(localServer, self, cmd)
     except Exception as ex:
         exc_type, exc_obj, exc_tb = sys.exc_info()

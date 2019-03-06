@@ -82,7 +82,7 @@ def kick(self, localServer, recv, override=False, sync=True):
             reason = reason[1:]
         reason = reason[:kicklen]
         success = True
-        for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_'+hook]:
+        for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_local_kick']:
             try:
                 success = callable[2](self, localServer, user, channel, reason)
                 if not success:

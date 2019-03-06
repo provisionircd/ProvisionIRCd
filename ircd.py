@@ -32,7 +32,6 @@ import handle.handleConf
 from handle.handleLink import Link as link
 import handle.handleModules as Modules
 from collections import OrderedDict
-#from OpenSSL import SSL
 
 path = os.path.abspath(__file__)
 dir_path = os.path.dirname(path)
@@ -95,7 +94,6 @@ class Server:
     def __init__(self, conffile=None, forked=False, origin=None, serverLink=False, sock=None, is_ssl=False):
         self.ctime = int(time.time())
         self.syncDone = []
-        self.replyPing = {}
         self.eos = False
         self.sendbuffer = ''
         self.hopcount = 0
@@ -116,10 +114,9 @@ class Server:
                 self.user_modes = {}
                 self.channel_modes = {}
                 self.validconf = False
-                self.datahandler = None
                 self.localServer = self
                 self.linkRequests = {}
-                self.sync_queue = []
+                self.sync_queue = {}
                 self.creationtime = int(time.time())
 
                 self.versionnumber = '1.1'
@@ -264,7 +261,6 @@ class Server:
             self.socket = sock
             self.is_ssl = is_ssl
             self.recvbuffer = ''
-            self.sendbuffer = ''
             self.name = ''
             self.hostname = ''
             self.ping = int(time.time())
@@ -286,20 +282,20 @@ class Server:
             if data.split()[1] in ['UID', 'SID']:
                 data = data.split()
                 data = '{} {} {}'.format(' '.join(data[:3]), str(int(data[3]) + 1), ' '.join(data[4:]))
+
             for server in [server for server in localServer.servers if server.socket and server not in skip]:
-                #print('New sync to {}: {}'.format(server, data))
                 if not server.eos:
                     if server not in localServer.sync_queue:
                         localServer.sync_queue[server] = []
-                    localServer.sync_queue.append(data)
-                    _print('{}Added to {} sync queue because they are not done syncing: {}{}'.format(R2, server, data, W), server=self.localServer)
+                    localServer.sync_queue[server].append(data)
+                    _print('{}Added to {} sync queue because they are not done syncing: {}{}'.format(R2, server, data, W), server=localServer)
                     continue
                 server._send(data)
         except Exception as ex:
             exc_type, exc_obj, exc_tb = sys.exc_info()
             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
             e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-            _print(e)
+            _print(e, server=localServer)
 
     def syncToServers(self, localServer, sourceServers, data):
         if type(sourceServers) != list:
@@ -402,19 +398,25 @@ class Server:
         return words
 
     def _send(self, data):
-        if not data:
-            _print('No data in _send', server=self.localServer)
-            return
-        if self.socket:
-            self.sendbuffer += data + '\r\n'
-            ignore = ['PRIVMSG', 'NOTICE']
-            try:
-                if data.split()[0] != 'PONG' and data.split()[1] != 'PONG':
-                    if len(data) > 1 and data.split()[1] not in ignore:
-                        #pass
-                        _print('{}{} <<<-- {}{}'.format(B, self.hostname if self.hostname != '' else self, data, W), server=self.localServer)
-            except:
-                pass
+        try:
+            if not data:
+                _print('No data in _send', server=self.localServer)
+                return
+            if self.socket:
+                self.sendbuffer += data + '\r\n'
+                ignore = ['PRIVMSG', 'NOTICE', 'PING', 'PONG']
+                try:
+                    if data.split()[0] not in ['PING', 'PONG'] and data.split()[1] not in ['PING', 'PONG']:
+                        if len(data) > 1 and data.split()[1] not in ignore:
+                            #pass
+                            _print('{}{} <<<-- {}{}'.format(B, self.hostname if self.hostname != '' else self, data, W), server=self.localServer)
+                except:
+                    pass
+        except Exception as ex:
+            exc_type, exc_obj, exc_tb = sys.exc_info()
+            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+            e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
+            _print(e)
 
     def handle_recv(self):
         while self.recvbuffer.find("\n") != -1:
@@ -511,25 +513,13 @@ class Server:
                             source[0]._send(':{} MODE +s :{}'.format(source[0].server.hostname, recv[2:]))
                             source[0].sendraw(8, 'Server notice mask (+{})'.format(source[0].snomasks))
                         localServer.new_sync(localServer, self, raw)
-                    try:
-                        ### Old method -- use new method instead
-                        cmd = importlib.import_module('cmds.cmd_'+command.lower())
-                        getattr(cmd, 'cmd_'+command.upper())(self, localServer, recvNoStrip)
-                        continue
-                    except ImportError:
-                        for callable in [callable for callable in localServer.commands if callable[0].lower() == command.lower()]:
-                            try:
-                                callable[1](self, localServer, recvNoStrip)
-                            except Exception as ex:
-                                _print('Exception in module {}: {}'.format(callable[6], ex), server=localServer)
-                                _print('Should we disconnect the server because of this issue?', server=localServer)
-                        continue
-                    except Exception as ex:
-                        #pass
-                        exc_type, exc_obj, exc_tb = sys.exc_info()
-                        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-                        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-                        _print(e, server=localServer)
+
+                    for callable in [callable for callable in localServer.commands if callable[0].lower() == command.lower()]:
+                        try:
+                            callable[1](self, localServer, recvNoStrip)
+                        except Exception as ex:
+                            _print('Exception in module {}: {}'.format(callable[6], ex), server=localServer)
+                            _print('Should we disconnect the server because of this issue?', server=localServer)
                     continue
 
                 else:
@@ -624,6 +614,10 @@ class Server:
                 except:
                     self.socket.close()
 
+            del self
+            gc.collect()
+            del gc.garbage[:]
+
         except Exception as ex:
             exc_type, exc_obj, exc_tb = sys.exc_info()
             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
@@ -648,7 +642,7 @@ class Server:
 
         from handle.handleSockets import data_handler
         self.datahandler = data_handler(self)
-        self.datahandler.start()
+        self.datahandler.run()
         return
 
     def handle(self, cmd, data, params=None):
@@ -690,7 +684,7 @@ class Server:
             if sno:
                 users = list(filter(lambda u: 'o' in u.modes and sno in u.snomasks, localServer.users))
 
-            for user in set(users):
+            for user in users:
                 try:
                     if sno in localServer.conf['opers'][user.operaccount]['ignore']['snomask']:
                         for m in localServer.conf['opers'][user.operaccount]['ignore']['snomask'][sno]:

@@ -19,6 +19,7 @@ defAction = {
     'j': 'i'
 }
 
+@ircd.Modules.hooks.loop()
 def checkExpiredFloods(localServer):
     ### Checking for timed-out flood protection.
     channels = (channel for channel in localServer.channels if 'f' in channel.modes and 'm' in channel.chmodef)
@@ -47,32 +48,6 @@ def checkExpiredFloods(localServer):
             if chan.chmodef['j']['actionSet'] and int(time.time()) - chan.chmodef['j']['actionSet'] > chan.chmodef['j']['duration']*60:
                 localServer.handle('MODE', '{} -R'.format(chan.name))
                 chan.chmodef['j']['actionSet'] = None
-
-class RepeatedTimer(object):
-    def __init__(self, interval, function, *args, **kwargs):
-        self._timer = None
-        self.interval = interval
-        self.function = function
-        self.args = args
-        self.kwargs = kwargs
-        self.is_running = False
-        self.start()
-
-    def _run(self):
-        self.is_running = False
-        self.start()
-        self.function(*self.args, **self.kwargs)
-
-    def start(self):
-        if not self.is_running:
-            self._timer = Timer(self.interval, self._run)
-            self._timer.daemon = True
-            self._timer.start()
-            self.is_running = True
-
-    def stop(self):
-        self._timer.cancel()
-        self.is_running = False
 
 @ircd.Modules.hooks.chanmsg()
 def msg(self, localServer, channel, msg):
@@ -267,18 +242,3 @@ def addmode(self, localServer, channel, modes, params, modebuf, parambuf):
         fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
         e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
         _print(e, server=localServer)
-
-def init(self):
-    global rt
-    rt = RepeatedTimer(1, checkExpiredFloods, self)
-    for chan in [chan for chan in self.channels]:
-        if not hasattr(chan, 'chmodef'):
-            chan.chmodef = {}
-        if not hasattr(chan, 'messageQueue'):
-            chan.messageQueue = {}
-        if not hasattr(chan, 'joinQueue'):
-            chan.joinQueue = {}
-
-def unload(self):
-    global rt
-    rt.stop()

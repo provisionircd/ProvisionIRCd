@@ -162,7 +162,7 @@ def HookToCore(self, callables):
                 #print(callable)
                 info = (h[0], h[1], callable, module)
                 self.hooks.append(info)
-                _print('Hooked hook {} to core'.format(info), server=self)
+                _print('Hooked {}'.format(info), server=self)
 
     except Exception as ex:
         exc_type, exc_obj, exc_tb = sys.exc_info()
@@ -264,7 +264,7 @@ def UnloadModule(self, name):
                         info = (h[0], h[1], function, module)
                         function.hooks.remove(h)
                         if info in self.hooks:
-                            _print('Removed hook {}'.format(info), server=self)
+                            _print('Removed {}'.format(info), server=self)
                             self.hooks.remove(info)
                         else:
                             _print('REMOVE ERROR: Unable to remove hook {}: not found in events list'.format(info), server=self)
@@ -414,18 +414,16 @@ import inspect
 all_hooks = [
             'pre_local_join',
             'local_join',
-            'pre_remote_join',
             'remote_join',
             'pre_local_part',
             'local_part',
-            'pre_remote_part',
             'remote_part',
             'pre_local_kick',
             'local_kick',
-            'pre_remote_kick',
             'remote_kick',
             'pre_local_quit',
-            'pre_quit',
+            'local_quit',
+            'remote_quit',
             'pre_chanmsg',
             'chanmsg',
             'pre_usermsg',
@@ -434,12 +432,14 @@ all_hooks = [
             'local_chanmode',
             'pre_remote_chanmode',
             'remote_chanmode',
-            'pre_local_connect',
             'modechar_add',
             'modechar_del',
+            'pre_local_connect',
             'local_connect',
             'remote_connect',
+            'visible_in_channel',
             'welcome',
+            'loop',
             ]
 
 class hooks:

@@ -52,7 +52,7 @@ def show_stats(self, localServer, recv):
             for s in localServer.servers:
                 if s.sid:
                     if s.socket:
-                        self.sendraw(210, ':            {} {} :: {} --- socket: {}, class: {}'.format(s.sid, s.hostname, s, s.socket, s.cls))
+                        self.sendraw(210, ':            {} {} :: {} --- socket: {}, class: {}, eos: {}'.format(s.sid, s.hostname, s, s.socket, s.cls, s.eos))
                     for s2 in localServer.servers:
                         if s2.introducedBy == s and s2 not in displayed:
                             self.sendraw(210, ':                        ---> {} :: {} --- introduced by: {}, uplinked to: {}'.format(s2.sid, s2, s2.introducedBy, s2.uplink))
@@ -75,13 +75,14 @@ def show_stats(self, localServer, recv):
                 self.sendraw(210, ':Services: {}'.format(localServer.conf['settings']['services']))
 
         elif recv[1] == 'd':
-            dnsbl = localServer.dnsblCache[:128] if len(localServer.dnsblCache) > 128 else localServer.dnsblCache
+            total_len = len(localServer.dnsblCache)
+            dnsbl = localServer.dnsblCache if len(localServer.dnsblCache) < 128 else sorted(localServer.dnsblCache)[:128]
             for entry in dnsbl:
                 date = '{} {}'.format(datetime.datetime.fromtimestamp(float(localServer.dnsblCache[entry]['ctime'])).strftime('%a %b %d %Y'), datetime.datetime.fromtimestamp(float(localServer.dnsblCache[entry]['ctime'])).strftime('%H:%M:%S %Z'))
                 date = date.strip()
                 self.sendraw(210, ':{} {} {}'.format(entry, localServer.dnsblCache[entry]['bl'], date))
             if len(dnsbl) == 128:
-                self.sendraw(210, ':Showing only first 128 entries')
+                self.sendraw(210, ':Showing only first 128 entries. Total entries: {}'.format(total_len))
 
         elif recv[1] == 'G':
             for type in [type for type in localServer.tkl if type in 'GZQ']:

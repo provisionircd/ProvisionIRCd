@@ -1,6 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+try:
+    import faulthandler
+    faulthandler.enable()
+except:
+    pass
 import gc
 gc.enable()
 
@@ -15,8 +20,6 @@ import socket
 import importlib
 import datetime
 import threading
-#import psutil
-#import objgraph
 
 if sys.version_info[0] < 3:
     print('Python 2 is not supported.')
@@ -35,39 +38,35 @@ def RevIP(ip):
         x -= 1
     return revip
 
-class DNSBLCheck(threading.Thread):
-    def __init__(self, localServer, u, ip):
-        self.localServer = localServer
-        self.u = u
-        self.ip = ip
-        threading.Thread.__init__(self)
+def DNSBLCheck(user):
+    localServer = user.server
+    if user.ip in localServer.dnsblCache:
+        reason = 'Your IP is blacklisted by {}'.format(localServer.dnsblCache[user.ip]['bl']+' [cached]')
+        for u in [u for u in list(localServer.users) if u.ip == user.ip]:
+            u._send(':{} 304 * :{}'.format(localServer.hostname, reason))
+            u.quit(reason)
+        return
+    if user.ip in localServer.bannedList:
+        user._send(':{} 304 * :Your IP has been banned (listed locally).'.format(localServer.hostname))
+        user.quit('Your IP has been banned (listed locally)')
+        return
 
-    def run(self):
-        if self.ip in self.localServer.dnsblCache:
-            reason = 'Your IP is blacklisted by {}'.format(self.localServer.dnsblCache[self.ip]['bl']+' [cached]')
-            self.u._send(':{} 304 * :{}'.format(self.localServer.hostname, reason))
-            self.u.quit(reason)
-            return
-        if self.ip in set(self.localServer.bannedList):
-            self.u._send(':{} 304 * :Your IP has been banned (listed locally).'.format(self.localServer.hostname))
-            self.u.quit('Your IP has been banned (listed locally)')
-            return
-
-        for x in [x for x in self.localServer.conf['dnsbl']['list'] if '.' in x]:
-            try:
-                result = socket.gethostbyname(RevIP(self.ip)+ '.' + x)
-                reason = 'Your IP is blacklisted by {}'.format(x)
-                if self.ip not in self.localServer.dnsblCache:
-                    self.localServer.dnsblCache[self.ip] = {}
-                    self.localServer.dnsblCache[self.ip]['bl'] = x
-                    self.localServer.dnsblCache[self.ip]['ctime'] = int(time.time())
-                self.u._send(':{} 304 * :{}'.format(self.localServer.hostname, reason))
-                msg = '*** DNSBL match for IP {}: {} [nick: {}]'.format(self.u.ip, x, self.u.nickname)
-                self.localServer.snotice('d', msg)
-                self.u.quit(reason)
-                return
-            except:
-                pass
+    for x in [x for x in localServer.conf['dnsbl']['list'] if '.' in x]:
+        try:
+            result = socket.gethostbyname(RevIP(user.ip)+ '.' + x)
+            reason = 'Your IP is blacklisted by {}'.format(x)
+            if user.ip not in localServer.dnsblCache:
+                localServer.dnsblCache[user.ip] = {}
+                localServer.dnsblCache[user.ip]['bl'] = x
+                localServer.dnsblCache[user.ip]['ctime'] = int(time.time())
+            user._send(':{} 304 * :{}'.format(localServer.hostname, reason))
+            msg = '*** DNSBL match for IP {}: {} [nick: {}]'.format(user.ip, x, user.nickname)
+            localServer.snotice('d', msg)
+            user.quit(reason)
+            break
+        except: #Exception as ex:
+            pass
+            #_print(ex, server=localServer)
 
 class User:
     def __init__(self, server, sock=None, address=None, is_ssl=None, serverClass=None, params=None):
@@ -116,9 +115,9 @@ class User:
                         for e in self.server.conf['except']['dnsbl']:
                             if match(e, self.ip):
                                 dnsbl_except = True
+                                break
                     if not dnsbl_except:
-                        d = DNSBLCheck(self.server, self, self.ip)
-                        d.start()
+                        DNSBLCheck(self)
 
                 TKL.check(self, self.server, self, 'z')
                 TKL.check(self, self.server, self, 'Z')
@@ -240,8 +239,8 @@ class User:
             _print(e, server=self.localServer)
 
     def __del__(self):
-        #pass
-        _print('User {} closed'.format(self, server=self.localServer))
+        pass
+        #_print('User {} closed'.format(self, server=self.localServer))
         #objgraph.show_most_common_types()
 
     def handle_recv(self):
@@ -412,6 +411,12 @@ class User:
             for c in str(info):
                 if c.lower() not in valid:
                     info = info.replace(c, '')
+            if t == 'host' and info:
+                self.cloakhost = info
+            elif t == 'ident' and info:
+                self.ident = info
+            if not info:
+                return
             updated = []
             if self.registered:
                 for user in self.localServer.users:
@@ -421,10 +426,6 @@ class User:
                             continue
                         user._send(':{} CHGHOST {} {}'.format(self.fullmask(), info if t == 'ident' else self.ident, info if t == 'host' else self.cloakhost))
                         updated.append(user)
-            if t == 'host':
-                self.cloakhost = info
-            elif t == 'ident':
-                self.ident = info
 
             if self.registered:
                 data = ':{} {} {}'.format(self.uid, 'SETHOST' if t == 'host' else 'SETIDENT', self.cloakhost if t == 'host' else self.ident)
@@ -437,6 +438,11 @@ class User:
 
     def welcome(self):
         if not self.registered:
+            for callable in [callable for callable in self.server.hooks if callable[0].lower() == 'pre_local_connect']:
+                try:
+                    callable[2](self, self.server)
+                except Exception as ex:
+                    _print('Exception in module: {}: {}'.format(callable[2], ex), server=self.server)
             for cls in self.server.conf['allow']:
                 if 'ip' in self.server.conf['allow'][cls]:
                     clientmask = '{}@{}'.format(self.ident, self.ip)
@@ -469,9 +475,6 @@ class User:
             current_lusers = len([user for user in self.server.users if user.server == self.server])
             if current_lusers > self.server.maxusers:
                 self.server.maxusers = current_lusers
-
-            msg = '*** Client connecting: {} ({}@{}) {{{}}} [{}{}]'.format(self.nickname, self.ident, self.hostname, self.cls, 'secure' if self.ssl else 'plain', ' '+self.socket.cipher()[0] if self.ssl else '')
-            self.server.snotice('c', msg)
 
             if len(self.server.users) > self.server.maxgusers:
                 self.server.maxgusers = len(self.server.users)
@@ -507,6 +510,9 @@ class User:
             if self.fingerprint:
                 self.send('NOTICE', ':*** Your SSL fingerprint is {}'.format(self.fingerprint))
 
+            msg = '*** Client connecting: {} ({}@{}) {{{}}} [{}{}]'.format(self.nickname, self.ident, self.hostname, self.cls, 'secure' if self.ssl else 'plain', ' '+self.socket.cipher()[0] if self.ssl else '')
+            self.server.snotice('c', msg)
+
             binip = IPtoBase64(self.ip)
 
             data = '{} {} {} {} {} {} 0 +{} {} {} {} :{}'.format(self.nickname, self.server.hopcount, self.signon, self.ident, self.hostname, self.uid, self.modes, self.cloakhost, self.cloakhost, binip, self.realname)
@@ -522,6 +528,7 @@ class User:
                 p = {'override': True}
                 self.handle('mode', '{} +{}'.format(self.nickname, ''.join(modes)), params=p)
 
+            self.registered = True
             if self.fingerprint:
                 data = 'MD client {} certfp :{}'.format(self.uid, self.fingerprint)
                 # :irc.foonet.com MD client 001HBEI01 certfp :a6fc0bd6100a776aa3266ed9d5853d6dce563560d8f18869bc7eef811cb2d413
@@ -531,7 +538,11 @@ class User:
             for user in watch_notify:
                 user.sendraw(600, '{} {} {} {} :logged online'.format(self.nickname, self.ident, self.cloakhost, self.signon))
 
-            self.registered = True
+            for callable in [callable for callable in self.server.hooks if callable[0].lower() == 'local_connect']:
+                try:
+                    callable[2](self, self.server)
+                except Exception as ex:
+                    _print('Exception in module: {}: {}'.format(callable[2], ex), server=self.server)
 
         gc.collect()
 
@@ -585,19 +596,21 @@ class User:
             if not sourceServer.socket and sourceServer.uplink:
                 sourceServer = sourceServer.uplink
             #_print('User {} quit, sourceServer: {}'.format(self, sourceServer), server=localServer)
-            hook = 'pre_local_quit' if self.server == localServer else 'pre_remote_quit'
-            for callable in [callable for callable in localServer.hooks if callable[0].lower() == hook]:
+            for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_local_quit']:
                 try:
                     ### 'quit' event will return a tuple: (success, broadcast)
                     ### broadcast is a list of all users to broadcast to.
                     ### This is useful for modules like m_delayjoin which modifies that list.
                     success, broadcast = callable[2](self, localServer, reason)
-                    _print('Broadcast set as {} from module {}'.format(broadcast, callable), server=localServer)
+                    #_print('Broadcast set as {} from module {}'.format(broadcast, callable), server=localServer)
                 except Exception as ex:
                     _print('Exception in module: {}: {}'.format(callable[2], ex), server=localServer)
 
             if banmsg:
                 localServer.notice(self, '*** You are banned from this server: {}'.format(banmsg))
+
+            if error and self.socket and reason:
+                self._send('ERROR :Closing link: [{}] ({})'.format(self.hostname, reason))
 
             while self.sendbuffer:
                 _print('User {} has sendbuffer remaining: {}'.format(self, self.sendbuffer.rstrip()), server=localServer)
@@ -606,12 +619,6 @@ class User:
                     self.sendbuffer = self.sendbuffer[sent:]
                 except:
                     break
-
-            if error and self.socket and reason:
-                try:
-                    self.socket.send(bytes('ERROR :Closing link: [{}] ({})\r\n'.format(self.hostname, reason), 'utf-8'))
-                except:
-                    pass
 
             if self.registered and (self.server == localServer or self.server.eos):
                 if reason and not kill:
@@ -660,15 +667,15 @@ class User:
                     self.socket.close()
 
             hook = 'local_quit' if self.server == localServer else 'remote_quit'
-            for callable in [callable for callable in localServer.events if callable[0].lower() == hook]:
+            for callable in [callable for callable in localServer.hooks if callable[0].lower() == hook]:
                 try:
                     callable[2](self, localServer, reason)
                 except Exception as ex:
                     _print('Exception in module: {}: {}'.format(callable[2], ex), server=localServer)
 
             del self
-
             gc.collect()
+            del gc.garbage[:]
 
             #if localServer.forked:
             #    _print('Growth after self.quit() (if any):', server=localServer)

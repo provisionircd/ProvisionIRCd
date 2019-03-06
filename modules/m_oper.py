@@ -108,8 +108,8 @@ def oper(self, localServer, recv):
         localServer.snotice('o', msg)
 
         data = ':{} MD client {} operaccount :{}'.format(localServer.sid, self.uid, self.operaccount)
-        localServer.syncToServers(localServer, self.server, data)
+        localServer.new_sync(localServer, self.server, data)
 
         for line in self.swhois:
             data = ':{} SWHOIS {} :{}'.format(localServer.sid, self.uid, line)
-            localServer.syncToServers(localServer, self.server, data)
+            localServer.new_sync(localServer, self.server, data)

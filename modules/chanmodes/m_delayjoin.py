@@ -18,7 +18,7 @@ parts_showed = {}
 joins_showed = {}
 
 ### Types: 0 = mask, 1 = require param, 2 = optional param, 3 = no param, 4 = special user channel-mode.
-@ircd.Modules.channel_modes(chmode, 3, 3, 'Delay join message until the user speaks') ### ('mode', type, level, 'Mode description', class 'user' or None, prefix, 'param desc')
+@ircd.Modules.channel_modes(chmode, 3, 3, 'Delay join message until the user speaks or receives channel status') ### ('mode', type, level, 'Mode description', class 'user' or None, prefix, 'param desc')
 @ircd.Modules.hooks.pre_chanmsg()
 def showjoin(self, localServer, channel, msg):
     if 'D' not in channel.modes:
@@ -33,8 +33,14 @@ def showjoin(self, localServer, channel, msg):
                 del parts_showed[channel][self][user]
     return msg
 
+@ircd.Modules.hooks.visible_in_channel() ### Returns True or False depending if <user> should be visible on <channel>
+def visible_in_chan(self, localServer, user, channel):
+    if chmode in channel.modes and user in channel.delayjoins and self not in joins_showed[channel][user]:
+        if self.chlevel(channel) < 2:
+            return 0
+    return 1
+
 @ircd.Modules.hooks.pre_local_join()
-@ircd.Modules.hooks.pre_remote_join()
 def hidejoin(self, localServer, channel):
     ### NoneType issues? Always make sure to return a tuple!
     overrides = []
@@ -50,7 +56,7 @@ def hidejoin(self, localServer, channel):
         if self not in channel.delayjoins:
             channel.delayjoins.append(self)
         broadcast = [user for user in channel.users if user.chlevel(channel) > 1]+[self]
-        for user in [user for user in broadcast if user in joins_showed[channel][self]]:
+        for user in broadcast:
             joins_showed[channel][self][user] = True
         return (True, broadcast, overrides) ### Bool 1: is the join allowed? Param 2: list of users to broadcast the join to.
 
@@ -61,7 +67,6 @@ def hidejoin(self, localServer, channel):
         _print(e, server=localServer)
 
 @ircd.Modules.hooks.pre_local_part()
-@ircd.Modules.hooks.pre_remote_part()
 def hidepart(self, localServer, channel):
     if 'D' not in channel.modes:
         return (True, None)
@@ -74,7 +79,8 @@ def hidepart(self, localServer, channel):
         if self not in parts_showed[channel]:
             parts_showed[channel][self] = {}
 
-        broadcast = [user for user in channel.users if all_part or user in joins_showed[channel][self] and (self in parts_showed[channel] and user not in parts_showed[channel][self])]
+        #broadcast = [user for user in channel.users if all_part or user in joins_showed[channel][self] and (self in parts_showed[channel] and user not in parts_showed[channel][self])]
+        broadcast = [user for user in channel.users if all_part or user in joins_showed[channel][self]]
         for user in broadcast:
             parts_showed[channel][self][user] = True
             if user in joins_showed[channel][self]:
@@ -106,7 +112,6 @@ def hidequit(self, localServer, reason):
         fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
         e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
         _print(e, server=localServer)
-
 
 @ircd.Modules.hooks.modechar_add()
 def set_D(channel, mode):
@@ -167,10 +172,9 @@ def chmode_D(self, localServer, channel, modes, params, modebuf, parambuf):
         e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
         _print(e, server=localServer)
 
-
 def show_joins(delayed_user, channel, user=None):
     if delayed_user not in joins_showed[channel]:
-        return
+        joins_showed[channel][delayed_user] = {}
     users = [user for user in channel.users if user not in joins_showed[channel][delayed_user] and user != delayed_user] if not user else [user]
     for user in [user for user in users if user not in joins_showed[channel][delayed_user]]:
         joins_showed[channel][delayed_user][user] = True
@@ -180,7 +184,7 @@ def show_joins(delayed_user, channel, user=None):
 
 def show_parts(delayed_user, channel):
     if delayed_user not in parts_showed[channel]:
-        return
+        parts_showed[channel][delayed_user] = {}
     for user in [user for user in channel.users if user not in parts_showed[channel][delayed_user] and user.chlevel(channel) < 2 and user != delayed_user]:
         parts_showed[channel][delayed_user][user] = True
         delayed_user.broadcast([user], 'PART :{}'.format(channel.name))
@@ -188,7 +192,6 @@ def show_parts(delayed_user, channel):
             del joins_showed[channel][delayed_user][user]
 
 @ircd.Modules.hooks.pre_local_kick()
-@ircd.Modules.hooks.pre_remote_kick()
 def kick(self, localServer, user, channel, reason):
     if chmode not in channel.modes:
         return True
@@ -197,15 +200,6 @@ def kick(self, localServer, user, channel, reason):
     if user in joins_showed[channel]:
         del joins_showed[channel][user]
     return True
-
-@ircd.Modules.events('pre_names')
-def names(self, localServer, channel):
-    exclude = []
-    if chmode in channel.modes:
-        for delayed_user in list(channel.delayjoins):
-            if self.chlevel(channel) < 2 and delayed_user != self:
-                exclude.append(delayed_user)
-    return (True, exclude)
 
 def init(self):
     for chan in [chan for chan in self.channels if chmode in chan.modes]:

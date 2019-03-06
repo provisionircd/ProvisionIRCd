@@ -136,7 +136,7 @@ def join(self, localServer, recv, override=False, skipmod=None, sourceServer=Non
             success = True
             broadcastjoin = None
             overrides = []
-            for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_'+hook and callable[3] != skipmod]:
+            for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_local_join' and callable[3] != skipmod]:
                 try:
                     success, temp_broadcastjoin, overrides = callable[2](self, localServer, channel)
                     if type(temp_broadcastjoin) == list and broadcastjoin is None:
@@ -264,7 +264,7 @@ def part(self, localServer, recv, reason=None):
             channel = channel[0]
 
             broadcastpart = channel.users+[self]
-            for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_'+hook]:
+            for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_local_part']:
                 try:
                     success, broadcastpart = callable[2](self, localServer, channel)
                 except Exception as ex:
