@@ -8,9 +8,20 @@ import datetime
 import hashlib
 import binascii
 import base64
+import logging
+import logging.handlers
+
+def initlogging(localServer):
+    datefile = time.strftime('%Y%m%d')
+    loghandlers = [logging.handlers.TimedRotatingFileHandler('logs/logs.txt', when='midnight')]
+    if not localServer.forked:
+        loghandlers.append(logging.StreamHandler())
+    format = '%(asctime)s [%(module)s]: %(message)s'
+    logging.basicConfig(level=logging.DEBUG, format=format, datefmt='%Y/%m/%d %H:%M:%S', handlers=loghandlers)
 
 path = os.path.abspath(__file__)
 dir_path = os.path.dirname(path)
+
 
 class TKL:
     def check(self, localServer, user, type):
@@ -122,8 +133,13 @@ class TKL:
             _print(e, server=localServer)
 
 def write(line, server=None):
-    line = line.replace('[34m', '')
     line = line.replace('[0m', '')
+    line = line.replace('[32m', '')
+    line = line.replace('[33m', '')
+    line = line.replace('[34m', '')
+    line = line.replace('[35m', '')
+    logging.debug(line)
+    return
     datefile = time.strftime('%Y%m%d')
     logFile = os.path.abspath(os.path.join(os.path.dirname( __file__ ), '..', 'logs/logs{}.txt'.format(datefile)))
     logDir = os.path.abspath(os.path.join(logFile, '..'))
@@ -155,8 +171,8 @@ def is_sslport(server,checkport):
 
 def _print(txt, server=None):
     write(str(txt), server)
-    if server and not server.forked:
-        print(txt)
+    #if server and not server.forked:
+    #    print(txt)
 
 def valid_expire(s):
     spu = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}

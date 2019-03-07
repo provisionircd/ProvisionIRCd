@@ -42,7 +42,7 @@ pidfile = dir_path+'/process.pid'
 from classes import user
 User = user.User
 
-from handle.functions import _print, match, is_sslport, update_support
+from handle.functions import _print, match, is_sslport, update_support, logging
 
 def exit_handler():
     try:
@@ -83,10 +83,6 @@ class Channel:
 
             self.temp_status = {}
 
-    #def __del__(self):
-        #pass
-        #print('Channel {} closed'.format(self))
-
     def __repr__(self):
         return "<Channel '{}'>".format(self.name)
 
@@ -100,6 +96,9 @@ class Server:
         if not serverLink:
             try:
                 self.forked = forked
+                self.hostname = '*'
+                from handle.functions import initlogging
+                initlogging(self)
                 self.running = False
                 self.listen_socks = {}
                 self.bannedList = []
@@ -227,10 +226,7 @@ class Server:
                 self.sid = self.conf['me']['sid']
 
             except Exception as ex:
-                exc_type, exc_obj, exc_tb = sys.exc_info()
-                fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-                e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-                _print(e, server=self)
+                logging.exception(ex)
 
             self.totalcons = 0
             self.gusers = []
@@ -277,7 +273,7 @@ class Server:
             if type(skip) != list:
                 skip = [skip]
             for t in [t for t in skip if type(t).__name__ != 'Server']:
-                _print('{}HALT: wrong source type in new_sync(): {} with data: {}{}'.format(R2, t, data, W), server=self.localServer)
+                logging.error('{}HALT: wrong source type in new_sync(): {} with data: {}{}'.format(R2, t, data, W))
                 return
             if data.split()[1] in ['UID', 'SID']:
                 data = data.split()
@@ -288,102 +284,11 @@ class Server:
                     if server not in localServer.sync_queue:
                         localServer.sync_queue[server] = []
                     localServer.sync_queue[server].append(data)
-                    _print('{}Added to {} sync queue because they are not done syncing: {}{}'.format(R2, server, data, W), server=localServer)
+                    logging.info('{}Added to {} sync queue because they are not done syncing: {}{}'.format(R2, server, data, W))
                     continue
                 server._send(data)
         except Exception as ex:
-            exc_type, exc_obj, exc_tb = sys.exc_info()
-            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-            _print(e, server=localServer)
-
-    def syncToServers(self, localServer, sourceServers, data):
-        if type(sourceServers) != list:
-            sourceServers = [sourceServers]
-        noSync = []
-        noSync.append(localServer)
-        noSync.extend(sourceServers)
-        ### Do not sync back to USER server source based on UID.
-        try:
-            temp = list(filter(lambda u: u.uid == data.split()[0][1:] or u.nickname == data.split()[0][1:], localServer.users))
-            tempserver = temp[0].server
-            if tempserver not in set(noSync):
-                _print('{}Adding {} tempserver to noSync (UID){}'.format(G, tempserver.hostname, W), server=localServer)
-                noSync.append(tempserver)
-            for s in localServer.servers:
-                if tempserver.introducedBy == s and s not in noSync:
-                    _print('{}Adding {} tempserver to noSync based on introducer (UID){}'.format(G, s.hostname, W), server=localServer)
-                    noSync.append(s)
-
-        except IndexError:
-           pass
-        try:
-            ### Do not sync back to SERVER source based on SID.
-            temp = list(filter(lambda s: s.sid == data.split()[0][1:], localServer.servers))
-            tempserver = temp[0]
-            if tempserver not in set(noSync):
-                _print('{}Adding {} tempserver to noSync (SID){}'.format(G, tempserver.hostname, W), server=localServer)
-                noSync.append(tempserver)
-            ### Do not sync back to SERVER server source based on introducer (SID).
-            for s in localServer.servers:
-                if tempserver.introducedBy == s and s not in noSync:
-                    _print('{}Adding {} tempserver to noSync based on introducer (SID){}'.format(G, s.hostname, W), server=localServer)
-                    noSync.append(s)
-        except IndexError:
-            pass
-
-        try:
-            recv = data.split()
-            isMsg = ['PRIVMSG', 'NOTICE']
-
-            if recv[1] in set(isMsg):
-                channel = [channel for channel in localServer.channels if channel.name.lower() == recv[2].lower()]
-                user = [user for user in localServer.users if user.nickname.lower() == recv[2].lower() or user.uid == recv[2] and user.server not in noSync]
-
-                if user and recv[1] in set(isMsg):
-                    ### We have a private privmsg/notice, extra checks are necessary.
-                    targetServer = user[0].server
-                    if not targetServer.socket and targetServer not in sourceServers:
-                        server = targetServer.introducedBy
-                        _print('{}Cannot send directly to server. Syncing to {} :: {}{}'.format(P, server,server.hostname, W), server=localServer)
-                            #pass
-                        server._send(data)
-                        return
-            for server in (server for server in localServer.servers if server not in noSync and server.socket):
-                if recv[1] in set(isMsg):
-                    if channel:
-                        users = [user for user in channel[0].users if user != self and user.server == server or user.server.introducedBy == server]
-                        if not users:
-                            #_print('{}No need to sync channel message to {}: no remote users on the channel{}'.format(P,server.hostname,W), server=localServer)
-                            pass
-                            continue
-                    elif user:
-                        if user[0].server != server:
-                            #_print('{}No need to sync private message to {}: user {} not originating from remote server{}'.format(P,server.hostname,user[0],W), server=localServer)
-                            pass
-                            continue
-
-                if recv[1] == 'UID':
-                    ### Set hopcount.
-                    user = list(filter(lambda u: u.nickname == recv[2], localServer.users))
-                    if not user:
-                        return
-                    user = user[0]
-                    if user.server != localServer:
-                        hopcount = list(filter(lambda u: u.nickname == recv[2], localServer.users))[0].server.hopcount
-                        recv[3] = str(hopcount)
-                        #print('Hopcount set: {}'.format(hopcount))
-                    data = ' '.join(recv)
-                if server.hostname:
-                    pass
-                    #_print('{}Syncing to {}: {}{}'.format(P, server.hostname, data, W), server=localServer)
-                if server.hostname:
-                    server._send(data)
-        except Exception as ex:
-            exc_type, exc_obj, exc_tb = sys.exc_info()
-            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-            _print(e)
+            logging.exception(ex)
 
     def parse_command(self, data):
         xwords = data.split(' ')
@@ -399,9 +304,6 @@ class Server:
 
     def _send(self, data):
         try:
-            if not data:
-                _print('No data in _send', server=self.localServer)
-                return
             if self.socket:
                 self.sendbuffer += data + '\r\n'
                 ignore = ['PRIVMSG', 'NOTICE', 'PING', 'PONG']
@@ -409,14 +311,11 @@ class Server:
                     if data.split()[0] not in ['PING', 'PONG'] and data.split()[1] not in ['PING', 'PONG']:
                         if len(data) > 1 and data.split()[1] not in ignore:
                             #pass
-                            _print('{}{} <<<-- {}{}'.format(B, self.hostname if self.hostname != '' else self, data, W), server=self.localServer)
+                            logging.info('{}{} <<<-- {}{}'.format(B, self.hostname if self.hostname != '' else self, data, W))
                 except:
                     pass
         except Exception as ex:
-            exc_type, exc_obj, exc_tb = sys.exc_info()
-            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-            _print(e)
+            logging.exception(ex)
 
     def handle_recv(self):
         while self.recvbuffer.find("\n") != -1:
@@ -438,11 +337,10 @@ class Server:
                     ignore = ['ping', 'pong', 'privmsg', 'notice']
                     #ignore = []
                     if command.lower() not in ignore and recv[1].lower() not in ignore:
-                        _print('{}{} -->>> {}{}'.format(B, self.hostname if self.hostname != '' else self, ' '.join(recvNoStrip), W), server=localServer)
+                        logging.info('{}{} -->>> {}{}'.format(B, self.hostname if self.hostname != '' else self, ' '.join(recvNoStrip), W))
                         pass
                 except Exception as ex:
                     pass
-                    #print(ex)
 
                 missing_mods = []
                 if recv[0].upper() == 'MODLIST':
@@ -457,7 +355,6 @@ class Server:
                         local_modules = [m.__name__ for m in localServer.modules]
                         for m in [m for m in remote_modules if m not in local_modules]:
                             missing_mods.append(m)
-                        ### Remote server is missing modules.
                     if missing_mods:
                         string = ', '.join(missing_mods)
                         self._send(':{} ERROR :they are missing modules: {}'.format(localServer.sid, string))
@@ -529,11 +426,8 @@ class Server:
                         callable[1](self, localServer, recvNoStrip)
 
             except Exception as ex:
-                exc_type, exc_obj, exc_tb = sys.exc_info()
-                fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-                e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-                _print(e, server=localServer)
-                self.quit(e)
+                logging.exception(ex)
+                self.quit(str(ex))
 
     def chlevel(self, channel):
         return 10000
@@ -546,23 +440,23 @@ class Server:
 
     def quit(self, reason, silent=False, error=False, source=None, squit=True):
         localServer = self.localServer
-        _print('Server QUIT self: {} :: reason: {}'.format(self, reason), server=localServer)
+        logging.info('Server QUIT self: {} :: reason: {}'.format(self, reason))
         if self in localServer.servers:
-            _print('---------- Removing self {}'.format(self), server=localServer)
+            logging.info('Removing self {}'.format(self))
             localServer.servers.remove(self)
 
         self.recvbuffer = ''
         #source = self.uplink if self.uplink else self
-        _print('Source: {}'.format(source), server=localServer)
+        logging.info('Source: {}'.format(source))
         if self.uplink:
-            _print('Server was uplinked to {}'.format(self.uplink), server=localServer)
+            logging.info('Server was uplinked to {}'.format(self.uplink))
         reason = reason[1:] if reason.startswith(':') else reason
         if self in localServer.introducedTo:
             localServer.introducedTo.remove(self)
 
         try:
             if self.hostname and self.eos:
-                _print('{}Lost connection to remote server {}: {}{}'.format(R, self.hostname, reason, W), server=localServer)
+                logging.info('{}Lost connection to remote server {}: {}{}'.format(R, self.hostname, reason, W))
                 if squit:
                     skip = [self]
                     if self.uplink:
@@ -586,7 +480,7 @@ class Server:
                 localServer.pendingLinks.remove(self.hostname)
 
             while self.sendbuffer:
-                _print('Server {} has sendbuffer remaining: {}'.format(self, self.sendbuffer.rstrip()), server=localServer)
+                logging.info('Server {} has sendbuffer remaining: {}'.format(self, self.sendbuffer.rstrip()))
                 try:
                     sent = self.socket.send(bytes(self.sendbuffer + '\n', 'utf-8'))
                     self.sendbuffer = self.sendbuffer[sent:]
@@ -597,7 +491,7 @@ class Server:
                 user.quit('Unknown connection')
 
             additional_servers = [server for server in localServer.servers if server.introducedBy == self or server.uplink == self]
-            _print('Also quitting additional servers: {}'.format(additional_servers), server=localServer)
+            logging.info('Also quitting additional servers: {}'.format(additional_servers))
             users = [user for user in localServer.users if user.server and (user.server == self or user.server in additional_servers)]
             for user in users:
                 server1 = self.hostname
@@ -605,7 +499,7 @@ class Server:
                 user.quit('{} {}'.format(server1, server2), source=self)
 
             for server in additional_servers:
-                _print('---------- Quitting server {}'.format(server), server=localServer)
+                logging.info('Quitting server {}'.format(server))
                 server.quit('{} {}'.format(self.hostname, source.hostname if source else localServer.hostname))
 
             if self.socket:
@@ -619,10 +513,7 @@ class Server:
             del gc.garbage[:]
 
         except Exception as ex:
-            exc_type, exc_obj, exc_tb = sys.exc_info()
-            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            e = '{}EXCEPTION: {} in file {} line {}: {}{}'.format(R, exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj, W)
-            _print(e, server=localServer)
+            logging.exception(ex)
 
     def run(self):
         if self.forked:
@@ -659,10 +550,7 @@ class Server:
                     callable[1](self, self.localServer, p)
 
         except Exception as ex:
-            exc_type, exc_obj, exc_tb = sys.exc_info()
-            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            e = '{}EXCEPTION: {} in file {} line {}: {}{}'.format(R, exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj, W)
-            _print(e, server=self.localServer)
+            logging.exception(ex)
 
     def broadcast(self, users, data, source=None):
         if source:
@@ -710,10 +598,7 @@ class Server:
                 localServer.new_sync(localServer, self, data)
 
         except Exception as ex:
-            exc_type, exc_obj, exc_tb = sys.exc_info()
-            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            e = '{}EXCEPTION: {} in file {} line {}: {}{}'.format(R, exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj, W)
-            _print(e, server=localServer)
+            logging.exception(ex)
 
     def listenToPort(self, port, type):
         try:
@@ -738,7 +623,6 @@ if __name__ == "__main__":
     parser.add_argument('--nofork', help='No fork.',action='store_true')
     parser.add_argument('--mkpasswd', help='Generate bcrypt password')
     args = parser.parse_args()
-
     global conffile
     if not args.conf:
         conffile = 'ircd.conf'

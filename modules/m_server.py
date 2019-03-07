@@ -6,11 +6,9 @@
 """
 
 import ircd
-import sys
-import os
 Server = ircd.Server
 
-from handle.functions import match, _print
+from handle.functions import match, logging
 from handle.handleLink import syncData, selfIntroduction
 
 W = '\033[0m'  # white (normal)
@@ -27,11 +25,11 @@ def server(self, localServer, recv):
     try:
         exists = list(filter(lambda s: s.hostname.lower() == recv[2].lower(), localServer.servers+[localServer]))
         if exists and self != exists[0]:
-            _print('Server {} already exists on this network2'.format(recv[2]), server=localServer)
+            logging.error('Server {} already exists on this network2'.format(recv[2]))
             #self.quit('Server already exists on this network')
             return
         if not self.sid:
-            _print('Direct link with {} denied because their SID is unknown to me'.format(recv[2]), server=localServer)
+            logging.error('Direct link with {} denied because their SID is unknown to me'.format(recv[2]))
             self.quit('No SID received')
             return
 
@@ -45,10 +43,10 @@ def server(self, localServer, recv):
             if self.name.startswith(':'):
                 self.name = self.name[1:]
 
-            _print('{}Hostname for {} set: {}{}'.format(G, self, self.hostname, W), server=localServer)
-            _print('{}Server name for {} set: {}{}'.format(G, self, self.name, W), server=localServer)
-            _print('{}Hopcount for {} set: {}{}'.format(G, self, self.hopcount, W), server=localServer)
-            _print('{}SID for {} set: {}{}'.format(G, self, self.sid, W), server=localServer)
+            logging.info('{}Hostname for {} set: {}{}'.format(G, self, self.hostname, W))
+            logging.info('{}Server name for {} set: {}{}'.format(G, self, self.name, W))
+            logging.info('{}Hopcount for {} set: {}{}'.format(G, self, self.hopcount, W))
+            logging.info('{}SID for {} set: {}{}'.format(G, self, self.sid, W))
 
             ip, port = self.socket.getpeername()
             ip2, port2 = self.socket.getsockname()
@@ -63,7 +61,7 @@ def server(self, localServer, recv):
                 return
 
             self.cls = localServer.conf['link'][self.hostname]['class']
-            _print('{}Class: {}{}'.format(G, self.cls, W), server=localServer)
+            logging.info('{}Class: {}{}'.format(G, self.cls, W))
             if not self.cls:
                 msg = 'Error connecting to server {}[{}:{}]: no matching link configuration: remote server has no class'.format(self.hostname, ip, port)
                 error = 'Error connecting to server {}[{}:{}]: no matching link configuration1'.format(localServer.hostname, ip2, port2)
@@ -101,7 +99,7 @@ def server(self, localServer, recv):
             if self.hostname not in localServer.conf['settings']['ulines']:
                 for cap in [cap.split('=')[0] for cap in localServer.server_support]:
                     if cap in self.protoctl:
-                        _print('Cap {} is supported by both parties'.format(cap), server=localServer)
+                        logging.info('Cap {} is supported by both parties'.format(cap))
                     else:
                         self._send(':{} ERROR :Server {} is missing support for {}'.format(self.sid, self.hostname, cap))
                         self.quit('Server {} is missing support for {}'.format(self.hostname, cap))
@@ -120,10 +118,7 @@ def server(self, localServer, recv):
             return
 
     except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = '{}EXCEPTION: {} in file {} line {}: {}{}'.format(R, exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj, W)
-        _print(e, server=localServer)
+        logging.exception(ex)
 
 @ircd.Modules.params(4)
 @ircd.Modules.req_class('Server')
@@ -164,16 +159,13 @@ def sid(self, localServer, recv):
         newServer.introducedBy = self
         newServer.uplink = uplink
         newServer.sid = sid
-        _print('{}New server added to the network: {}{}'.format(G, newServer.hostname, W), server=localServer)
-        _print('{}SID: {}{}'.format(G, newServer.sid, W), server=localServer)
-        _print('{}Introduced by: {} ({}) {}'.format(G, newServer.introducedBy.hostname, newServer.introducedBy.sid, W), server=localServer)
-        _print('{}Uplinked to: {} ({}) {}'.format(G, newServer.uplink.hostname, newServer.uplink.sid, W), server=localServer)
-        _print('{}Hopcount: {}{}'.format(G, newServer.hopcount, W), server=localServer)
+        logging.info('{}New server added to the network: {}{}'.format(G, newServer.hostname, W))
+        logging.info('{}SID: {}{}'.format(G, newServer.sid, W))
+        logging.info('{}Introduced by: {} ({}) {}'.format(G, newServer.introducedBy.hostname, newServer.introducedBy.sid, W))
+        logging.info('{}Uplinked to: {} ({}) {}'.format(G, newServer.uplink.hostname, newServer.uplink.sid, W))
+        logging.info('{}Hopcount: {}{}'.format(G, newServer.hopcount, W))
 
         localServer.new_sync(localServer, self, ' '.join(recv))
 
     except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = '{}EXCEPTION: {} in file {} line {}: {}{}'.format(R, exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj,W)
-        _print(e, server=localServer)
+        logging.exception(ex)

@@ -13,8 +13,7 @@ from ircd import Server
 ### Import classes.
 from classes.user import User
 #User = user.User
-from handle.functions import _print, is_sslport, check_flood
-from handle.functions import write as write_logs
+from handle.functions import is_sslport, check_flood, logging
 import select
 import ssl
 import random
@@ -34,8 +33,6 @@ sslctx.load_cert_chain(certfile=server_cert, keyfile=server_key)
 sslctx.load_default_certs(purpose=ssl.Purpose.CLIENT_AUTH)
 sslctx.load_verify_locations(cafile=ca_certs)
 sslctx.verify_mode = ssl.CERT_NONE
-#sslctx.verify_flags = ssl.VERIFY_DEFAULT ### Dunno what this does.
-#sslctx.verify_flags = ssl.VERIFY_X509_STRICT
 
 if sys.version_info[0] < 3:
     print('Python 2 is not supported.')
@@ -67,7 +64,7 @@ class data_handler: #(threading.Thread):
 
                 read, write, error = select.select(list(self.listen_socks) + read_users + read_servers, write_users + write_servers, read_users + read_servers + write_users + write_servers + list(self.listen_socks), 1.0)
                 for s in error:
-                    _print('Error occurred in {}'.format(s), server=localServer)
+                    logging.error('Error occurred in {}'.format(s))
                 for s in write:
                     check_flood(localServer, s)
                     if type(s).__name__ == 'User' or type(s).__name__ == 'Server':
@@ -84,18 +81,16 @@ class data_handler: #(threading.Thread):
                     if type(s).__name__ == 'User' or type(s).__name__ == 'Server':
                         read_socket(localServer, s)
                         continue
-                    _print('Reading from {}'.format(s), server=localServer)
                     if self.listen_socks[s] == 'clients':
-                        _print('Incoming client', server=localServer)
                         try:
                             path = os.path.abspath(__file__)
                             dir_path = os.path.dirname(path)
                             os.chdir(dir_path)
                             conn, addr = s.accept()
                             conn_backlog = [user for user in localServer.users if user.socket and not user.registered]
-                            _print('Accepting client on {} -- fd: {}, with IP {}'.format(s, conn.fileno(), addr[0]), server=localServer)
+                            logging.info('Accepting client on {} -- fd: {}, with IP {}'.format(s, conn.fileno(), addr[0]))
                             if len(conn_backlog) > 10:
-                                _print('Current connection backlog is >{}, so not allowing any more connections for now. Bye.'.format(len(conn_backlog)), server=localServer)
+                                logging.warning('Current connection backlog is >{}, so not allowing any more connections for now. Bye.'.format(len(conn_backlog)))
                                 conn.close()
                                 continue
                             port = conn.getsockname()[1]
@@ -119,14 +114,14 @@ class data_handler: #(threading.Thread):
                                     fp = conn.getpeercert(binary_form=True)
                                     if fp:
                                         ssl_fingerprint = hashlib.sha256(repr(conn.getpeercert()).encode('utf-8')).hexdigest()
-                                        _print('Fingerprint: {}'.format(ssl_fingerprint), server=localServer)
+                                        logging.info('Fingerprint: {}'.format(ssl_fingerprint))
                                 except Exception as ex:
-                                    _print(ex, server=localServer)
+                                    logging.exception(ex)
 
                             u = User(localServer, conn, addr, is_ssl)
                             gc.collect()
                             if u.fileno() == -1:
-                                _print('{}Invalid fd for {} -- quit() on user{}'.format(R, u, W), server=localServer)
+                                logging.error('{}Invalid fd for {} -- quit() on user{}'.format(R, u, W))
                                 u.quit('Invalid fd')
                                 continue
                             try:
@@ -136,20 +131,14 @@ class data_handler: #(threading.Thread):
 
                             except Exception as ex:
                                 #localServer.snotice('t', '[{}](1) {}'.format(addr[0], ex))
-                                exc_type, exc_obj, exc_tb = sys.exc_info()
-                                fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-                                e = '{}EXCEPTION after accept: {} in file {} line {}: {}{}'.format(R, exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj, W)
-                                _print(e, server=localServer)
+                                logging.exception(ex)
                                 u.quit(ex)
                                 continue
 
                         except Exception as ex:
                             #localServer.snotice('t', '[{}](2) {}'.format(addr[0], ex))
                             conn.close()
-                            exc_type, exc_obj, exc_tb = sys.exc_info()
-                            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-                            e = '{}EXCEPTION after conn.close: {} in file {} line {}: {}{}'.format(R, exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj, W)
-                            _print(e, server=localServer)
+                            logging.exception(ex)
                             continue
 
                     if self.listen_socks[s] == 'servers':
@@ -174,32 +163,18 @@ class data_handler: #(threading.Thread):
                                                         )
 
                                 conn.do_handshake()
-                                '''
-                                while True:
-                                    try:
-                                        conn.do_handshake()
-                                        break
-                                    except ssl.SSLError as ex:
-                                        pass
-                                '''
-                                _print('Wrapped incoming socket {} in SSL'.format(conn), server=localServer)
+                                logging.info('Wrapped incoming socket {} in SSL'.format(conn))
                                 if not conn:
                                     continue
                             Server(origin=localServer, serverLink=True, sock=conn, is_ssl=is_ssl)
 
                         except ssl.SSLError as ex:
-                            exc_type, exc_obj, exc_tb = sys.exc_info()
                             localServer.snotice('t', '[{}]3 {}'.format(addr[0], ex))
-                            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-                            e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-                            _print(e, server=localServer)
+                            logging.exception(ex)
                             continue
                         except OSError as ex:
                             localServer.snotice('t', '[{}]4 {}'.format(addr[0], ex))
-                            exc_type, exc_obj, exc_tb = sys.exc_info()
-                            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-                            e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-                            _print(e, server=localServer)
+                            logging.exception(ex)
                             continue
 
                 '''
@@ -248,7 +223,7 @@ class data_handler: #(threading.Thread):
                     for link in (link for link in servers if time.time() - localServer.linkRequests[link]['ctime'] > 900.0):
                         localServer.linkRequests[link] = {}
                         localServer.linkRequests[link]['ctime'] = int(time.time())
-                        _print('Connecting to {}'.format(link), server=localServer)
+                        logging.info('Connecting to {}'.format(link))
                         connectTo(None, localServer, link, autoLink=True)
 
                 if len(localServer.dnsblCache) >= 1024:
@@ -339,16 +314,12 @@ class data_handler: #(threading.Thread):
                     try:
                         callable[2](localServer)
                     except Exception as ex:
-                        _print('Exception in module: {}: {}'.format(callable[2], ex), server=localServer)
+                        logging.exception(ex)
 
             except Exception as ex:
-                exc_type, exc_obj, exc_tb = sys.exc_info()
-                fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-                e = '{}EXCEPTION: {} in file {} line {}: {}{}'.format(R, exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj, W)
-                _print(e, server=self.server)
+                logging.exception(ex)
 
-        _print('data_handler loop broke! This should only happen if you reload the core, or after /restart.', server=self.server)
-
+        logging.warning('data_handler loop broke! This should only happen if you reload the core, or after /restart.')
 
 def read_socket(localServer, sock):
     try:
@@ -359,10 +330,7 @@ def read_socket(localServer, sock):
         try:
             recv = sock.socket.recv(buffer_len).decode('utf-8')
         except Exception as ex:
-            exc_type, exc_obj, exc_tb = sys.exc_info()
-            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            e = 'EXCEPTION: {} in file {} on line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-            _print(e, server=localServer)
+            logging.exception(ex)
             sock.quit('Read error: {}'.format(ex))
             return
 
@@ -374,7 +342,4 @@ def read_socket(localServer, sock):
         check_flood(localServer, sock)
         sock.handle_recv()
     except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = '{}EXCEPTION: {} in file {} line {}: {}{}'.format(R, exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj, W)
-        _print(e, server=localServer)
+        logging.exception(ex)

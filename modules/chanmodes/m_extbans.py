@@ -10,14 +10,11 @@ import time
 import os
 import sys
 import re
-from threading import Timer
 
 from modules.m_mode import makeMask
 from modules.m_joinpart import checkMatch
 
-from handle.functions import _print, match
-
-rt = None
+from handle.functions import match, logging
 
 ext_bans = 'TtCOa'
 prefix = '~'
@@ -75,10 +72,7 @@ def checkExtMatch(type, action, channel, msg):
             if replaceDone:
                 return tempMsg
     except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        print(e)
+        logging.exception(ex)
 
 def char_repeat(string, char, amount):
     for word in [word for word in string.split(' ') if '://' not in word and 'www.' not in word]: ### Excluding urls.
@@ -211,10 +205,7 @@ def extbans(self, localServer, channel, modes, params, modebuf, parambuf):
                     c[rawParam]['ctime'] = int(time.time())
 
     except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        _print(e, server=localServer)
+        logging.exception(ex)
 
 @ircd.Modules.hooks.pre_local_join()
 def join(self, localServer, channel):
@@ -277,11 +268,7 @@ def join(self, localServer, channel):
         return (True, None, overrides)
 
     except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        _print(e, server=localServer)
-
+        logging.exception(ex)
 
 @ircd.Modules.hooks.pre_chanmsg()
 def pre_chanmsg(self, localServer, channel, msg):

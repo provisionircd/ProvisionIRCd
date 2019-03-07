@@ -9,7 +9,7 @@ except:
 import gc
 gc.enable()
 
-from handle.functions import _print, match, TKL, cloak, IPtoBase64, Base64toIP, show_support, check_flood
+from handle.functions import match, TKL, cloak, IPtoBase64, Base64toIP, show_support, check_flood, logging
 
 import random
 import time
@@ -197,7 +197,7 @@ class User:
                     self.uid = params[7]
                     server = list(filter(lambda s: s.sid == params[0][1:], self.localServer.servers))
                     if not server:
-                        _print('Quitting {} because their server does not exist'.format(self.nickname), server=self.localServer)
+                        logging.debug('Quitting {} because their server does not exist'.format(self.nickname), server=self.localServer)
                         self.quit('Unknown connection')
                         return
                     self.server = server[0]
@@ -224,19 +224,12 @@ class User:
                     #msg = '*** Remote client connecting: {} ({}@{}) {{{}}} [{}{}]'.format(self.nickname, self.ident, self.hostname, str(self.cls), 'secure' if 'z' in self.modes else 'plain', ' '+self.socket.cipher()[0] if self.ssl else '')
                     #self.server.snotice('C', msg)
                 except Exception as ex:
-                    exc_type, exc_obj, exc_tb = sys.exc_info()
-                    fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-                    e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-                    _print(e, server=self.localServer)
-
-            #_print('New user class {} successfully created'.format(self), server=self.localServer)
+                    logging.exception(ex)
+            logging.info('New user class {} successfully created'.format(self))
             gc.collect()
 
         except Exception as ex:
-            exc_type, exc_obj, exc_tb = sys.exc_info()
-            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-            _print(e, server=self.localServer)
+            logging.exception(ex)
 
     def __del__(self):
         pass
@@ -317,10 +310,7 @@ class User:
                         if got_params < req_params:
                             return self.sendraw(461, ':{} Not enough parameters. Required: {}'.format(command.upper(), req_params))
                     except Exception as ex:
-                        exc_type, exc_obj, exc_tb = sys.exc_info()
-                        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-                        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-                        _print(e, server=localServer)
+                        logging.exception(ex)
 
                     if req_modes:
                         req_modes = ' '.join(req_modes)
@@ -346,15 +336,12 @@ class User:
                         false_cmd = False
                         callable[1](self, localServer, parsed)
                     except Exception as ex:
-                        _print('Exception in module {}: {}'.format(module, ex), server=localServer)
+                        logging.exception(ex)
                 if false_cmd:
                     self.sendraw(421, '{} :Unknown command you foolish user'.format(command.upper()))
 
         except Exception as ex:
-            exc_type, exc_obj, exc_tb = sys.exc_info()
-            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-            _print(e, server=localServer)
+            logging.exception(ex)
 
     def parse_command(self, data):
         xwords = data.split(' ')
@@ -371,9 +358,6 @@ class User:
     def _send(self, data, direct=False):
         if self.socket:
             self.sendbuffer += data + '\r\n'
-            ignore = ['ping', 'pong', 'ison', '303']
-            #if data.split()[1].lower() not in set(ignore):
-            #    print('< {} :: {}'.format(self.nickname, data))
 
     def send(self, command, data, direct=False):
         self._send(':{} {} {} {}'.format(self.server.hostname, command, self.nickname, data), direct=direct)
@@ -382,7 +366,6 @@ class User:
         self.send(str(numeric).rjust(3, '0'), data)
 
     def broadcast(self, users, data, source=None):
-        ### Source must be a class.
         if source:
             if type(source).__name__ == 'Server':
                 source = source.hostname
@@ -399,13 +382,13 @@ class User:
             if not info or not type:
                 return
             if not source:
-                _print('No source provided in setinfo()!', server=self.localServer)
+                logging.error('No source provided in setinfo()!')
                 return
             if type(source) == str or type(source).__name__ != 'Server':
-                _print('Wrong source type provided in setinfo(): {}'.format(source), server=self.localServer)
+                logging.error('Wrong source type provided in setinfo(): {}'.format(source))
                 return
             if t not in ['host', 'ident']:
-                _print('Incorrect type received in setinfo(): {}'.format(t), server=self.localServer)
+                logging.error('Incorrect type received in setinfo(): {}'.format(t))
                 return
             valid = 'abcdefghijklmnopqrstuvwxyz0123456789.-'
             for c in str(info):
@@ -431,10 +414,7 @@ class User:
                 data = ':{} {} {}'.format(self.uid, 'SETHOST' if t == 'host' else 'SETIDENT', self.cloakhost if t == 'host' else self.ident)
                 self.localServer.new_sync(self.localServer, source, data)
         except Exception as ex:
-            exc_type, exc_obj, exc_tb = sys.exc_info()
-            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-            _print(e, server=self.localServer)
+            logging.exception(ex)
 
     def welcome(self):
         if not self.registered:
@@ -442,7 +422,7 @@ class User:
                 try:
                     callable[2](self, self.server)
                 except Exception as ex:
-                    _print('Exception in module: {}: {}'.format(callable[2], ex), server=self.server)
+                    logging.exception(ex)
             for cls in self.server.conf['allow']:
                 if 'ip' in self.server.conf['allow'][cls]:
                     clientmask = '{}@{}'.format(self.ident, self.ip)
@@ -484,7 +464,7 @@ class User:
                 try:
                     callable[2](self, self.server)
                 except Exception as ex:
-                    _print('Exception in module: {}: {}'.format(callable[2], ex), server=self.server)
+                    logging.exception(ex)
 
             self.sendraw('001', ':Welcome to the {} IRC Network {}!{}@{}'.format(self.server.name, self.nickname, self.ident, self.hostname))
             self.sendraw('002', ':Your host is {}, running version {}'.format(self.server.hostname, self.server.version))
@@ -542,7 +522,7 @@ class User:
                 try:
                     callable[2](self, self.server)
                 except Exception as ex:
-                    _print('Exception in module: {}: {}'.format(callable[2], ex), server=self.server)
+                    logging.exception(ex)
 
         gc.collect()
 
@@ -595,16 +575,14 @@ class User:
             sourceServer = source if source else self.server
             if not sourceServer.socket and sourceServer.uplink:
                 sourceServer = sourceServer.uplink
-            #_print('User {} quit, sourceServer: {}'.format(self, sourceServer), server=localServer)
             for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_local_quit']:
                 try:
                     ### 'quit' event will return a tuple: (success, broadcast)
                     ### broadcast is a list of all users to broadcast to.
                     ### This is useful for modules like m_delayjoin which modifies that list.
                     success, broadcast = callable[2](self, localServer, reason)
-                    #_print('Broadcast set as {} from module {}'.format(broadcast, callable), server=localServer)
                 except Exception as ex:
-                    _print('Exception in module: {}: {}'.format(callable[2], ex), server=localServer)
+                    logging.exception(ex)
 
             if banmsg:
                 localServer.notice(self, '*** You are banned from this server: {}'.format(banmsg))
@@ -613,7 +591,7 @@ class User:
                 self._send('ERROR :Closing link: [{}] ({})'.format(self.hostname, reason))
 
             while self.sendbuffer:
-                _print('User {} has sendbuffer remaining: {}'.format(self, self.sendbuffer.rstrip()), server=localServer)
+                logging.info('User {} has sendbuffer remaining: {}'.format(self, self.sendbuffer.rstrip()))
                 try:
                     sent = self.socket.send(bytes(self.sendbuffer + '\n', 'utf-8'))
                     self.sendbuffer = self.sendbuffer[sent:]
@@ -671,7 +649,7 @@ class User:
                 try:
                     callable[2](self, localServer, reason)
                 except Exception as ex:
-                    _print('Exception in module: {}: {}'.format(callable[2], ex), server=localServer)
+                    logging.exception(ex)
 
             del self
             gc.collect()
@@ -682,10 +660,7 @@ class User:
             #    objgraph.show_growth(limit=10)
 
         except Exception as ex:
-            exc_type, exc_obj, exc_tb = sys.exc_info()
-            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-            _print(e, server=localServer)
+            logging.exception(ex)
 
     def handle(self, command, data=None, params=None):
         recv = '{} {}'.format(command, data if data else '')
@@ -730,4 +705,4 @@ class User:
                         callable[1](self, localServer, parsed)
 
                 except Exception as ex:
-                    _print('Exception in module {}: {}'.format(callable[6], ex), server=localServer)
+                    logging.exception(ex)
