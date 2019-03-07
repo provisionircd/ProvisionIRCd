@@ -159,7 +159,7 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                 if oper_override and type(self).__name__ != 'Server':
                     sourceServer.snotice('s', '*** OperOverride by {} ({}@{}) with MODE {} {}'.format(sourceUser.nickname, sourceUser.ident, sourceUser.hostname, channel.name, all_modes))
 
-                self.broadcast(channel.users, 'MODE {} {}'.format(channel.name, all_modes), source=sourceUser)
+                sourceUser.broadcast(channel.users, 'MODE {} {}'.format(channel.name, all_modes), source=sourceUser)
                 if sync:
                     localServer.new_sync(localServer, sourceServer, ':{} MODE {} :{}'.format(displaySource, channel.name, all_modes if type(self).__name__ == 'User' else rawModes))
 
@@ -495,7 +495,7 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
             if oper_override and type(self).__name__ != 'Server':
                 sourceServer.snotice('s', '*** OperOverride by {} ({}@{}) with MODE {} {}'.format(sourceUser.nickname, sourceUser.ident, sourceUser.hostname, channel.name, all_modes))
             localServer.new_sync(localServer, sourceServer, ':{} MODE {} :{}'.format(displaySource, channel.name, all_modes if type(self).__name__ == 'User' else rawModes))
-            self.broadcast(channel.users, 'MODE {} {}'.format(channel.name, all_modes), source=sourceUser)
+            sourceUser.broadcast(channel.users, 'MODE {} {}'.format(channel.name, all_modes), source=sourceUser)
             for cmd, data in commandQueue:
                 localServer.handle(cmd, data)
 
