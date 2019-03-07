@@ -19,7 +19,7 @@ def svsjoin(self, localServer, recv):
     target = list(filter(lambda c: c.uid == recv[2], localServer.users))
     if not target:
         return
-    p = {'sajoin': True}
+    p = {'override': True}
     target[0].handle('join', recv[3], params=p)
 
 @ircd.Modules.params(2)
@@ -34,5 +34,4 @@ def svspart(self, localServer, recv):
     target = list(filter(lambda c: c.uid == recv[2], localServer.users))
     if not target:
         return
-    p = {'sapart': source}
-    target[0].handle('part', recv[3], params=p)
+    target[0].handle('part', ' '.join(recv[3:]))

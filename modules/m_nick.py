@@ -46,9 +46,6 @@ def cmdnick(self, localServer, recv, override=False, sanick=False):
         if nick.strip() == '':
             return self.sendraw(431, ':No nickname given')
 
-        if self in localServer.nickflood and len(localServer.nickflood[self]) >= int(localServer.conf['settings']['nickflood'].split(':')[0]) and not self.ocheck('o', 'override') and not override:
-            return self.sendraw(438, '{} :Nick change too fast. Please wait a while before attempting again.'.format(nick))
-
         if nick[0].isdigit():
             return self.sendraw(432, '{} :Erroneous nickname (Invalid: {})'.format(nick, nick[0]))
 
@@ -59,6 +56,11 @@ def cmdnick(self, localServer, recv, override=False, sanick=False):
 
         if sanick:
             override = True
+
+        if self in localServer.nickflood and len(localServer.nickflood[self]) >= int(localServer.conf['settings']['nickflood'].split(':')[0]) and not 'o' not in self.modes and not override:
+            self.flood_penalty += 100000
+            return self.sendraw(438, '{} :Nick change too fast. Please wait a while before attempting again.'.format(nick))
+
 
         inUse =  list(filter(lambda u: u.nickname.lower() == nick.lower(), localServer.users))
         if inUse and nick == self.nickname:
