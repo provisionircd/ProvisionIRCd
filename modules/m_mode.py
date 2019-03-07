@@ -12,7 +12,7 @@ import importlib
 import sys
 import time
 
-from handle.functions import _print, valid_expire, match, cloak
+from handle.functions import _print, valid_expire, match, cloak, logging
 
 W  = '\033[0m'  # white (normal)
 R  = '\033[31m' # red
@@ -79,10 +79,7 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
             if not sourceServer.eos and sourceServer != localServer:
                 sync = False
     except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        _print(e, server=localServer)
+        logging.exception(ex)
     try:
         chstatus = localServer.chstatus
         global tmodes, action, prevaction, param, commandQueue
@@ -94,14 +91,12 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
 
         ## Setting paramModes
         paramModes = localServer.chstatus
-        for m in [m for m in localServer.channel_modes[0] if m not in paramModes]:
-            paramModes += m
         for x in range(0, 4):
             for m in [m for m in localServer.channel_modes[x] if m not in chmodes]:
                 chmodes += m
                 if str(x) in '012' and m not in paramModes:
                     paramModes += m
-
+        localServer.parammodes = paramModes
         global oper_override
         local = [e for e in localServer.support if e.split('=')[0] == 'EXTBAN']
         if local:
@@ -139,7 +134,8 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                     try:
                         callable[2](self, localServer, channel, recv[1], recv[2:], tmodes, param)
                     except Exception as ex:
-                        _print('Exception in {}: {}'.format(callable[2], ex), server=localServer)
+                        logging.exception(ex)
+                        #_print('Exception in {}: {}'.format(callable[2], ex), server=localServer)
 
                 for m in tmodes:
                     if m in '+-':
@@ -153,7 +149,8 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         try:
                             callable[2](channel, m)
                         except Exception as ex:
-                            _print('Exception in {}: {}'.format(callable[2], ex), server=localServer)
+                            logging.exception(ex)
+                            #_print('Exception in {}: {}'.format(callable[2], ex), server=localServer)
 
                 all_modes = ''.join(tmodes)+' '+' '.join(param)
                 if oper_override and type(self).__name__ != 'Server':
@@ -167,7 +164,8 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                     try:
                         callable[2](self, localServer, channel, recv[1], recv[2:], tmodes, param)
                     except Exception as ex:
-                        _print('Exception in {}: {}'.format(callable[2], ex), server=localServer)
+                        logging.exception(ex)
+                        #_print('Exception in {}: {}'.format(callable[2], ex), server=localServer)
 
                 tmodes, param = [prevaction], []
 
@@ -469,7 +467,8 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
             try:
                 callable[2](self, localServer, channel, recv[1], recv[2:], tmodes, param)
             except Exception as ex:
-                _print('Exception in {}: {}'.format(callable[2], ex), server=localServer)
+                logging.exception(ex)
+                #_print('Exception in {}: {}'.format(callable[2], ex), server=localServer)
 
         modes = ''.join(tmodes)
         #param = ' '.join(param)
@@ -490,7 +489,7 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                     try:
                         callable[2](channel, m)
                     except Exception as ex:
-                        _print('Exception in {}: {}'.format(callable[2], ex), server=localServer)
+                        logging.exception(ex)
 
             if oper_override and type(self).__name__ != 'Server':
                 sourceServer.snotice('s', '*** OperOverride by {} ({}@{}) with MODE {} {}'.format(sourceUser.nickname, sourceUser.ident, sourceUser.hostname, channel.name, all_modes))
@@ -507,16 +506,12 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                 try:
                     callable[2](self, localServer, channel, modes, param)
                 except Exception as ex:
-                    _print('Exception in {}: {}'.format(callable[2], ex), server=localServer)
-
+                    logging.exception(ex)
 
         tmodes = []
         param = []
     except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = '{}EXCEPTION: {} in file {} line {}: {}{}'.format(R, exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj, W)
-        _print(e, server=localServer)
+        lgging.exception(ex)
 
 @ircd.Modules.params(1)
 @ircd.Modules.support(('CHANMODES=', True)) ### (support string, boolean if support must be sent to other servers)
@@ -608,7 +603,7 @@ def mode(self, localServer, recv, override=False, handleParams=None):
                 try:
                     callable[1](self, localServer, recv)
                 except Exception as ex:
-                    _print('Exception in {} :{}'.format(callable[2], ex), server=localServer)
+                    logging.exception(ex)
             return
 
         ######################
@@ -652,10 +647,7 @@ def mode(self, localServer, recv, override=False, handleParams=None):
         processModes(self, localServer, channel, recv[1:], sourceServer=sourceServer, sourceUser=sourceUser)
 
     except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        _print(e, server=localServer)
+        logging.exception(ex)
 
 def chgumode(self, localServer, recv, override, sourceServer=None, sourceUser=None):
     try:
@@ -809,7 +801,6 @@ def chgumode(self, localServer, recv, override, sourceServer=None, sourceUser=No
 
             if target.server != localServer:
                 localServer.new_sync(localServer, sourceServer, ':{} MODE {} {}'.format(displaySource, target.nickname, modes))
-                #target.server._send(':{} MODE {} :{}'.format(displaySource, target.nickname, modes))
             else:
                 localServer.new_sync(localServer, sourceServer, ':{} UMODE2 {}'.format(target.uid, modes))
 
@@ -817,7 +808,7 @@ def chgumode(self, localServer, recv, override, sourceServer=None, sourceUser=No
                 try:
                     callable[1](target, localServer, modes)
                 except Exception as ex:
-                    _print('Exception in {}: {}'.format(callable[2], ex), server=localServer)
+                    logging.exception(ex)
 
         if 's' in modes or showsno:
             localServer.new_sync(localServer, sourceServer, ':{} BV +{}'.format(target.uid, target.snomasks))
@@ -827,7 +818,4 @@ def chgumode(self, localServer, recv, override, sourceServer=None, sourceUser=No
             self.sendraw(501, 'Mode{} \'{}\' not found'.format('s' if len(unknown) > 1 else '', ''.join(unknown)))
 
     except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        _print(e, server=localServer)
+        logging.exception(ex)

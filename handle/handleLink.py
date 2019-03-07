@@ -10,7 +10,7 @@ import importlib
 import ast
 import hashlib
 import ssl
-from handle.functions import _print, IPtoBase64
+from handle.functions import _print, IPtoBase64, logging
 
 if sys.version_info[0] < 3:
     print('Python 2 is not supported.')
@@ -35,6 +35,11 @@ def syncChannels(localServer, newServer):
                 modeparams.append(c.key)
             if mode == 'l':
                 modeparams.append(str(c.limit))
+            if mode == 'f':
+                p = []
+                for t in c.chmodef:
+                    p.append('{}:{}:{}'.format(c.chmodef[t]['amount'], t, c.chmodef[t]['time']))
+                modeparams.append(','.join(p))
         modeparams = ' {}'.format(' '.join(modeparams)) if len(modeparams) > 0 else '{}'.format(' '.join(modeparams))
         memberlist, banlist, excepts, invex, prefix = [], [], [], [], ''
         for user in [user for user in c.users if '^' not in user.modes]:
@@ -83,7 +88,6 @@ def selfIntroduction(localServer, newServer, outgoing=False):
             server_support = ' '.join(localServer.server_support)
             newServer._send(':{} PROTOCTL EAUTH={} SID={} {}'.format(localServer.sid, localServer.hostname, localServer.sid, server_support))
             newServer._send(':{} PROTOCTL NOQUIT NICKv2 CLK SJOIN SJOIN2 UMODE2 VL SJ3 TKLEXT TKLEXT2 NICKIP ESVID EXTSWHOIS'.format(localServer.sid))
-            ### :version-sid
             version = 'P{}-{}'.format(localServer.versionnumber.replace('.', ''), localServer.sid)
             local_modules = [m.__name__ for m in localServer.modules]
             modlist = []
@@ -97,16 +101,11 @@ def selfIntroduction(localServer, newServer, outgoing=False):
                 newServer._send('MODLIST :{}'.format(' '.join(modlist)))
 
             newServer._send('SERVER {} 1 :{} {}'.format(localServer.hostname, version, localServer.name))
-            #else:
-            #    newServer._send(':{} SID {} 1 {} :{}'.format(localServer.sid, localServer.hostname, localServer.sid, localServer.name))
-            _print('{}Introduced myself to {}. Expecting remote sync sequence...{}'.format(Y, newServer.hostname, W))
+            logging.info('{}Introduced myself to {}. Expecting remote sync sequence...{}'.format(Y, newServer.hostname, W))
         localServer.introducedTo.append(newServer)
 
     except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = '{}EXCEPTION: {} in file {} line {}: {}{}'.format(R, exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj,W)
-        _print(e, server=localServer)
+        logging.exception(ex)
 
 def syncUsers(localServer, newServer, local_only):
     try:
@@ -115,7 +114,7 @@ def syncUsers(localServer, newServer, local_only):
             totalServers.extend(localServer.servers)
         for server in [server for server in totalServers if server != newServer and server.introducedBy != newServer and newServer.introducedBy != server and server not in newServer.syncDone and newServer.socket]:
             newServer.syncDone.append(server)
-            _print('{}Syncing info from {} to {}{}'.format(Y, server.hostname, newServer.hostname, W), server=localServer)
+            logging.info('{}Syncing info from {} to {}{}'.format(Y, server.hostname, newServer.hostname, W))
             for u in [u for u in localServer.users if u.server == server and u.registered]:
                 ip = IPtoBase64(u.ip)
                 if not ip:
@@ -137,17 +136,9 @@ def syncUsers(localServer, newServer, local_only):
                 if u.away:
                     newServer._send(':{} AWAY :{}'.format(u.uid, u.away))
     except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = '{}EXCEPTION: {} in file {} line {}: {}{}'.format(R, exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj,W)
-        _print(e, server=localServer)
+        logging.exception(ex)
 
 def syncData(localServer, newServer, selfRequest=True, local_only=False):
-    if selfRequest:
-        _print('{}Local server requested the link.{}'.format(Y, W), server=localServer)
-    else:
-        _print('{}Remote server requested the link.{}'.format(Y, W), server=localServer)
-
     if localServer.users:
         syncUsers(localServer, newServer, local_only=local_only)
     if localServer.channels:
@@ -173,8 +164,8 @@ def syncData(localServer, newServer, selfRequest=True, local_only=False):
                 data = ':{} TKL + {} {} {} {} {} :{}'.format(localServer.sid, type, mask, setter, expire, ctime, reason)
                 newServer._send(data)
     except Exception as ex:
-        _print(str(ex), server=localServer)
-    _print('{}Server {} is done syncing to {}, sending EOS.{}'.format(Y, localServer.hostname, newServer.hostname, W), server=localServer)
+        logging.exception(ex)
+    logging.info('{}Server {} is done syncing to {}, sending EOS.{}'.format(Y, localServer.hostname, newServer.hostname, W))
     newServer._send(':{} EOS'.format(localServer.sid))
 
     if newServer not in localServer.syncDone:
@@ -207,8 +198,7 @@ class Link(threading.Thread):
         try:
             exists = list(filter(lambda s: s.hostname == self.name, self.localServer.servers+[self.localServer]))
             if exists:
-                _print('Server {} already exists on this network'.format(exists[0].hostname), server=self.localServer)
-                #self.quit('Server already exists on this network')
+                logging.error('Server {} already exists on this network'.format(exists[0].hostname))
                 return
 
             serv = None
@@ -217,7 +207,7 @@ class Link(threading.Thread):
             self.socket = socket.socket()
             if self.is_ssl:
                 self.socket = ssl.wrap_socket(self.socket)
-                _print('Wrapped outgoing socket {} in SSL'.format(self.socket), server=self.localServer)
+                logging.info('Wrapped outgoing socket {} in SSL'.format(self.socket))
 
             from ircd import Server
             serv = Server(origin=self.localServer, serverLink=True, sock=self.socket, is_ssl=self.is_ssl)
@@ -225,7 +215,6 @@ class Link(threading.Thread):
             serv.ip = self.host
             serv.port = self.port
             serv.outgoing = True
-            # Requesting and authing link to remote server.
             if self.origin or self.autoLink:
                 self.localServer.linkrequester[serv] = self.origin
 
@@ -237,10 +226,7 @@ class Link(threading.Thread):
                 self.localServer.introducedTo.append(serv)
 
         except Exception as ex:
-            exc_type, exc_obj, exc_tb = sys.exc_info()
-            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            e = '{} EXCEPTION: {} in file {} line {}: {}'.format(self.name, exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-            _print(e, server=self.localServer)
+            logging.exception(ex)
 
             if serv:
                 serv.quit(str(ex))

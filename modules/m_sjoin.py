@@ -13,7 +13,7 @@ import sys
 Channel = ircd.Channel
 
 from modules.m_mode import processModes
-from handle.functions import _print
+from handle.functions import logging
 
 W  = '\033[0m'  # white (normal)
 R  = '\033[31m' # red
@@ -35,28 +35,29 @@ def sjoin(self, localServer, recv):
 
         channel = recv[3]
         if channel[0] == '&':
-            _print('{}ERROR: received a local channel from remote server: {}{}'.format(R, channel, W), server=localServer)
+            logging.error('{}ERROR: received a local channel from remote server: {}{}'.format(R, channel, W))
             self.squit('Sync error! Remote server tried to link local channels.')
             return
 
         if not self.eos:
             localServer.new_sync(localServer, self, raw)
 
-        memberlist = ' '.join(' '.join(recv).split(':')[2:]).split('&')[0].split('"')[0].split("'")[0].split()
-
-        banlist, excepts, invex = [], [], []
-        try:
-            banlist = ' '.join(recv).split('&')[1].split('"')[0].split()
-        except:
-            pass
-        try:
-            excepts = ' '.join(recv).split('"')[1].split("'")[0].split()
-        except:
-            pass
-        try:
-            invex = ' '.join(recv).split("'")[1].split()
-        except:
-            pass
+        memberlist = []
+        banlist = []
+        excepts = []
+        invex = []
+        c = 0
+        for pos in recv[1:]:
+            c += 1
+            if pos.startswith(':'):
+                memberlist = ' '.join(recv[c:]).split('&')[0].split('"')[0].split("'")[0][1:].split()
+                continue
+            if pos.startswith('&'):
+                banlist.append(pos[1:])
+            if pos.startswith('"'):
+                excepts.append(pos[1:])
+            if pos.startswith("'"):
+                invex.append(pos[1:])
 
         if recv[4].startswith('+'):
             modes = recv[4].replace('+','')
@@ -82,19 +83,22 @@ def sjoin(self, localServer, recv):
             if m == 'l':
                 limit = recv[pc]
                 pc += 1
+            if m == 'f':
+                floodparam = recv[pc]
+                pc += 1
 
         for member in memberlist:
             membernick = []
             for c in member:
-                if c not in '*~@%+':
+                if c not in ':*~@%+':
                     membernick.append(c)
             membernick = ''.join(membernick)
 
             userClass = list(filter(lambda c: c.nickname.lower() == membernick.lower() or c.uid == membernick, localServer.users))
             if not userClass:
-                _print('{}ERROR: could not fetch userclass for remote user {}. Looks like the user did not sync correctly. Maybe nick collision, or remote leftover from a netsplit.{}'.format(R, membernick, W), server=localServer)
+                logging.error('{}ERROR: could not fetch userclass for remote user {}. Looks like the user did not sync correctly. Maybe nick collision, or remote leftover from a netsplit.{}'.format(R, membernick, W))
                 ##continue
-                source.quit('ERROR: could not fetch userclass for remote user {}. Looks like the user did not sync correctly. Maybe nick collision, or remote leftover from a netsplit, or never bwxUAW quit 02-03-2019 7:23am fri/sa'.format(membernick))
+                source.quit('ERROR: could not fetch userclass for remote user {}. Looks like the user did not sync correctly. Maybe nick collision, or remote leftover from a netsplit.'.format(membernick))
                 continue
 
             userClass = userClass[0]
@@ -102,10 +106,10 @@ def sjoin(self, localServer, recv):
             userClass.handle('join', channel, params=p)
             localChan = list(filter(lambda c: c.name.lower() == channel.lower(), localServer.channels))[0]
             if len(localChan.users) == 1:
-                ### Channel did not exist on localServer
+                ### Channel did not exist on localServer. Hook channel_create?
                 pass
             if userClass.server != localServer:
-                _print('{}External user {} joined {} on local server.{}'.format(G, userClass.nickname, channel, W), server=localServer)
+                logging.info('{}External user {} joined {} on local server.{}'.format(G, userClass.nickname, channel, W))
             if timestamp < localChan.creation and not source.eos:
                 if '*' in member:
                     giveModes.append('q')
@@ -133,8 +137,9 @@ def sjoin(self, localServer, recv):
             # Remote channel is dominant. Replacing modes with remote channel
             # Clear the local modes.
             #
-            _print('Remote channel {} is dominant. Replacing modes with remote channel'.format(channel), server=localServer)
+            logging.info('Remote channel {} is dominant. Replacing modes with remote channel'.format(channel))
             localChan.creation = timestamp
+            localChan.name = channel
             if modes:
                 for m in localChan.modes:
                     if m not in modes and m != 'k':
@@ -160,8 +165,10 @@ def sjoin(self, localServer, recv):
             for m in modes:
                 if m == 'k':
                     giveParams.append(key)
-                if m == 'limit':
+                if m == 'l':
                     giveParams.append(limit)
+                if m == 'f':
+                    giveParams.append(floodparam)
 
             for b in banlist:
                 giveModes.append('b')
@@ -188,7 +195,7 @@ def sjoin(self, localServer, recv):
 
         elif timestamp == localChan.creation and not source.eos:
             if modes:
-                _print('{}Equal timestamps for remote channel {} -- merging modes.{}'.format(Y, localChan.name, W), server=localServer)
+                logging.info('{}Equal timestamps for remote channel {} -- merging modes.{}'.format(Y, localChan.name, W))
                 for member in memberlist:
                     rawUid = re.sub('[:*!~&@%+]', '', member)
                     if '*' in member:
@@ -214,6 +221,8 @@ def sjoin(self, localServer, recv):
                         giveParams.append(key)
                     if m == 'l':
                         giveParams.append(limit)
+                    if m == 'f':
+                        giveParams.append(floodparam)
 
                 for b in [b for b in banlist if b not in localChan.bans]:
                     giveModes.append('b')
@@ -233,8 +242,6 @@ def sjoin(self, localServer, recv):
                 data.append(modes)
                 for p in removeParams:
                     data.append(p)
-                #if giveParams:
-                #    data.append(':')
                 for p in giveParams:
                     data.append(p)
 
@@ -242,7 +249,4 @@ def sjoin(self, localServer, recv):
             processModes(self, localServer, localChan, data, sync=True, sourceServer=self, sourceUser=self)
 
     except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        _print(e, server=localServer)
+        logging.exception(ex)
