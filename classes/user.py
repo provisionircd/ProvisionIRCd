@@ -38,6 +38,23 @@ def RevIP(ip):
         x -= 1
     return revip
 
+class blacklist_check(threading.Thread):
+    def __init__(self, user, blacklist):
+        threading.Thread.__init__(self)
+        try:
+            result = socket.gethostbyname(RevIP(user.ip)+ '.' + blacklist)
+            reason = 'Your IP is blacklisted by {}'.format(blacklist)
+            if user.ip not in user.server.dnsblCache:
+                user.server.dnsblCache[user.ip] = {}
+                user.server.dnsblCache[user.ip]['bl'] = blacklist
+                user.server.dnsblCache[user.ip]['ctime'] = int(time.time())
+            user._send(':{} 304 * :{}'.format(user.server.hostname, reason))
+            msg = '*** DNSBL match for IP {}: {} [nick: {}]'.format(user.ip, blacklist, user.nickname)
+            user.server.snotice('d', msg)
+            user.quit(reason)
+        except:
+            pass
+
 def DNSBLCheck(user):
     localServer = user.server
     if user.ip in localServer.dnsblCache:
@@ -52,21 +69,8 @@ def DNSBLCheck(user):
         return
 
     for x in [x for x in localServer.conf['dnsbl']['list'] if '.' in x]:
-        try:
-            result = socket.gethostbyname(RevIP(user.ip)+ '.' + x)
-            reason = 'Your IP is blacklisted by {}'.format(x)
-            if user.ip not in localServer.dnsblCache:
-                localServer.dnsblCache[user.ip] = {}
-                localServer.dnsblCache[user.ip]['bl'] = x
-                localServer.dnsblCache[user.ip]['ctime'] = int(time.time())
-            user._send(':{} 304 * :{}'.format(localServer.hostname, reason))
-            msg = '*** DNSBL match for IP {}: {} [nick: {}]'.format(user.ip, x, user.nickname)
-            localServer.snotice('d', msg)
-            user.quit(reason)
-            break
-        except: #Exception as ex:
-            pass
-            #_print(ex, server=localServer)
+        b = blacklist_check(user, x)
+        b.start()
 
 class User:
     def __init__(self, server, sock=None, address=None, is_ssl=None, serverClass=None, params=None):
