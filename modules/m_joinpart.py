@@ -9,7 +9,7 @@ import ircd
 
 Channel = ircd.Channel
 
-from handle.functions import match, _print
+from handle.functions import match, logging
 import time
 import re
 import os
@@ -144,7 +144,7 @@ def join(self, localServer, recv, override=False, skipmod=None, sourceServer=Non
                     if not success:
                         break
                 except Exception as ex:
-                    _print('Exception in {}: {}'.format(callable[2], ex), server=localServer)
+                    logging.exception(ex)
             if not success:
                 continue
             if not override:
@@ -214,19 +214,15 @@ def join(self, localServer, recv, override=False, skipmod=None, sourceServer=Non
             if channel.users == [self] and channel.name[0] != '+':
                 sourceServer.handle('MODE', '{} +nt'.format(channel.name))
 
-            ### Check for module events (after join)
             success = True
             broadcastjoin = channel.users+[self]
             for callable in [callable for callable in localServer.hooks if callable[0].lower() == hook and callable[3] != skipmod]:
                 try:
                     callable[2](self, localServer, channel)
                 except Exception as ex:
-                    _print('Exception in {}: {}'.format(callable[2], ex), server=localServer)
+                    logging.exception(ex)
     except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        _print(e, server=localServer)
+        logging.exception(ex)
 
 @ircd.Modules.params(1)
 @ircd.Modules.commands('part')
@@ -268,8 +264,7 @@ def part(self, localServer, recv, reason=None):
                 try:
                     success, broadcastpart = callable[2](self, localServer, channel)
                 except Exception as ex:
-                    _print('Exception in module: {}: {}'.format(callable[2], ex), server=localServer)
-                    _print(ex, server=localServer)
+                    logging.exception(ex)
 
             self.channels.remove(channel)
             channel.usermodes.pop(self)
@@ -286,13 +281,10 @@ def part(self, localServer, recv, reason=None):
                 try:
                     callable[2](self, localServer, channel)
                 except Exception as ex:
-                    _print(ex, server=localServer)
+                    logging.exception(ex)
 
             if channel.name[0] != '&':
                 localServer.new_sync(localServer, sourceServer, ':{} PART {} {}'.format(self.uid, channel.name, reason))
 
     except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        _print(e, server=localServer)
+        logging.exception(ex)

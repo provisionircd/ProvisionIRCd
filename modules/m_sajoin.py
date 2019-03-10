@@ -38,6 +38,15 @@ def sajoin(self, localServer, recv):
 
     p = {'override': True}
     target[0].handle('join', chan, params=p)
+    chan_class = [c for c in localServer.channels if c.name == chan][0]
+    if target[0].server != localServer:
+        ### Sync join to its server.
+        prefix = ''
+        for mode in [mode for mode in localServer.chprefix if mode in chan_class.usermodes[target[0]]]:
+            prefix += localServer.chprefix[mode]
+        data = ':{} SJOIN {} {}{} :{}{}'.format(self.server.sid, chan_class.creation, chan_class.name, ' +{}'.format(chan_class.modes) if chan_class.modes and chan_class.users == [target[0]] else '', prefix, target[0].uid)
+        target[0].server._send(data)
+
 
     snomsg = '*** {} ({}@{}) used SAJOIN to make {} join {}'.format(self.nickname, self.ident, self.hostname, target[0].nickname, chan)
     localServer.snotice('S', snomsg)
