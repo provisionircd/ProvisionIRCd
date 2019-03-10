@@ -105,9 +105,9 @@ def checkExpiredBans(localServer):
 @ircd.Modules.support(('EXTBAN='+prefix+','+str(ext_bans), True)) ### (support string, boolean if support must be sent to other servers)
 @ircd.Modules.hooks.pre_local_chanmode()
 @ircd.Modules.hooks.pre_remote_chanmode()
-def extbans(self, localServer, channel, modes, params, modebuf, parambuf):
+def extbans(self, localServer, channel, modes, params, modebuf, parambuf, paramcount=0):
     try:
-        paramcount = 0
+        #paramcount = 0
         action = ''
 
         for m in modes:

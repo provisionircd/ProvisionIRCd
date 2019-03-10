@@ -31,4 +31,3 @@ def cap(self, localServer, recv):
             self.welcome()
     else:
         self.sendraw(410, '{} :Unknown CAP command'.format(recv[1]))
-        #pass

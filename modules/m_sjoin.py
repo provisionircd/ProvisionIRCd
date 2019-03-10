@@ -140,21 +140,31 @@ def sjoin(self, localServer, recv):
             logging.info('Remote channel {} is dominant. Replacing modes with remote channel'.format(channel))
             localChan.creation = timestamp
             localChan.name = channel
-            if modes:
-                for m in localChan.modes:
-                    if m not in modes and m != 'k':
-                        removeModes.append(m)
-                        continue
-                    if m == 'k' and key != localChan.key:
-                        removeParams.append(localChan.key)
-                        removeModes.append(m)
-                    elif m == 'l' and limit != localChan.limit:
-                        removeParams.append(localChan.limit)
-                        removeModes.append(m)
+            for m in localChan.modes:
+                if m not in modes and m in localServer.channel_modes[3]:
+                    removeModes.append(m)
+                    continue
+                if m == 'k' and key != localChan.key:
+                    removeParams.append(localChan.key)
+                    removeModes.append(m)
+                elif m == 'l' and limit != localChan.limit:
+                    removeModes.append(m)
+                elif m == 'f' and not floodparam:
+                    removeModes.append(m)
 
-                for m in modes:
-                    if m not in localChan.modes:
-                        giveModes.append(m)
+            for m in modes:
+                if m not in localChan.modes and m in localServer.channel_modes[3]:
+                    giveModes.append(m)
+                    continue
+                elif m in localServer.channel_modes[2]: ### This type of mode will overwrite existing modes.
+                    giveModes.append(m)
+                if m == 'k' and key != localChan.key:
+                    giveModes.append(m)
+                    giveParams.append(key)
+                if m == 'l':
+                    giveParams.append(limit)
+                if m == 'f' and floodparam:
+                    giveParams.append(floodparam)
 
             # Removing local channel user modes.
             for user in localChan.users:
@@ -162,23 +172,27 @@ def sjoin(self, localServer, recv):
                     removeModes.append(m)
                     removeParams.append(user.nickname)
 
-            for m in modes:
-                if m == 'k':
-                    giveParams.append(key)
-                if m == 'l':
-                    giveParams.append(limit)
-                if m == 'f' and floodparam:
-                    giveParams.append(floodparam)
+            for b in [b for b in localChan.bans if b not in banlist]:
+                removeModes.append('b')
+                removeParams.append(b)
 
-            for b in banlist:
+            for e in [e for e in localChan.excepts if e not in excepts]:
+                removeModes.append('e')
+                removeParams.append(e)
+
+            for I in [I for I in localChan.invex if I not in invex]:
+                removeModes.append('I')
+                removeParams.append(I)
+
+            for b in [b for b in banlist if b not in localChan.bans]:
                 giveModes.append('b')
                 giveParams.append(b)
 
-            for e in excepts:
+            for e in [e for e in excepts if e not in localChan.excepts]:
                 giveModes.append('e')
                 giveParams.append(e)
 
-            for I in invex:
+            for I in [I for I in invex if I not in localChan.invex]:
                 giveModes.append('I')
                 giveParams.append(I)
 

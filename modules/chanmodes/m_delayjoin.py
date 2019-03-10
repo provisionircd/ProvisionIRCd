@@ -130,11 +130,11 @@ def unset_D(channel, mode):
 
 @ircd.Modules.hooks.pre_local_chanmode()
 @ircd.Modules.hooks.pre_remote_chanmode()
-def chmode_D(self, localServer, channel, modes, params, modebuf, parambuf):
+def chmode_D(self, localServer, channel, modes, params, modebuf, parambuf, paramcount=0):
     try:
         if not hasattr(channel, 'delayjoins') or not channel.delayjoins:
             channel.delayjoins = []
-        paramcount = 0
+        #paramcount = 0
         action = ''
         for m in modebuf:
             if m in '+-':

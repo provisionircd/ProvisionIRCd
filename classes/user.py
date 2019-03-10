@@ -110,6 +110,7 @@ class User:
                 self.ip, self.hostname = self.addr[0], self.addr[0]
                 self.cls = None
                 if 'dnsbl' in self.server.conf:
+                    #self.sendraw('020', ':Please wait while we process your connection.')
                     dnsbl_except = False
                     if 'except' in self.server.conf and 'dnsbl' in self.server.conf['except']:
                         for e in self.server.conf['except']['dnsbl']:
@@ -153,7 +154,7 @@ class User:
 
                 if self.ssl and self.socket:
                     try:
-                        fp = self.socket.getpeercert()
+                        fp = self.socket.getpeercert(binary_form=True)
                         if fp:
                             self.fingerprint = hashlib.sha256(repr(fp).encode('utf-8')).hexdigest()
                     except:
@@ -338,7 +339,7 @@ class User:
                     except Exception as ex:
                         logging.exception(ex)
                 if false_cmd:
-                    self.sendraw(421, '{} :Unknown command you foolish user'.format(command.upper()))
+                    self.sendraw(421, '{} :Unknown command'.format(command.upper()))
 
         except Exception as ex:
             logging.exception(ex)

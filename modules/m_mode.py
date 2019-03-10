@@ -65,6 +65,7 @@ def makeMask(localServer, data):
 
 oper_override = False
 def processModes(self, localServer, channel, recv, sync=True, sourceServer=None, sourceUser=None):
+    #print('processModes(): {}'.format(recv))
     try:
         if sourceServer != localServer or (type(sourceUser).__name__ == 'User' and sourceUser.server != localServer):
             hook = 'remote_chanmode'
@@ -77,8 +78,8 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
             displaySource = sourceUser.uid
         else:
             displaySource = sourceUser.sid
-            if not sourceServer.eos and sourceServer != localServer:
-                sync = False
+            #if not sourceServer.eos and sourceServer != localServer:
+            #    sync = False
     except Exception as ex:
         logging.exception(ex)
     try:
@@ -291,11 +292,10 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         channel.temp_status[user][m]['action'] = '-'
                     continue
                 # Rest of the modes.
-                if m not in channel.modes:
-                    if m not in localServer.channel_modes[3]:
-                        paramcount += 1
-                        continue
-
+                #if m not in channel.modes:
+                if m not in localServer.channel_modes[3]:
+                    paramcount += 1
+                if m not in channel.modes and m not in modebuf and m in localServer.channel_modes[3]:
                     modebuf.append(m)
                     channel.modes += m
                     if m == 'O' and len(channel.users) > 2:
@@ -450,8 +450,8 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                     try:
                         callable[2](self, localServer, channel, modes, parambuf)
                     except Exception as ex:
-                        logging.exception(ex)
-                if m in localServer.parammodes:
+                        logging.exception(ex, callable)
+                if m in localServer.parammodes and (m not in localServer.channel_modes[2] or action == '+'):
                     total_params.append(parambuf[paramcount])
                     paramcount += 1
                 total_modes.append(m)
