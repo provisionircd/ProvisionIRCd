@@ -167,7 +167,7 @@ def sjoin(self, localServer, recv):
                     giveParams.append(key)
                 if m == 'l':
                     giveParams.append(limit)
-                if m == 'f':
+                if m == 'f' and floodparam:
                     giveParams.append(floodparam)
 
             for b in banlist:
@@ -221,7 +221,7 @@ def sjoin(self, localServer, recv):
                         giveParams.append(key)
                     if m == 'l':
                         giveParams.append(limit)
-                    if m == 'f':
+                    if m == 'f' and floodparam:
                         giveParams.append(floodparam)
 
                 for b in [b for b in banlist if b not in localChan.bans]:

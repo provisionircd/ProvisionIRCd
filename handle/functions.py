@@ -11,17 +11,30 @@ import base64
 import logging
 import logging.handlers
 
+W = '\033[0m'  # white (normal)
+R = '\033[31m' # red
+R2 = '\033[91m' # bright red
+G = '\033[32m' # green
+G2 = '\033[92m' # bright green
+Y = '\033[33m' # yellow
+B = '\033[34m' # blue
+P = '\033[35m' # purple
+
 def initlogging(localServer):
     datefile = time.strftime('%Y%m%d')
     loghandlers = [logging.handlers.TimedRotatingFileHandler('logs/logs.txt', when='midnight')]
     if not localServer.forked:
         loghandlers.append(logging.StreamHandler())
-    format = '%(asctime)s [%(module)s]: %(message)s'
+    format = '%(asctime)s %(levelname)s [%(module)s]: %(message)s'+W
     logging.basicConfig(level=logging.DEBUG, format=format, datefmt='%Y/%m/%d %H:%M:%S', handlers=loghandlers)
+    logging.addLevelName(logging.WARNING, Y+"%s" % logging.getLevelName(logging.WARNING))
+    logging.addLevelName(logging.ERROR, R2+"%s" % logging.getLevelName(logging.ERROR))
+    logging.addLevelName(logging.INFO, W+"%s" % logging.getLevelName(logging.INFO))
+    logging.addLevelName(logging.DEBUG, B+"%s" % logging.getLevelName(logging.INFO))
+    #logging.addLevelName(logging.LINKSYNC, B+"%s" % logging.getLevelName(logging.INFO))
 
 path = os.path.abspath(__file__)
 dir_path = os.path.dirname(path)
-
 
 class TKL:
     def check(self, localServer, user, type):

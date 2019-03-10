@@ -10,7 +10,7 @@ import ircd
 @ircd.Modules.user_modes('R', 0, 'Only users with a registered nickname can private message you') ### ('mode', 0, 1 or 2 for normal user, oper or server, 'Mode description')
 @ircd.Modules.user_modes('Z', 0, 'Only users on a secure connection can private message you') ### ('mode', 0, 1 or 2 for normal user, oper or server, 'Mode description')
 @ircd.Modules.user_modes('D', 0, 'No-one can private message you') ### ('mode', 0, 1 or 2 for normal user, oper or server, 'Mode description')
-@ircd.Modules.events('pre_usermsg')
+@ircd.Modules.hooks.pre_usermsg()
 def blockmsg_RZD(self, localServer, target, msg, module=None):
     if 'o' in self.modes:
         return msg

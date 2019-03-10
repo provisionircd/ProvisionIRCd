@@ -11,8 +11,9 @@ import os
 import importlib
 import sys
 import time
+import re
 
-from handle.functions import _print, valid_expire, match, cloak, logging
+from handle.functions import valid_expire, match, cloak, logging
 
 W  = '\033[0m'  # white (normal)
 R  = '\033[31m' # red
@@ -23,8 +24,8 @@ P  = '\033[35m' # purple
 
 ### Make these global so they can be modified by modules.
 commandQueue = []
-tmodes = []
-param = []
+modebuf = []
+parambuf = []
 
 maxmodes = 24
 
@@ -82,13 +83,12 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
         logging.exception(ex)
     try:
         chstatus = localServer.chstatus
-        global tmodes, action, prevaction, param, commandQueue
-        tmodes, param, commandQueue = [], [], []
+        global modebuf, parambuf, action, prevaction, commandQueue
+        modebuf, parambuf, commandQueue = [], [], []
         action = ''
         prevaction = ''
         paramcount = 0
         chmodes = localServer.chstatus
-
         ## Setting paramModes
         paramModes = localServer.chstatus
         for x in range(0, 4):
@@ -124,55 +124,13 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
             for m in localServer.channel_modes[t]:
                 level = localServer.channel_modes[t][m][0]
                 modeLevel[m] = level
-
         for m in [m for m in recv[1] if m in chmodes+'+-']:
             if m == 'r' and type(self).__name__ != 'Server':
                 continue
-            totalLength = len(''.join(tmodes)+' '+' '.join(param))
-            if len(tmodes) > maxmodes or totalLength >= 400:
-                for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_'+hook]:
-                    try:
-                        callable[2](self, localServer, channel, recv[1], recv[2:], tmodes, param)
-                    except Exception as ex:
-                        logging.exception(ex)
-                        #_print('Exception in {}: {}'.format(callable[2], ex), server=localServer)
-
-                for m in tmodes:
-                    if m in '+-':
-                        action = m
-                        continue
-                    if action == '+':
-                        thook = 'modechar_add'
-                    elif action == '-':
-                        thook = 'modechar_del'
-                    for callable in [callable for callable in localServer.hooks if callable[0].lower() == thook]:
-                        try:
-                            callable[2](channel, m)
-                        except Exception as ex:
-                            logging.exception(ex)
-                            #_print('Exception in {}: {}'.format(callable[2], ex), server=localServer)
-
-                all_modes = ''.join(tmodes)+' '+' '.join(param)
-                if oper_override and type(self).__name__ != 'Server':
-                    sourceServer.snotice('s', '*** OperOverride by {} ({}@{}) with MODE {} {}'.format(sourceUser.nickname, sourceUser.ident, sourceUser.hostname, channel.name, all_modes))
-
-                sourceUser.broadcast(channel.users, 'MODE {} {}'.format(channel.name, all_modes), source=sourceUser)
-                if sync:
-                    localServer.new_sync(localServer, sourceServer, ':{} MODE {} :{}'.format(displaySource, channel.name, all_modes if type(self).__name__ == 'User' else rawModes))
-
-                for callable in [callable for callable in localServer.hooks if callable[0].lower() == hook]:
-                    try:
-                        callable[2](self, localServer, channel, recv[1], recv[2:], tmodes, param)
-                    except Exception as ex:
-                        logging.exception(ex)
-                        #_print('Exception in {}: {}'.format(callable[2], ex), server=localServer)
-
-                tmodes, param = [prevaction], []
-
             if m in '+-' and action != m:
                 try:
-                    if ''.join(tmodes[-1]) in '+-':
-                        del tmodes[-1]
+                    if ''.join(modebuf[-1]) in '+-':
+                        del modebuf[-1]
                 except:
                     pass
                 action = m
@@ -180,7 +138,7 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
             if not action:
                 action = '+'
             if m not in '+-' and action != prevaction and ( (m in chmodes or m in localServer.chstatus) or (action == '-' and m in channel.modes) ):
-                tmodes.append(action)
+                modebuf.append(action)
                 prevaction = action
 
             if m not in localServer.chstatus and m not in '+-':
@@ -209,8 +167,8 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                     else:
                         if m not in channel.modes:
                             channel.modes += m
-                        tmodes.append(m)
-                        param.append(p)
+                        modebuf.append(m)
+                        parambuf.append(p)
                         paramcount += 1
                         channel.limit = int(p)
                         continue
@@ -224,8 +182,8 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         continue
                     if m not in channel.modes:
                         channel.modes += m
-                    tmodes.append(m)
-                    param.append(p)
+                    modebuf.append(m)
+                    parambuf.append(p)
                     paramcount += 1
                     channel.key = p
                     continue
@@ -241,8 +199,8 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         continue
                     if m not in channel.modes:
                         channel.modes += m
-                    tmodes.append(m)
-                    param.append(p)
+                    modebuf.append(m)
+                    parambuf.append(p)
                     paramcount += 1
                     channel.redirect = p
                     continue
@@ -278,8 +236,8 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         except:
                             setter = self.hostname
                         paramcount += 1
-                        tmodes.append(m)
-                        param.append(mask)
+                        modebuf.append(m)
+                        parambuf.append(mask)
                         data[mask] = {}
                         data[mask]['setter'] = setter
                         data[mask]['ctime'] = int(time.time())
@@ -323,8 +281,8 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                             oper_override = True
 
                     channel.usermodes[user] += m
-                    tmodes.append(m)
-                    param.append(user.nickname)
+                    modebuf.append(m)
+                    parambuf.append(user.nickname)
                     paramcount += 1
                     if timed:
                         channel.temp_status[user] = {}
@@ -339,7 +297,7 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         paramcount += 1
                         continue
 
-                    tmodes.append(m)
+                    modebuf.append(m)
                     channel.modes += m
                     if m == 'O' and len(channel.users) > 2:
                         for user in [user for user in channel.users if 'o' not in user.modes]:
@@ -356,9 +314,9 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         channel.limit = 0
                         if 'L' in channel.modes:
                             channel.modes = channel.modes.replace('L', '')
-                            tmodes.append('L')
+                            modebuf.append('L')
                             #print('Channel redirect: {}'.format(channel.redirect))
-                            param.append(channel.redirect)
+                            parambuf.append(channel.redirect)
                             channel.redirect = None
 
                     elif m == 'k':
@@ -368,7 +326,7 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                             continue
                         if p != channel.key:
                             continue
-                        param.append(channel.key)
+                        parambuf.append(channel.key)
                         channel.key = None
                         paramcount += 1
 
@@ -379,7 +337,7 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         localServer.channels.remove(channel)
 
                     channel.modes = channel.modes.replace(m, '')
-                    tmodes.append(m)
+                    modebuf.append(m)
 
                 elif m in 'beI':
                     try:
@@ -396,12 +354,12 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         data = channel.invex
                     if mask in data:
                         del data[mask]
-                        param.append(mask)
-                        tmodes.append(m)
+                        parambuf.append(mask)
+                        modebuf.append(m)
                     elif rawmask in data:
                         del data[rawmask]
-                        param.append(rawmask)
-                        tmodes.append(m)
+                        parambuf.append(rawmask)
+                        modebuf.append(m)
                     paramcount += 1
                     continue
                 elif m in chstatus:
@@ -412,11 +370,9 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                     except:
                         paramcount += 1
                         continue
-                    ### Check to see for timed shit.
                     try:
                         t = recv[2:][paramcount].split(':')
                         temp_user = t[0]
-                        ### This is only temporary.
                         try:
                             channel.temp_status
                         except:
@@ -449,8 +405,8 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
 
                     channel.usermodes[user] = channel.usermodes[user].replace(m, '')
                     paramcount += 1
-                    tmodes.append(m)
-                    param.append(user.nickname)
+                    modebuf.append(m)
+                    parambuf.append(user.nickname)
                     if timed:
                         channel.temp_status[user] = {}
                         channel.temp_status[user][m] = {}
@@ -458,28 +414,30 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         channel.temp_status[user][m]['action'] = '+'
                     continue
 
-        if len(tmodes) == 0:
+        if not modebuf:
             return
-        if ''.join(tmodes[-1]) in '+-':
-            del tmodes[-1]
+        if ''.join(modebuf[-1]) in '+-':
+            del modebuf[-1]
 
         for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_'+hook]:
             try:
-                callable[2](self, localServer, channel, recv[1], recv[2:], tmodes, param)
+                callable[2](self, localServer, channel, recv[1], recv[2:], modebuf, parambuf)
             except Exception as ex:
                 logging.exception(ex)
-                #_print('Exception in {}: {}'.format(callable[2], ex), server=localServer)
 
-        modes = ''.join(tmodes)
-        #param = ' '.join(param)
-        all_modes = modes+' '+' '.join(param)
         if channel.name[0] == '&':
             sync = False
-        if len(tmodes) > 1:
-
+        modes = ''.join(modebuf)
+        total_modes, total_params = [], []
+        if len(modebuf) > 1:
+            mode_limit = modes.replace('+', '').replace('-', '')
+            total_modes, total_params = [], []
+            paramcount = 0
+            action = ''
             for m in modes:
                 if m in '+-':
                     action = m
+                    total_modes.append(m)
                     continue
                 if action == '+':
                     thook = 'modechar_add'
@@ -490,28 +448,39 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         callable[2](channel, m)
                     except Exception as ex:
                         logging.exception(ex)
+                for callable in [callable for callable in localServer.hooks if callable[0].lower() == hook]:
+                    try:
+                        callable[2](self, localServer, channel, modes, parambuf)
+                    except Exception as ex:
+                        logging.exception(ex)
+                if m in localServer.parammodes:
+                    total_params.append(parambuf[paramcount])
+                    paramcount += 1
+                total_modes.append(m)
+                totalLength = len(''.join(total_modes)+' '+' '.join(total_params))
+                mode_amount = len(re.sub('[+-]', '', ''.join(total_modes)))
+                if mode_amount >= maxmodes or totalLength >= 400:
+                    all_modes = ''.join(total_modes)+' '+' '.join(total_params)
+                    if oper_override and type(self).__name__ != 'Server':
+                        sourceServer.snotice('s', '*** OperOverride by {} ({}@{}) with MODE {} {}'.format(sourceUser.nickname, sourceUser.ident, sourceUser.hostname, channel.name, all_modes))
+                    if sync:
+                        localServer.new_sync(localServer, sourceServer, ':{} MODE {} :{}'.format(displaySource, channel.name, all_modes if type(self).__name__ == 'User' else rawModes))
+                    sourceUser.broadcast(channel.users, 'MODE {} {}'.format(channel.name, all_modes), source=sourceUser)
+                    total_modes, total_params = [action], []
+                    continue
+            if len(total_modes) > 1:
+                all_modes = ''.join(total_modes)+' '+' '.join(total_params)
+                if oper_override and type(self).__name__ != 'Server':
+                    sourceServer.snotice('s', '*** OperOverride by {} ({}@{}) with MODE {} {}'.format(sourceUser.nickname, sourceUser.ident, sourceUser.hostname, channel.name, all_modes))
+                if sync:
+                    localServer.new_sync(localServer, sourceServer, ':{} MODE {} :{}'.format(displaySource, channel.name, all_modes if type(self).__name__ == 'User' else rawModes))
+                sourceUser.broadcast(channel.users, 'MODE {} {}'.format(channel.name, all_modes), source=sourceUser)
 
-            if oper_override and type(self).__name__ != 'Server':
-                sourceServer.snotice('s', '*** OperOverride by {} ({}@{}) with MODE {} {}'.format(sourceUser.nickname, sourceUser.ident, sourceUser.hostname, channel.name, all_modes))
-            localServer.new_sync(localServer, sourceServer, ':{} MODE {} :{}'.format(displaySource, channel.name, all_modes if type(self).__name__ == 'User' else rawModes))
-            sourceUser.broadcast(channel.users, 'MODE {} {}'.format(channel.name, all_modes), source=sourceUser)
             for cmd, data in commandQueue:
                 localServer.handle(cmd, data)
 
-        for m in modes:
-            if m in '+-':
-                action = m
-                continue
-            for callable in [callable for callable in localServer.hooks if callable[0].lower() == hook]:
-                try:
-                    callable[2](self, localServer, channel, modes, param)
-                except Exception as ex:
-                    logging.exception(ex)
-
-        tmodes = []
-        param = []
     except Exception as ex:
-        lgging.exception(ex)
+        logging.exception(ex)
 
 @ircd.Modules.params(1)
 @ircd.Modules.support(('CHANMODES=', True)) ### (support string, boolean if support must be sent to other servers)

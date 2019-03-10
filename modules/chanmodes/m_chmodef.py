@@ -93,7 +93,7 @@ def join(self, localServer, channel):
         channel.messageQueue = {}
     if not hasattr(channel, 'joinQueue'):
         channel.joinQueue = {}
-    if 'f' in channel.modes and 'j' in channel.chmodef and not self.ocheck('o', 'override'):
+    if 'f' in channel.modes and 'j' in channel.chmodef and not self.ocheck('o', 'override') and self.server.eos:
             r = int(round(time.time() * 1000))
             channel.joinQueue[r] = {}
             channel.joinQueue[r]['ctime'] = int(time.time())
@@ -119,6 +119,8 @@ def mode_del(channel, mode):
 @ircd.Modules.hooks.pre_local_chanmode()
 @ircd.Modules.hooks.pre_remote_chanmode()
 def addmode(self, localServer, channel, modes, params, modebuf, parambuf):
+    if not parambuf:
+        return
     try:
         floodTypes = 'jm'
         tempparam = []
@@ -131,22 +133,17 @@ def addmode(self, localServer, channel, modes, params, modebuf, parambuf):
                 if not modebuf and m == '+':
                     modebuf.append(m)
                 continue
-            try:
-                total_params = params[paramcount]
-            except:
+            if m != 'f' and m in localServer.parammodes and m not in '+-':
                 paramcount += 1
                 continue
-            if action == '+':
-                if m != 'f' and m in localServer.parammodes:
-                    paramcount += 1
-                    continue
+            if m == 'f' and action == '+':
                 for p in params[paramcount].split(','):
                     if len(p) < 2:
                         paramcount += 1
                         continue
                     if p[0] == '-':
                         type = p[1]
-                        #print('Removing flood type')
+                        #print('Removing flood type: ', type)
                         if type not in floodTypes or type not in channel.chmodef:
                             #print('Type {} not found in {}'.format(type, channel.chmodef))
                             paramcount += 1
@@ -163,15 +160,15 @@ def addmode(self, localServer, channel, modes, params, modebuf, parambuf):
                         continue
 
                     if len(p.split(':')) < 3:
-                        #print('Invalid param format')
+                        #print('Invalid param format: ', p)
                         paramcount += 1
                         continue
                     if not p.split(':')[0].isdigit():
-                        #print('Amount must be a number')
+                        #print('Amount must be a number: ', p.split(':')[0])
                         paramcount += 1
                         continue
                     if p.split(':')[1] not in floodTypes:
-                        #print('Invalid flood type')
+                        #print('Invalid flood type: ', p.split(':')[1])
                         paramcount += 1
                         continue
                     if not p.split(':')[2].isdigit():
@@ -210,7 +207,7 @@ def addmode(self, localServer, channel, modes, params, modebuf, parambuf):
                             try:
                                 duration = p.split(':')[4]
                                 if not duration.isdigit():
-                                    #print('Invalid duration, unsetting action')
+                                    #print('Invalid duration "{}" unsetting action'.format(duration))
                                     fAction = None
                                 else:
                                     duration = int(duration)
@@ -243,7 +240,7 @@ def addmode(self, localServer, channel, modes, params, modebuf, parambuf):
                     if len(tempparam) == 1:
                         modebuf.append(m)
                     paramcount += 1
-                if ','.join(tempparam) not in parambuf:
+                if tempparam and ','.join(tempparam) not in parambuf:
                     parambuf.append(','.join(tempparam))
 
     except Exception as ex:

@@ -650,7 +650,6 @@ class User:
                     callable[2](self, localServer, reason)
                 except Exception as ex:
                     logging.exception(ex)
-
             del self
             gc.collect()
             del gc.garbage[:]

@@ -7,7 +7,7 @@
 
 import ircd
 
-from handle.functions import match, checkSpamfilter, _print
+from handle.functions import match, checkSpamfilter, logging
 
 import time
 import os
@@ -33,6 +33,8 @@ def privmsg(self, localServer, recv, override=False, safe=False):
         else:
             sourceServer = self.server
             sourceID = self.uid
+            if self.ocheck('o', 'override'):
+                override = True
 
         if len(recv) < 2:
             self.sendraw(411, ':No recipient given')
@@ -68,11 +70,11 @@ def privmsg(self, localServer, recv, override=False, safe=False):
                 if type(self).__name__ == 'User':
                     for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_usermsg']:
                         try:
-                            msg = callable[3](self, localServer, user, msg)
+                            msg = callable[2](self, localServer, user, msg)
                             if not msg:
                                 break
                         except Exception as ex:
-                            _print('Exception in {} :{}'.format(callable[2],ex), server=localServer)
+                            logging.exception(ex)
                     if not msg:
                         continue
                 if user.away:
@@ -87,7 +89,7 @@ def privmsg(self, localServer, recv, override=False, safe=False):
                         try:
                             callable[2](self, localServer, user, msg)
                         except Exception as ex:
-                            _print('Exception in {} :{}'.format(callable[2],ex), server=localServer)
+                            logging.exception(ex)
 
                 if sync:
                     data = ':{} PRIVMSG {} :{}'.format(sourceID, user.nickname, msg)
@@ -105,19 +107,18 @@ def privmsg(self, localServer, recv, override=False, safe=False):
                     continue
 
                 if not override:
-                    if self not in channel.users and 'n' in channel.modes and not self.ocheck('o', 'override') and not override:
+                    if self not in channel.users and 'n' in channel.modes and not override:
                         self.sendraw(404, '{} :No external messages'.format(channel.name))
                         continue
 
-                    if 'C' in channel.modes and msg[0] == '' and msg[-1] == '' and self.chlevel(channel) < 5 and not self.ocheck('o', 'override') and not override:
+                    if 'C' in channel.modes and msg[0] == '' and msg[-1] == '' and self.chlevel(channel) < 5 and not override:
                         self.sendraw(404, '{} :CTCPs are not permitted in this channel'.format(channel.name))
                         continue
 
-                    if 'm' in channel.modes and self.chlevel(channel) == 0 and not self.ocheck('o', 'override') and not override:
+                    if 'm' in channel.modes and self.chlevel(channel) == 0 and not override:
                         self.sendraw(404, '{} :Cannot send to channel (+m)'.format(channel.name))
                         continue
 
-                ### Check for module hooks (channel messages).
                 if type(self).__name__ == 'User':
                     for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_chanmsg']:
                         try:
@@ -125,7 +126,7 @@ def privmsg(self, localServer, recv, override=False, safe=False):
                             if not msg:
                                 break
                         except Exception as ex:
-                            _print('Exception in {} :{}'.format(callable[2], ex), server=localServer)
+                            logging.exception(ex)
                     if not msg:
                         continue
 
@@ -144,13 +145,10 @@ def privmsg(self, localServer, recv, override=False, safe=False):
                     try:
                         callable[2](self, localServer, channel, msg)
                     except Exception as ex:
-                        _print('Exception in {} :{}'.format(callable[2], ex), server=localServer)
+                        logging.exception(ex)
 
     except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        _print(e, server=localServer)
+        logging.exception(ex)
 
 
 @ircd.Modules.commands('notice')
@@ -161,7 +159,6 @@ def notice(self, localServer, recv, override=False, s_sync=True):
             S = recv[0][1:]
             source = [s for s in localServer.servers+[localServer] if s.sid == S or s.hostname == S]+[u for u in localServer.users if u.uid == S or u.nickname == S]
             if not source:
-                #print('ERROR: remote /notice source not found')
                 return
             self = source[0]
             sourceID = self.uid if type(self).__name__ == 'User' else self.sid
@@ -172,6 +169,8 @@ def notice(self, localServer, recv, override=False, s_sync=True):
         else:
             sourceServer = self.server
             sourceID = self.uid
+            if self.ocheck('o', 'override'):
+                override = True
 
         if len(recv) < 2:
             return self.sendraw(411, ':No recipient given')
@@ -212,7 +211,6 @@ def notice(self, localServer, recv, override=False, s_sync=True):
 
                 if sync:
                     localServer.new_sync(localServer, sourceServer, ':{} NOTICE {} :{}'.format(sourceID, target, msg))
-                    #localServer.syncToServers(localServer, sourceServer, ':{} NOTICE {} :{}'.format(sourceID, target, msg))
 
                 if type(self).__name__ == 'User':
                     self.idle = int(time.time())
@@ -225,11 +223,11 @@ def notice(self, localServer, recv, override=False, s_sync=True):
 
                 channel = channel[0]
 
-                if self not in channel.users and 'n' in channel.modes and not self.ocheck('o', 'override') and not override:
+                if self not in channel.users and 'n' in channel.modes and not override:
                     self.sendraw(404, '{} :No external messages'.format(channel.name))
                     continue
 
-                if 'T' in channel.modes and self.chlevel(channel) < 5 and not self.ocheck('o', 'override') and not override:
+                if 'T' in channel.modes and self.chlevel(channel) < 5 and not override:
                     self.sendraw(404, '{} :NOTICEs are not permitted in this channel'.format(channel.name))
                     continue
 
@@ -243,9 +241,6 @@ def notice(self, localServer, recv, override=False, s_sync=True):
 
                 if sync and s_sync:
                     localServer.new_sync(localServer, sourceServer, ':{} NOTICE {} :{}'.format(sourceID, target, msg))
-                    #localServer.syncToServers(localServer, sourceServer, ':{} NOTICE {} :{}'.format(sourceID, target, msg))
+
     except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        _print(e, server=localServer)
+        logging.exception(ex)

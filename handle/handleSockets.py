@@ -14,6 +14,7 @@ from ircd import Server
 from classes.user import User
 #User = user.User
 from handle.functions import is_sslport, check_flood, logging
+from modules.m_connect import connectTo
 import select
 import ssl
 import random
@@ -55,6 +56,7 @@ class data_handler: #(threading.Thread):
     def run(self):
         while 1:
             try:
+                #print('spam')
                 localServer = self.server
                 read_users = [user for user in list(localServer.users) if user.socket and user.fileno() != -1]
                 write_users = [user for user in list(localServer.users) if user.sendbuffer and user.socket and user.fileno() != -1]
@@ -87,6 +89,7 @@ class data_handler: #(threading.Thread):
                             dir_path = os.path.dirname(path)
                             os.chdir(dir_path)
                             conn, addr = s.accept()
+                            conn.settimeout(1) ### Look into this.
                             conn_backlog = [user for user in localServer.users if user.socket and not user.registered]
                             logging.info('Accepting client on {} -- fd: {}, with IP {}'.format(s, conn.fileno(), addr[0]))
                             if len(conn_backlog) > 10:
@@ -96,11 +99,11 @@ class data_handler: #(threading.Thread):
                             port = conn.getsockname()[1]
                             is_ssl = is_sslport(localServer, port)
                             if is_ssl:
-
+                                is_ssl = 0
                                 version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
                                 if int(version) >= 36:
                                     conn = sslctx.wrap_socket(conn, server_side=True)
-
+                                    is_ssl = 1
                                 else:
                                     conn = ssl.wrap_socket(conn,
                                                             server_side=True,
@@ -109,15 +112,15 @@ class data_handler: #(threading.Thread):
                                                             #cert_reqs=ssl.CERT_OPTIONAL,
                                                             ciphers='HIGH'
                                                             )
-
+                                    is_ssl = 1
                                 try:
                                     fp = conn.getpeercert(binary_form=True)
                                     if fp:
-                                        ssl_fingerprint = hashlib.sha256(repr(conn.getpeercert()).encode('utf-8')).hexdigest()
+                                        ssl_fingerprint = hashlib.sha256(repr(fp).encode('utf-8')).hexdigest()
                                         logging.info('Fingerprint: {}'.format(ssl_fingerprint))
                                 except Exception as ex:
                                     logging.exception(ex)
-
+                            conn.setblocking(1)
                             u = User(localServer, conn, addr, is_ssl)
                             gc.collect()
                             if u.fileno() == -1:
@@ -131,13 +134,15 @@ class data_handler: #(threading.Thread):
 
                             except Exception as ex:
                                 #localServer.snotice('t', '[{}](1) {}'.format(addr[0], ex))
-                                logging.exception(ex)
+                                ogging.exception(ex)
                                 u.quit(ex)
                                 continue
 
                         except Exception as ex:
-                            #localServer.snotice('t', '[{}](2) {}'.format(addr[0], ex))
-                            conn.close()
+                            try:
+                                conn.close()
+                            except Exception as ex:
+                                logging.exception(ex)
                             logging.exception(ex)
                             continue
 
@@ -147,6 +152,7 @@ class data_handler: #(threading.Thread):
                             dir_path = os.path.dirname(path)
                             os.chdir(dir_path)
                             conn, addr = s.accept()
+                            conn.settimeout(1)
                             port = conn.getsockname()[1]
                             is_ssl = is_sslport(localServer, port)
                             if is_ssl:
@@ -169,18 +175,17 @@ class data_handler: #(threading.Thread):
                             Server(origin=localServer, serverLink=True, sock=conn, is_ssl=is_ssl)
 
                         except ssl.SSLError as ex:
-                            localServer.snotice('t', '[{}]3 {}'.format(addr[0], ex))
+                            localServer.snotice('t', '[{}](3) {}'.format(addr[0], ex))
                             logging.exception(ex)
                             continue
-                        except OSError as ex:
-                            localServer.snotice('t', '[{}]4 {}'.format(addr[0], ex))
+                        except Exception as ex:
+                            localServer.snotice('t', '[{}](4) {}'.format(addr[0], ex))
                             logging.exception(ex)
                             continue
 
                 '''
                 Checks related to users
                 '''
-                # Send out pings
                 pingfreq = 120
                 users = (user for user in localServer.users if user.socket)
                 for user in (user for user in users if time.time() - user.ping > pingfreq and time.time() - user.lastPingSent > pingfreq/2):
@@ -189,7 +194,7 @@ class data_handler: #(threading.Thread):
                         user._send('PING :{}'.format(localServer.hostname))
                     except OSError as ex:
                         user.quit('Write error: {}'.format(str(ex)))
-                # Ping timeouts
+
                 users = (user for user in localServer.users if user.socket and time.time() - user.ping > 180.0)
                 for user in users:
                     user.quit('Ping timeout: {} seconds'.format(int(time.time() - user.ping)))
