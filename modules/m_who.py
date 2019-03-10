@@ -112,6 +112,8 @@ def who(self, localServer, recv):
                 modes += '*'
             if 'H' in user.modes:
                 modes += '?'
+            if 'z' in user.modes:
+                modes += 'z'
             if not user.server:
                 #print('User {} has no server? {}'.format(user.nickname, user.server))
                 continue

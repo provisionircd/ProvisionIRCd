@@ -127,6 +127,7 @@ def join(self, localServer, recv, override=False, skipmod=None, sourceServer=Non
                 new = Channel(chan)
                 localServer.channels.append(new)
                 channel = [new]
+                channel[0].msg_backlog = [] ### For CAP backlog
             channel = channel[0]
 
             invite_override = False
@@ -213,6 +214,19 @@ def join(self, localServer, recv, override=False, skipmod=None, sourceServer=Non
 
             if channel.users == [self] and channel.name[0] != '+':
                 sourceServer.handle('MODE', '{} +nt'.format(channel.name))
+
+            if 'backlog' in self.caplist:
+                if channel.msg_backlog:
+                    self._send(':{} PRIVMSG {} :Displaying backlog for #Home'.format(localServer.hostname, channel.name))
+                for entry in channel.msg_backlog:
+                    prefix = ''
+                    timestamp = int(entry[1]/10)
+                    if 'server-time' in self.caplist:
+                        prefix = '@time={}.{}Z '.format(time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(timestamp)), round(entry[1]%1000))
+                    data = '{}:{} PRIVMSG {} :{}'.format(prefix, entry[0], channel.name, entry[2])
+                    self._send(data)
+                if channel.msg_backlog:
+                    self._send(':{} PRIVMSG {} :Done displaying last {} messages.'.format(localServer.hostname, channel.name, len(channel.msg_backlog)))
 
             success = True
             broadcastjoin = channel.users+[self]

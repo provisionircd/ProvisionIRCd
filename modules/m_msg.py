@@ -28,7 +28,7 @@ def privmsg(self, localServer, recv, override=False, safe=False):
                 source = [s for s in localServer.servers+[localServer] if s.sid == S or s.hostname == S]+[u for u in localServer.users if u.uid == S or u.nickname == S]
                 self = source[0]
                 sourceID = self.uid if type(self).__name__ == 'User' else self.sid
-                recv = recv[1:]
+            recv = recv[1:]
             recv = localServer.parse_command(' '.join(recv[0:]))
         else:
             sourceServer = self.server
@@ -111,7 +111,7 @@ def privmsg(self, localServer, recv, override=False, safe=False):
                         self.sendraw(404, '{} :No external messages'.format(channel.name))
                         continue
 
-                    if 'C' in channel.modes and msg[0] == '' and msg[-1] == '' and self.chlevel(channel) < 5 and not override:
+                    if 'C' in channel.modes and (msg[0] == '' and msg[-1] == '') and msg.split()[0] != 'ACTION' and self.chlevel(channel) < 5 and not override:
                         self.sendraw(404, '{} :CTCPs are not permitted in this channel'.format(channel.name))
                         continue
 
@@ -136,6 +136,12 @@ def privmsg(self, localServer, recv, override=False, safe=False):
                     self._send(':{} PRIVMSG {} :{}'.format(self.fullmask(), channel.name, msg))
 
                 self.idle = int(time.time())
+
+
+                while len(channel.msg_backlog) >= 10:
+                    channel.msg_backlog = channel.msg_backlog[1:]
+                data = (self.fullmask(), time.time()*10, msg)
+                channel.msg_backlog.append(data)
 
                 if sync:
                     localServer.new_sync(localServer, sourceServer, ':{} PRIVMSG {} :{}'.format(sourceID, target, msg))

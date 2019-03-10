@@ -122,7 +122,7 @@ class Server:
                 self.version = 'ProvisionIRCd-{}-beta'.format(self.versionnumber)
                 self.hostinfo = 'Python {}'.format(sys.version.split('\n')[0].strip())
 
-                self.caps = ['account-notify', 'away-notify', 'server-time', 'chghost', 'echo-message', 'tls', 'userhost-in-names', 'extended-join']
+                self.caps = ['account-notify', 'away-notify', 'server-time', 'chghost', 'echo-message', 'tls', 'userhost-in-names', 'extended-join', 'backlog']
                 self.socket = None
                 self.introducedBy = None
                 self.uplink = None

@@ -56,7 +56,6 @@ class data_handler: #(threading.Thread):
     def run(self):
         while 1:
             try:
-                #print('spam')
                 localServer = self.server
                 read_users = [user for user in list(localServer.users) if user.socket and user.fileno() != -1]
                 write_users = [user for user in list(localServer.users) if user.sendbuffer and user.socket and user.fileno() != -1]
@@ -109,12 +108,12 @@ class data_handler: #(threading.Thread):
                                                             server_side=True,
                                                             certfile=server_cert, keyfile=server_key, ca_certs=ca_certs,
                                                             suppress_ragged_eofs=True,
-                                                            #cert_reqs=ssl.CERT_OPTIONAL,
+                                                            cert_reqs=ssl.CERT_NONE,
                                                             ciphers='HIGH'
                                                             )
                                     is_ssl = 1
                                 try:
-                                    fp = conn.getpeercert(binary_form=True)
+                                    fp = conn.getpeercert(True)
                                     if fp:
                                         ssl_fingerprint = hashlib.sha256(repr(fp).encode('utf-8')).hexdigest()
                                         logging.info('Fingerprint: {}'.format(ssl_fingerprint))
