@@ -293,7 +293,6 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                 # Rest of the modes.
                 if m not in channel.modes:
                     if m not in localServer.channel_modes[3]:
-                        #print('this mode {} requires a param on set'.format(m))
                         paramcount += 1
                         continue
 
@@ -315,7 +314,6 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         if 'L' in channel.modes:
                             channel.modes = channel.modes.replace('L', '')
                             modebuf.append('L')
-                            #print('Channel redirect: {}'.format(channel.redirect))
                             parambuf.append(channel.redirect)
                             channel.redirect = None
 
@@ -491,8 +489,6 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
 def mode(self, localServer, recv, override=False, handleParams=None):
     global oper_override
     oper_override = False
-    #print('MODE self: {}'.format(self))
-    #print('MODE recv: {}'.format(recv))
     try:
         if type(self).__name__ == 'Server':
             sourceServer = self
