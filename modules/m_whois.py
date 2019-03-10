@@ -8,9 +8,7 @@
 import ircd
 import time
 import datetime
-import os
-import sys
-from handle.functions import _print
+from handle.functions import logging
 
 @ircd.Modules.user_modes('c', 0, 'Hide channels in /WHOIS') ### ('mode', 0, 1 or 2 for normal user, oper or server, 'Mode description')
 @ircd.Modules.user_modes('W', 1, 'See when people doing a /WHOIS on you') ### ('mode', 0, 1 or 2 for normal user, oper or server, 'Mode description')
@@ -22,7 +20,6 @@ def whois(self, localServer, recv):
             return
         user = list(filter(lambda u: u.nickname.lower() == recv[1].lower(), self.server.users))
 
-        ### Need to check this 'or' statement...
         if not user or not user[0].registered:
             self.sendraw(401, '{} :No such nick'.format(recv[1]))
             self.sendraw(318, '{} :End of /WHOIS list.'.format(recv[1]))
@@ -118,10 +115,7 @@ def whois(self, localServer, recv):
 
         self.sendraw(318, '{} :End of /WHOIS list.'.format(user.nickname))
     except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        _print(e, server=localServer)
+        logging.exception(ex)
 
 @ircd.Modules.commands('whowas')
 def whowas(self, localServer, recv):
@@ -159,18 +153,17 @@ def whowas(self, localServer, recv):
         self.sendraw(369, '{} :End of /WHOWAS list.'.format(recv[1]))
 
     except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        print(e)
+        logging.exception(ex)
 
-
-@ircd.Modules.events('quit', 'nick')
+@ircd.Modules.hooks.local_quit()
+@ircd.Modules.hooks.remote_quit()
+@ircd.Modules.hooks.local_nickchange()
+@ircd.Modules.hooks.remote_nickchange()
 def savewhowas(*args):
     try:
         self = args[0]
         if type(self).__name__ == 'Server' or not self.registered:
-            return (True, None)
+            return
         localServer = args[1]
         if not hasattr(localServer, 'whowas'):
             localServer.whowas = {}
@@ -197,9 +190,5 @@ def savewhowas(*args):
                 if int(time.time()) - signoff > 3600*24*30: ### 1 month expire?
                     localServer.whowas[nick].remove(data)
 
-        return (True, None)
     except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        print(e)
+        logging.exception(ex)

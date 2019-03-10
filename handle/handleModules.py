@@ -8,7 +8,7 @@ import sys
 import gc
 gc.enable()
 
-from handle.functions import _print, update_support
+from handle.functions import _print, update_support, logging
 
 def ListModules(self):
     modules = {}
@@ -92,13 +92,13 @@ def HookToCore(self, callables):
                 if len(chmode) > 6:
                     param_desc = chmode[6]
                 if not str(level).isdigit():
-                    _print('Invalid mode-level for {} -- skipping'.format(chmode), server=self)
+                    logging.warning('Invalid mode-level for {} -- skipping'.format(chmode))
                     continue
                 level = int(level)
                 for m in mode:
                     if (cls and cls.lower() == 'user' and m in self.chstatus) or (not type and m in self.chmodes):
                         ### Found conflicting channel user-mode. Skipping.
-                        _print('Channel (user)-mode {} already exists.'.format(m), server=self)
+                        logging.warning('Channel (user)-mode {} already exists.'.format(m))
                         continue
                     if cls and cls.lower() == 'user':
                         self.chstatus += m[0]
@@ -142,7 +142,6 @@ def HookToCore(self, callables):
                 self.user_modes[mode] = (level, desc)
                 #_print('Hooked user mode {} to core (level: {}, desc: {})'.format(mode, level, desc), server=self)
 
-
         ### This does not really needed to be "hooked" here. Just loop over the callables to check if there's an event.
         ### callables, channel_modes, user_modes, events, req_modes, req_flags, req_class, commands, params, module
         hooks = []
@@ -162,13 +161,10 @@ def HookToCore(self, callables):
                 #print(callable)
                 info = (h[0], h[1], callable, module)
                 self.hooks.append(info)
-                _print('Hooked {}'.format(info), server=self)
+                logging.info('Hooked {}'.format(info))
 
     except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        _print(e, server=self)
+        logging.exception(ex)
 
 def LoadModule(self, name, path):
     try:
@@ -183,10 +179,7 @@ def LoadModule(self, name, path):
             update_support(self)
             #_print('Loaded {}'.format(name), server=self)
     except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        _print(e, server=self)
+        logging.exception(ex)
         e = 'Unable to load module {}: {}'.format(name, exc_obj)
         _print(e, server=self)
 
@@ -421,6 +414,8 @@ all_hooks = [
             'pre_local_kick',
             'local_kick',
             'remote_kick',
+            'local_nickchange',
+            'remote_nickchange',
             'pre_local_quit',
             'local_quit',
             'remote_quit',

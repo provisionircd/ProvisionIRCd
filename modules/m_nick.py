@@ -10,7 +10,7 @@ import ircd
 import time
 import sys
 import os
-from handle.functions import match, _print
+from handle.functions import match, logging
 
 nicklen = 33
 
@@ -33,8 +33,10 @@ def cmdnick(self, localServer, recv, override=False, sanick=False):
             ### Cut the recv to match original syntax. (there's now an extra :UID at the beginning.
             self = self[0]
             recv = recv[1:]
+            hook = 'remote_nickchange'
         else:
             sourceServer = localServer
+            hook = 'local_nickchange'
 
         if len(recv) < 2:
             return self.sendraw(431, ':No nickname given')
@@ -112,16 +114,11 @@ def cmdnick(self, localServer, recv, override=False, sanick=False):
             for user in watch_notify_online:
                 user.sendraw(600, '{} {} {} {} :logged online'.format(nick, self.ident, self.cloakhost, self.signon))
 
-            success = True
-            for callable in [callable for callable in localServer.events if callable[0].lower() == recv[0].lower()]:
+            for callable in [callable for callable in localServer.hooks if callable[0].lower() == hook]:
                 try:
-                    success = callable[1](self, localServer)
-                    if not success:
-                        break
+                    callable[2](self, localServer)
                 except Exception as ex:
-                    _print('Exception in module {}: {}'.format(callable[2], ex), server=localServer)
-            if not success:
-                return
+                    logging.exception(ex)
 
         old = self.nickname
         self.nickname = nick
@@ -130,7 +127,4 @@ def cmdnick(self, localServer, recv, override=False, sanick=False):
             self.welcome()
 
     except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        _print(e, server=localServer)
+        logging.exception(ex)
