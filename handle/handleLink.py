@@ -85,8 +85,12 @@ def selfIntroduction(localServer, newServer, outgoing=False):
             if outgoing:
                 destPass = localServer.conf['link'][newServer.hostname]['pass']
                 newServer._send(':{} PASS :{}'.format(localServer.sid, destPass))
-            server_support = ' '.join(localServer.server_support)
-            newServer._send(':{} PROTOCTL EAUTH={} SID={} {}'.format(localServer.sid, localServer.hostname, localServer.sid, server_support))
+            info = []
+            for row in localServer.server_support:
+                value = localServer.support[row]
+                info.append('{}{}'.format(row, '={}'.format(value) if value else ''))
+
+            newServer._send(':{} PROTOCTL EAUTH={} SID={} {}'.format(localServer.sid, localServer.hostname, localServer.sid, ' '.join(info)))
             newServer._send(':{} PROTOCTL NOQUIT NICKv2 CLK SJOIN SJOIN2 UMODE2 VL SJ3 TKLEXT TKLEXT2 NICKIP ESVID EXTSWHOIS'.format(localServer.sid))
             version = 'P{}-{}'.format(localServer.versionnumber.replace('.', ''), localServer.sid)
             local_modules = [m.__name__ for m in localServer.modules]

@@ -16,7 +16,7 @@ from modules.m_joinpart import checkMatch
 
 from handle.functions import match, logging
 
-ext_bans = ['T', 't', 'C', 'O', 'a']
+ext_bans = ['T', 't', 'c', 'O', 'a']
 prefix = '~'
 
 def checkExtMatch(type, action, channel, msg):
@@ -111,56 +111,62 @@ def extbans(self, localServer, channel, modes, params, modebuf, parambuf, paramc
         action = ''
 
         for m in modes:
-            if m in '+-':
+            if m in '-+':
                 action = m
                 continue
-            try:
-                rawParam = params[paramcount]
-            except:
+            if m not in localServer.parammodes:
+                continue
+            if m not in 'beI':
+                paramcount += 1
+                continue
+            param = params[paramcount]
+            if not param.startswith(prefix) or ':' not in param:
                 paramcount += 1
                 continue
             try:
-                rawParam.split(':')[1][0]
+                param.split(':')[1][0]
             except:
                 paramcount += 1
                 continue
-            if rawParam[0] != prefix:
+            if param.split(':')[0][1:] not in ext_bans:
                 paramcount += 1
                 continue
+            logging.info('Param for {}{} set: {}'.format(action, m, param))
 
-            if rawParam.split(':')[0][1:] not in ext_bans:
-                paramcount += 1
-                continue
             try:
                 setter = self.fullmask()
             except:
                 setter = self.hostname
 
             if m == 'b':
-                if rawParam[:2] == '~T':
+                if param[:2] not in ['~T', '~c', '~t']:
+                    paramcount += 1
+                    continue
+                if param[:2] == '~T':
                     ### Text block.
-                    if rawParam.split(':')[1] not in ['block', 'replace'] or len(rawParam.split(':')) < 3:
+                    if param.split(':')[1] not in ['block', 'replace'] or len(param.split(':')) < 3:
                         paramcount += 1
                         continue
-                    bAction = rawParam.split(':')[1]
-                    if not rawParam.split(':')[2:]:
+                    bAction = param.split(':')[1]
+                    if not param.split(':')[2:]:
                         paramcount += 1
                         continue
                     if bAction == 'replace':
                         ### Replace requires an additional parameter: ~T:replace:match:replacement
-                        if len(rawParam.split(':')) < 4:
+                        if len(param.split(':')) < 4:
                             paramcount += 1
                             continue
-                        if not rawParam.split(':')[3]:
+                        if not param.split(':')[3]:
                             paramcount += 1
                             continue
-                elif rawParam[:2] == '~C':
+                elif param[:2] == '~c':
                     ### Channel block.
-                    if len(rawParam.split(':')) < 2:
+                    if len(param.split(':')) < 2:
                         paramcount += 1
                         continue
-                    chanBan = rawParam.split(':')[1]
-                    if chanBan[0] != '#':
+                    chanBan = param.split(':')[1]
+                    if chanBan[0] not in localServer.chantypes:
+                        logging.info('Channel {} is invalid for {}{} {}'.format(chanBan, action, m, param))
                         paramcount += 1
                         continue
                     tempchan = list(filter(lambda c: c.name.lower() == chanBan.lower(), localServer.channels))
@@ -171,23 +177,26 @@ def extbans(self, localServer, channel, modes, params, modebuf, parambuf, paramc
                             cmd = ('KICK', '{} {} :Users from {} are not welcome here'.format(channel.name, user.nickname, tempchan.name))
                             commandQueue.append(cmd)
 
-                elif rawParam[:2] == '~t':
+                elif param[:2] == '~t':
                     ### Timed bans.
-                    if len(rawParam.split(':')) < 3:
+                    if len(param.split(':')) < 3:
                         paramcount += 1
                         continue
-                    bTime = rawParam.split(':')[1]
+                    bTime = param.split(':')[1]
                     if not bTime.isdigit():
                         paramcount += 1
                         continue
-                    banmask = makeMask(localServer, rawParam.split(':')[2])
-                    rawParam = '{}:{}'.format(':'.join(rawParam.split(':')[:2]), banmask)
+                    banmask = makeMask(localServer, param.split(':')[2])
+                    param = '{}:{}'.format(':'.join(param.split(':')[:2]), banmask)
 
             elif m == 'I':
-                if rawParam[:2] == '~O':
-                    if len(rawParam.split(':')) < 2:
+                if param[:2] == '~O':
+                    if len(param.split(':')) < 2:
                         paramcount += 1
                         continue
+                else:
+                    paramcount += 1
+                    continue
 
             c = None
             if m == 'b':
@@ -198,12 +207,12 @@ def extbans(self, localServer, channel, modes, params, modebuf, parambuf, paramc
                 c = channel.excepts
             if c is not None:
                 paramcount += 1
-                if action == '+' and rawParam not in c:
+                if action == '+' and param not in c:
                     modebuf.append(m)
-                    parambuf.append(rawParam)
-                    c[rawParam] = {}
-                    c[rawParam]['setter'] = setter
-                    c[rawParam]['ctime'] = int(time.time())
+                    parambuf.append(param)
+                    c[param] = {}
+                    c[param]['setter'] = setter
+                    c[param]['ctime'] = int(time.time())
 
     except Exception as ex:
         logging.exception(ex)
@@ -216,29 +225,17 @@ def join(self, localServer, channel):
         if self in channel.invites:
             invite_override = channel.invites[self]['override']
         for c in self.channels:
-            for b in [b for b in channel.bans if b[:2] == '~C']:
+            for b in [b for b in channel.bans if b[:2] == '~c']:
                 banChan = b.split(':')[1]
                 ison_banchan = [chan for chan in localServer.channels if chan.name.lower() == banChan.lower() and self in chan.users]
                 if (banChan.lower() == channel.name.lower() or ison_banchan) and not invite_override and not checkMatch(self, localServer, 'e', channel):
                     self.sendraw(474, '{} :Cannot join channel (+b)'.format(channel.name))
                     return (False, None, overrides)
 
-            for b in [b for b in c.bans if b[:2] == '~C']:
+            for b in [b for b in c.bans if b[:2] == '~c']:
                 banChan = b.split(':')[1]
                 ison_banchan = [chan for chan in localServer.channels if chan.name.lower() == banChan.lower() and self in chan.users]
                 if (banChan.lower() == channel.name.lower() or ison_banchan) and not invite_override and not checkMatch(self, localServer, 'e', channel):
-                    self.sendraw(474, '{} :Cannot join channel (+b)'.format(channel.name))
-                    return (False, None, overrides)
-
-        if hasattr(self, 'geodata'):
-            for b in [b for b in channel.bans if b[:8] == '~country']: ### Country ban.
-                banCountry = b.split(':')[1]
-                if self.geodata['country'].lower() == banCountry.lower() or self.geodata['countryCode'].lower() == banCountry.lower() and not checkMatch(self, localServer, 'e', channel) and not invite_override:
-                    self.sendraw(474, '{} :Cannot join channel (+b)'.format(channel.name))
-                    return (False, None, overrides)
-            for b in [b for b in channel.bans if b[:4] == '~isp']: ### ISP ban.
-                banISP = b.split(':')[1]
-                if self.geodata['isp'].lower() == banISP.lower() and not checkMatch(self, localServer, 'e', channel) and not invite_override:
                     self.sendraw(474, '{} :Cannot join channel (+b)'.format(channel.name))
                     return (False, None, overrides)
 

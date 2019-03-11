@@ -106,7 +106,7 @@ def sjoin(self, localServer, recv):
             userClass.handle('join', channel, params=p)
             localChan = list(filter(lambda c: c.name.lower() == channel.lower(), localServer.channels))[0]
             if len(localChan.users) == 1:
-                ### Channel did not exist on localServer. Hook channel_create?
+                ### Channel did not exist on localServer. Hook channel_create? Sure, why not.
                 pass
             if userClass.server != localServer:
                 logging.info('{}External user {} joined {} on local server.{}'.format(G, userClass.nickname, channel, W))
@@ -202,8 +202,6 @@ def sjoin(self, localServer, recv):
             data.append(modes)
             for p in removeParams:
                 data.append(p)
-            #if giveParams:
-            #    data.append(':')
             for p in giveParams:
                 data.append(p)
 
@@ -230,6 +228,9 @@ def sjoin(self, localServer, recv):
 
                 for m in modes:
                     if m not in localChan.modes:
+                        giveModes.append(m)
+                        continue
+                    elif m in localServer.channel_modes[2]:
                         giveModes.append(m)
                     if m == 'k':
                         giveParams.append(key)

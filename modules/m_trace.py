@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-extbans ~country and ~isp
+extbans ~country and ~isp, requires m_extbans to be loaded
 """
 
 import ircd
@@ -10,46 +10,55 @@ import json
 import requests
 import logging
 import time
+import re
 from modules.chanmodes.m_extbans import prefix, ext_bans
-trace_bans = ['country', 'isp']
+from modules.m_joinpart import checkMatch
+from handle.functions import match
+
+trace_bans = 'Ci'
 for e in trace_bans:
     if e in ext_bans:
         logging.error('Unable to load m_trace: conflicting with existing extban')
 
 @ircd.Modules.hooks.local_connect()
 def connect_hook(self, localServer):
-    if not hasattr(self, 'geodata'):
+    if not hasattr(localServer, 'geodata'):
+        localServer.geodata = {} ### Store info with IP.
+    if self.ip not in localServer.geodata:
         url = 'https://extreme-ip-lookup.com/json/'+self.ip
         response = requests.get(url)
         json_res = response.json()
-        self.geodata = json_res
+        localServer.geodata[self.ip] = json_res
 
+@ircd.Modules.support(('EXTBAN='+prefix+','+trace_bans, True)) ### (support string, boolean if support must be sent to other servers)
 @ircd.Modules.hooks.pre_local_chanmode()
 @ircd.Modules.hooks.pre_remote_chanmode()
 def extbans(self, localServer, channel, modes, params, modebuf, parambuf, paramcount=0):
     try:
         action = ''
         for m in modes:
-            if m in '+-':
+            if m in '-+':
                 action = m
                 continue
-            try:
-                rawParam = params[paramcount]
-            except:
-                paramcount += 1
+            if m not in localServer.parammodes:
                 continue
-            try:
-                rawParam.split(':')[1][0]
-            except:
-                paramcount += 1
-                continue
-            if rawParam[0] != prefix:
+            if m not in 'beI':
                 paramcount += 1
                 continue
 
-            if rawParam.split(':')[0][1:] not in trace_bans:
+            param = params[paramcount]
+            r_string = ''
+            for r in trace_bans:
+                r_string += '{}{}|'.format(prefix, r)
+            r_string = r_string[:-1]
+            traceban_check = re.findall("^("+r_string+"):(.*)", param)
+            if not traceban_check or not traceban_check[0][1]:
                 paramcount += 1
+                logging.info('Param {} is invalid for {}{}'.format(param, action, m))
                 continue
+
+            logging.info('Param for {}{} set: {}'.format(action, m, param))
+
             try:
                 setter = self.fullmask()
             except:
@@ -64,12 +73,12 @@ def extbans(self, localServer, channel, modes, params, modebuf, parambuf, paramc
                 c = channel.excepts
             if c is not None:
                 paramcount += 1
-                if action == '+' and rawParam not in c:
+                if action == '+' and param not in c:
                     modebuf.append(m)
-                    parambuf.append(rawParam)
-                    c[rawParam] = {}
-                    c[rawParam]['setter'] = setter
-                    c[rawParam]['ctime'] = int(time.time())
+                    parambuf.append(param)
+                    c[param] = {}
+                    c[param]['setter'] = setter
+                    c[param]['ctime'] = int(time.time())
 
     except Exception as ex:
         logging.exception(ex)
@@ -81,27 +90,47 @@ def join(self, localServer, channel):
         invite_override = False
         if self in channel.invites:
             invite_override = channel.invites[self]['override']
-        if hasattr(self, 'geodata'):
-            for b in [b for b in channel.bans if b[:8] == '~country']: ### Country ban.
-                banCountry = b.split(':')[1]
-                if self.geodata['country'].lower() == banCountry.lower() or self.geodata['countryCode'].lower() == banCountry.lower() and not checkMatch(self, localServer, 'e', channel) and not invite_override:
+        if invite_override:
+            overrides.append('b')
+            overrides.append('i')
+
+        if hasattr(localServer, 'geodata') and self.ip in localServer.geodata:
+            ### Exceptions.
+            if 'b' not in overrides:
+                for e in [e for e in channel.excepts if e.startswith('~C')]: ### Country except.
+                    country = e.split(':')[1]
+                    if match(country.lower(), localServer.geodata[self.ip]['country'].lower()) or match(country.lower(), localServer.geodata[self.ip]['countryCode'].lower()):
+                        overrides.append('b')
+                for e in [e for e in channel.excepts if e.startswith('~i')]: ### ISP except.
+                    exceptIsp = e.split(':')[1]
+                    if localServer.geodata[self.ip]['isp'].lower() == exceptIsp.lower() or invite_override and 'b' not in overrides:
+                        overrides.append('b')
+
+            for b in [b for b in channel.bans if b.startswith('~i')]: ### ISP ban.
+                isp = b.split(':')[1]
+                if match(isp.lower(), localServer.geodata[self.ip]['isp'].lower()) and not checkMatch(self, localServer, 'e', channel) and 'b' not in overrides:
                     self.sendraw(474, '{} :Cannot join channel (+b)'.format(channel.name))
                     return (False, None, overrides)
-            for b in [b for b in channel.bans if b[:4] == '~isp']: ### ISP ban.
-                banISP = b.split(':')[1]
-                if self.geodata['isp'].lower() == banISP.lower() and not checkMatch(self, localServer, 'e', channel) and not invite_override:
+
+            for b in [b for b in channel.bans if b.startswith('~C')]: ### Country ban.
+                country = b.split(':')[1]
+                if (match(country.lower(), localServer.geodata[self.ip]['country'].lower()) or match(country.lower(), localServer.geodata[self.ip]['countryCode'].lower())) and not checkMatch(self, localServer, 'e', channel) and 'b' not in overrides:
+                    self.sendraw(474, '{} :Cannot join channel (+b)'.format(channel.name))
+                    return (False, None, overrides)
+            for b in [b for b in channel.bans if b.startswith('~i')]: ### ISP ban.
+                isp = b.split(':')[1]
+                if match(isp.lower(), localServer.geodata[self.ip]['isp'].lower()) and not checkMatch(self, localServer, 'e', channel) and 'b' not in overrides:
                     self.sendraw(474, '{} :Cannot join channel (+b)'.format(channel.name))
                     return (False, None, overrides)
 
             for i in channel.invex:
-                if i.startswith('~country'):
+                if i.startswith('~C'):
                     country = i.split(':')[1].lower()
-                    if 'i' in channel.modes and (self.geodata['country'].lower() == country or self.geodata['countryCode'].lower() == country) and 'i' not in overrides:
+                    if 'i' in channel.modes and match(country, localServer.geodata[self.ip]['country'].lower()) or match(country, localServer.geodata[self.ip]['countryCode'].lower()):
                         overrides.append('i')
-
-                if i.startswith('~isp'):
+                if i.startswith('~i'):
                     isp = i.split(':')[1].lower()
-                    if 'i' in channel.modes and self.geodata['isp'].lower() == isp and 'i' not in overrides:
+                    if 'i' in channel.modes and match(isp, localServer.geodata[self.ip]['isp'].lower()) and 'i' not in overrides:
                         overrides.append('i')
 
         return (True, None, overrides)

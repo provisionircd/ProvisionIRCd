@@ -48,13 +48,15 @@ def protoctl(self, localServer, recv):
                 elif cap == 'EXTBAN':
                     remote_prefix = param[0]
                     remote_ban_types = param.split(',')[1]
-                    local = [e for e in localServer.support if e.split('=')[0] == cap]
-                    local_prefix = local[0].split('=')[1][0]
+                    local_prefix = None
+                    if 'EXTBAN' in localServer.support:
+                        local_prefix = localServer.support['EXTBAN'][0]
                     if remote_prefix != local_prefix:
                         self._send(':{} ERROR :extban prefixes are not the same. We have: {} but they have: {}'.format(self.sid, remote_prefix, local_prefix))
                         self.quit('extban prefixes are not the same. We have: {} but they have: {}'.format(local_prefix, remote_prefix))
                         return
-                    local_ban_types = [e.split(',')[1] for e in localServer.support if e.split('=')[0] == cap][0]
+                    local_ban_types = localServer.support['EXTBAN'][1:]
+                    logging.info('We have bantypes: {}'.format(local_ban_types))
                     missing_ext_types = []
                     for m in [m for m in remote_ban_types if m not in local_ban_types]:
                         missing_ext_types.append(m)
@@ -65,7 +67,7 @@ def protoctl(self, localServer, recv):
 
             except Exception as ex:
                 logging.exception(ex)
-                self.quit(e)
+                self.quit(ex)
 
             logging.info('{}Added PROTOCTL support for {} for server {}{}'.format(P, p, self, W))
 

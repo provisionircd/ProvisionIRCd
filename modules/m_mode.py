@@ -89,7 +89,7 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
         modebuf, parambuf, commandQueue = [], [], []
         action = ''
         prevaction = ''
-        paramcount = 0
+        paramcount = -1
         chmodes = localServer.chstatus
         ## Setting paramModes
         paramModes = localServer.chstatus
@@ -100,11 +100,10 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                     paramModes += m
         localServer.parammodes = paramModes
         global oper_override
-        local = [e for e in localServer.support if e.split('=')[0] == 'EXTBAN']
-        if local:
-            extban_prefix = local[0].split('=')[1][0]
-        else:
-            local = None
+        extban_prefix = None
+        if 'EXTBAN' in localServer.support:
+            extban_prefix = localServer.support['EXTBAN'][0]
+            #logging.info('Extban prefix set: {}'.format(extban_prefix))
 
         ### Setting some mode level shit.
         ### +v = 1
@@ -127,14 +126,19 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                 level = localServer.channel_modes[t][m][0]
                 modeLevel[m] = level
         for m in [m for m in recv[1] if m in chmodes+'+-']:
+            if m in localServer.parammodes:
+                if (action == '+') or (action == '-' and m not in localServer.channel_modes[2] and m not in localServer.channel_modes[3]):
+                    paramcount += 1
+                    if len(recv[2:]) > paramcount:
+                        param_mode = recv[2:][paramcount]
+                        logging.info('Param for {}{}: {}'.format(action, m, param_mode))
+                    else:
+                        logging.warning('Received param mode {}{} without param'.format(action, m))
+                        continue
+
             if m == 'r' and type(self).__name__ != 'Server':
                 continue
             if m in '+-' and action != m:
-                try:
-                    if ''.join(modebuf[-1]) in '+-':
-                        del modebuf[-1]
-                except:
-                    pass
                 action = m
                 continue
             if not action:
@@ -145,8 +149,6 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
 
             if m not in localServer.chstatus and m not in '+-':
                 if self.chlevel(channel) < modeLevel[m] and not self.ocheck('o', 'override'):
-                    if m in paramModes:
-                       paramcount += 1
                     continue
                 elif self.chlevel(channel) < modeLevel[m]:
                     oper_override = True
@@ -156,69 +158,49 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                 ### SETTING CHANNEL MODES
                 ###
                 if m == 'l' and len(recv) > 2:
-                    try:
-                        p = recv[2:][paramcount]
-                    except IndexError:
+                    if not param_mode.isdigit():
                         continue
-                    if not p.isdigit():
+                    if int(param_mode) <= 0:
                         continue
-                    if int(p) <= 0:
-                        continue
-                    if channel.limit == int(p):
+                    if channel.limit == int(param_mode):
                         continue
                     else:
                         if m not in channel.modes:
                             channel.modes += m
                         modebuf.append(m)
-                        parambuf.append(p)
-                        paramcount += 1
-                        channel.limit = int(p)
+                        parambuf.append(param_mode)
+                        channel.limit = int(param_mode)
                         continue
 
                 elif m == 'k' and not channel.key:
-                    try:
-                        p = recv[2:][paramcount]
-                    except Exception as ex:
-                        continue
-                    if channel.key == p:
+                    if channel.key == param_mode:
                         continue
                     if m not in channel.modes:
                         channel.modes += m
                     modebuf.append(m)
-                    parambuf.append(p)
-                    paramcount += 1
-                    channel.key = p
+                    parambuf.append(param_mode)
+                    channel.key = param_mode
                     continue
 
                 elif m == 'L' and channel.limit:
-                    try:
-                        p = recv[2:][paramcount].split(',')[0]
-                    except IndexError:
+                    param_mode = param_mode.split(',')[0]
+                    if param_mode[0] not in localServer.chantypes:
                         continue
-                    if p[0] not in localServer.chantypes:
-                        continue
-                    if channel.redirect == p or p.lower() == channel.name.lower():
+                    if channel.redirect == param_mode or p.lower() == channel.name.lower():
                         continue
                     if m not in channel.modes:
                         channel.modes += m
                     modebuf.append(m)
-                    parambuf.append(p)
-                    paramcount += 1
-                    channel.redirect = p
+                    parambuf.append(param_mode)
+                    channel.redirect = param_mode
                     continue
                 elif m == 'O':
                     if type(self).__name__ != 'Server' and 'o' not in self.modes:
                         continue
                 elif m in 'beI':
-                    try:
-                        rawParam = recv[2:][paramcount]
-                    except IndexError:
-                        paramcount += 1
+                    if param_mode.startswith(extban_prefix):
                         continue
-                    if rawParam.startswith(extban_prefix):
-                        paramcount += 1
-                        continue
-                    mask = makeMask(localServer, rawParam)
+                    mask = makeMask(localServer, param_mode)
                     if m == 'b':
                         data = channel.bans
                         s = 'ban'
@@ -231,13 +213,11 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                     if mask not in data:
                         if len(data) >= localServer.maxlist[m] and type(self).__name__ == 'User':
                             self.sendraw(478, '{} {} :Channel {} list is full'.format(channel.name, mask, s))
-                            paramcount += 1
                             continue
                         try:
                             setter = self.fullmask()
                         except:
                             setter = self.hostname
-                        paramcount += 1
                         modebuf.append(m)
                         parambuf.append(mask)
                         data[mask] = {}
@@ -248,14 +228,10 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                 elif m in chstatus:
                     timed = False
                     # + status
-                    try:
-                        temp_user = recv[2:][paramcount]
-                    except:
-                        paramcount += 1
-                        continue
+                    temp_user = param_mode
                     ### Check to see for timed shit.
                     try:
-                        t = recv[2:][paramcount].split(':')
+                        t = param_mode.split(':')
                         temp_user = t[0]
                         ### This is only temporary.
                         try:
@@ -268,16 +244,13 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         pass
                     user = list(filter(lambda u: u.uid == temp_user or u.nickname.lower() == temp_user.lower(), channel.users))
                     if not user:
-                        paramcount += 1
                         continue
                     else:
                         user = user[0]
                     if m in channel.usermodes[user]:
-                        paramcount += 1
                         continue
                     if type(self).__name__ != 'Server':
                         if self.chlevel(channel) < modeLevel[m] and not self.ocheck('o', 'override'):
-                            paramcount += 1
                             continue
                         elif self.chlevel(channel) < modeLevel[m]:
                             oper_override = True
@@ -285,17 +258,12 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                     channel.usermodes[user] += m
                     modebuf.append(m)
                     parambuf.append(user.nickname)
-                    paramcount += 1
                     if timed:
                         channel.temp_status[user] = {}
                         channel.temp_status[user][m] = {}
                         channel.temp_status[user][m]['ctime'] = int(time.time()) + timed
                         channel.temp_status[user][m]['action'] = '-'
                     continue
-                # Rest of the modes.
-                #if m not in channel.modes:
-                if m not in localServer.channel_modes[3]:
-                    paramcount += 1
                 if m not in channel.modes and m not in modebuf and m in localServer.channel_modes[3]:
                     modebuf.append(m)
                     channel.modes += m
@@ -319,15 +287,10 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                             channel.redirect = None
 
                     elif m == 'k':
-                        try:
-                            p = recv[2:][paramcount]
-                        except Exception as ex:
-                            continue
-                        if p != channel.key:
+                        if param_mode != channel.key:
                             continue
                         parambuf.append(channel.key)
                         channel.key = None
-                        paramcount += 1
 
                     elif m  == 'L':
                         channel.redirect = None
@@ -339,12 +302,7 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                     modebuf.append(m)
 
                 elif m in 'beI':
-                    try:
-                        # Checking both mask forms. Only for removing.
-                        rawmask = recv[2:][paramcount]
-                        mask = makeMask(localServer, recv[2:][paramcount])
-                    except:
-                        continue
+                    mask = makeMask(localServer, param_mode)
                     if m == 'b':
                         data = channel.bans
                     elif m == 'e':
@@ -355,22 +313,17 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         del data[mask]
                         parambuf.append(mask)
                         modebuf.append(m)
-                    elif rawmask in data:
-                        del data[rawmask]
-                        parambuf.append(rawmask)
+                    elif param_mode in data:
+                        del data[param_mode]
+                        parambuf.append(param_mode)
                         modebuf.append(m)
-                    paramcount += 1
                     continue
                 elif m in chstatus:
                     timed = False
                     # -qaohv
+                    temp_user = param_mode
                     try:
-                        temp_user = recv[2:][paramcount]
-                    except:
-                        paramcount += 1
-                        continue
-                    try:
-                        t = recv[2:][paramcount].split(':')
+                        t = param_mode.split(':')
                         temp_user = t[0]
                         try:
                             channel.temp_status
@@ -382,28 +335,23 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         pass
                     user = list(filter(lambda u: u.uid == temp_user or u.nickname.lower() == temp_user.lower(), channel.users))
                     if not user:
-                        paramcount += 1
                         continue
                     else:
                         user = user[0]
                     if m not in channel.usermodes[user]:
-                        paramcount += 1
                         continue
                     if 'S' in user.modes and not self.ocheck('o', 'override'):
                         self.sendraw(974, '{} :{} is a protected service bot'.format(m, user.nickname))
-                        paramcount += 1
                         continue
                     elif 'S' in user.modes:
                         oper_override = True
                     if type(self).__name__ != 'Server':
                         if self.chlevel(channel) < modeLevel[m] and not self.ocheck('o', 'override') and user != self:
-                            paramcount += 1
                             continue
                         elif self.chlevel(channel) < modeLevel[m]:
                             oper_override = True
 
                     channel.usermodes[user] = channel.usermodes[user].replace(m, '')
-                    paramcount += 1
                     modebuf.append(m)
                     parambuf.append(user.nickname)
                     if timed:
@@ -415,8 +363,6 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
 
         if not modebuf:
             return
-        if ''.join(modebuf[-1]) in '+-':
-            del modebuf[-1]
 
         for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_'+hook]:
             try:

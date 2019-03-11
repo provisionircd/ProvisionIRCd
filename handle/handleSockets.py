@@ -305,7 +305,7 @@ class data_handler: #(threading.Thread):
                     server.quit('Ping timeout: {} seconds'.format(int(time.time() - server.ping)))
 
                 # Registration timeouts
-                for server in [server for server in localServer.servers if (not server.eos and (server.introducedBy and not server.introducedBy.eos)) and time.time() - server.ping >= 10.0]:
+                for server in [server for server in localServer.servers if not server.eos and ((server.introducedBy and not server.introducedBy.eos) or server.socket) and time.time() - server.ping >= 10.0]:
                     is_silent = False if server.socket else True
                     server.quit('Server registration timed out', silent=is_silent)
 

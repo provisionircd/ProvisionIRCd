@@ -31,10 +31,6 @@ def initlogging(localServer):
     logging.addLevelName(logging.ERROR, R2+"%s" % logging.getLevelName(logging.ERROR))
     logging.addLevelName(logging.INFO, W+"%s" % logging.getLevelName(logging.INFO))
     logging.addLevelName(logging.DEBUG, B+"%s" % logging.getLevelName(logging.INFO))
-    #logging.addLevelName(logging.LINKSYNC, B+"%s" % logging.getLevelName(logging.INFO))
-
-path = os.path.abspath(__file__)
-dir_path = os.path.dirname(path)
 
 class TKL:
     def check(self, localServer, user, type):
@@ -63,11 +59,7 @@ class TKL:
                             user.quit('User has been banned from using this server', error=True, banmsg=banmsg)
                         return
         except Exception as ex:
-            exc_type, exc_obj, exc_tb = sys.exc_info()
-            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            e = '{}EXCEPTION after accept: {} in file {} line {}: {}{}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-            _print(e, server=localServer)
-
+            logging.exception(ex)
 
     def add(self, localServer, data):
         try:
@@ -116,10 +108,7 @@ class TKL:
             return
 
         except Exception as ex:
-            exc_type, exc_obj, exc_tb = sys.exc_info()
-            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-            _print(e, server=localServer)
+            logging.exception(ex)
 
     def remove(self, localServer, data, expire=False):
         try:
@@ -140,10 +129,7 @@ class TKL:
                 data = ':{} TKL - {} {} {}'.format(localServer.sid, tkltype, ident, mask)
                 localServer.new_sync(localServer, self, data)
         except Exception as ex:
-            exc_type, exc_obj, exc_tb = sys.exc_info()
-            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-            _print(e, server=localServer)
+            logging.exception(ex)
 
 def write(line, server=None):
     line = line.replace('[0m', '')
@@ -184,8 +170,6 @@ def is_sslport(server,checkport):
 
 def _print(txt, server=None):
     write(str(txt), server)
-    #if server and not server.forked:
-    #    print(txt)
 
 def valid_expire(s):
     spu = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
@@ -225,17 +209,15 @@ def checkSpamfilter(self, localServer, target, filterTarget, msg):
                     localServer.handle('tkl', data)
 
     except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        _print(e, server=localServer)
+        logging.exception(ex)
 
 def update_support(localServer):
     if not hasattr(localServer, 'name'):
         return
-    localServer.support = []
-    localServer.server_support = []
-    localServer.support.append('NETWORK={}'.format(localServer.name))
+    localServer.support = {}
+    localServer.server_support = {}
+    localServer.support['NETWORK'] = localServer.name
+    ext_ban = []
     for module in localServer.modules:
         for function in [function for function in localServer.modules[module][9] if hasattr(function, 'support')]:
             for r in [r for r in function.support]:
@@ -253,18 +235,24 @@ def update_support(localServer):
                     param = localServer.chprefix_string
                 if support == 'MAXLIST':
                     param = localServer.maxlist_string
-                if support not in localServer.support:
-                    string = '{}{}'.format(support, '={}'.format(param) if param else '')
-                    localServer.support.append(string)
+                if support == 'EXTBAN':
+                    if not ext_ban:
+                        ext_ban = param
+                    else:
+                        ext_ban += param[2:]
+                        param = ext_ban
+
+                if support not in localServer.support or support == 'EXTBAN':
+                    localServer.support[support] = param
+                    #logging.info('Adding support for: {}{}'.format(support, '={}'.format(param) if param else ''))
                 if server_support:
-                    localServer.server_support.append(string)
+                    localServer.server_support[support] = param
+
     if hasattr(localServer, 'chprefix'):
-        #print('-')
         chprefix_string = ''
         first = '('
         second = ''
         for key in localServer.chprefix:
-            #print('Prefix: {}'.format(key))
             first += key
             second += localServer.chprefix[key]
         first += ')'
@@ -282,7 +270,9 @@ def update_support(localServer):
 def show_support(self, localServer):
     line = []
     for row in localServer.support:
-        line.append(row)
+        row = row
+        value = localServer.support[row]
+        line.append('{}{}'.format(row, '={}'.format(value) if value else ''))
         if len(line) == 15:
             self.sendraw('005', '{} :are supported by this server'.format(' '.join(line)))
             line = []
@@ -327,10 +317,7 @@ def IPtoBase64(ip):
         binip = binip.decode()
         return binip
     except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        print(e)
+        logging.exception(ex)
 
 def Base64toIP(base):
     try:
@@ -344,10 +331,7 @@ def Base64toIP(base):
         ip = '.'.join(ip)
         return ip
     except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        print(e)
+        logging.exception(ex)
 
 def check_flood(localServer, target):
     try:
@@ -413,7 +397,4 @@ def check_flood(localServer, target):
                 server.quit('Excess Flood')
                 return
     except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = 'EXCEPTION: {} in file {} on line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        _print(e, server=localServer)
+        logging.exception(ex)
