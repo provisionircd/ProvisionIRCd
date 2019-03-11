@@ -301,7 +301,8 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         parambuf.append(channel.key)
                         channel.key = None
 
-                    elif m  == 'L':
+                    elif m  == 'L' and channel.redirect:
+                        parambuf.append(channel.redirect)
                         channel.redirect = None
 
                     elif m == 'P' and len(channel.users) == 0:
