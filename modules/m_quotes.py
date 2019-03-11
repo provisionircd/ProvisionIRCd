@@ -60,7 +60,6 @@ Computers make very fast, very accurate mistakes
 Life would be so much easier if we only had the source code
 Who is this 'General Failure' and why is he reading my disk?
 hAS aNYONE sEEN MY cAPSLOCK kEY?
-InspIRCd, now with excessive ammounts of Cheeze
 I'm in the computer business, I make Out-Of-Order signs
 Kevorkian Virus: helps your computer shut down whenever it wants to.
           [OUT OF QUOTES, PLEASE ORDER MORE]
@@ -192,7 +191,6 @@ We can learn much from wise words, little from wisecracks, and less from wise gu
 "Blessed are the young, for they shall inherit the national debt." - Herbert Hoover
 If you have five dollars and Chuck Norris has five dollars, Chuck Norris has more money than you.
 Apple pays Chuck Norris 99 cents every time he listens to a song.
-If Chuck Norris and InspIRCd met in a dark alley, Chuck Norris would get his first black eye. Ever.
 Chuck Norris can sneeze with his eyes open.
 Chuck Norris can kill two stones with one bird.
 There is no theory of evolution. Just a list of animals Chuck Norris allows to live.
@@ -205,11 +203,7 @@ Chuck Norris is so fast, he can run around the world and punch himself in the ba
 When the Boogeyman goes to sleep every night, he checks his closet for Chuck Norris.
 Outer space exists because it's afraid to be on the same planet with Chuck Norris.
 Chuck Norris counted to infinity - twice.
-Chuck Norris only fears one thing in this world, and that is InspIRCd.
-InspIRCd's core is ran by donated Chuck Norris DNA.
-Chuck Norris exists because InspIRCd allows him to.
 Chuck Norris CAN punch you in the face over the internet.
-When Chuck Norris uses InspIRCd, he doesn't use the /kill command, he uses the /ROUND-HOUSE-TO-THE-FACE command.
 A developer only classifies oneself as such if they consider themselves as such.
 "While hunting in Africa, I shot an elephant in my pajamas. How an elephant got into my pajamas I'll never know." -- Groucho Marx
 """
