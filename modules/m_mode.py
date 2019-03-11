@@ -14,6 +14,7 @@ import time
 import re
 
 from handle.functions import valid_expire, match, cloak, logging
+from collections import OrderedDict
 
 W  = '\033[0m'  # white (normal)
 R  = '\033[31m' # red
@@ -588,19 +589,19 @@ def mode(self, localServer, recv, override=False, handleParams=None):
 
         if len(recv) == 3:
             if recv[2] == '+b' or recv[2] == 'b':
-                for entry in channel.bans:
+                for entry in OrderedDict(reversed(list(channel.bans.items()))):
                     self.sendraw(367, '{} {} {} {}'.format(channel.name, entry, channel.bans[entry]['setter'], channel.bans[entry]['ctime']))
                 return self.sendraw(368, '{} :End of Channel Ban List'.format(channel.name))
             elif recv[2] == '+e' or recv[2] == 'e':
                 if self.chlevel(channel) < 3 and not self.ocheck('o', 'override'):
                     return self.sendraw(482, '{} :You are not allowed to view the excepts list'.format(channel.name))
-                for entry in channel.excepts:
+                for entry in OrderedDict(reversed(list(channel.excepts.items()))):
                     self.sendraw(348, '{} {} {} {}'.format(channel.name, entry, channel.excepts[entry]['setter'], channel.excepts[entry]['ctime']))
                 return self.sendraw(349, '{} :End of Channel Exceptions List'.format(channel.name))
             elif recv[2] == '+I' or recv[2] == 'I':
                 if self.chlevel(channel) < 3 and not self.ocheck('o', 'override'):
                     return self.sendraw(482, '{} :You are not allowed to view the invex list'.format(channel.name))
-                for entry in channel.invex:
+                for entry in OrderedDict(reversed(list(channel.invex.items()))):
                     self.sendraw(346, '{} {} {} {}'.format(channel.name, entry, channel.invex[entry]['setter'], channel.invex[entry]['ctime']))
                 return self.sendraw(347, '{} :End of Channel Invite List'.format(channel.name))
 

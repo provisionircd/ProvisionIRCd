@@ -88,7 +88,7 @@ class data_handler: #(threading.Thread):
                             dir_path = os.path.dirname(path)
                             os.chdir(dir_path)
                             conn, addr = s.accept()
-                            conn.settimeout(1) ### Look into this.
+                            conn.settimeout(1.5) ### Look into this.
                             conn_backlog = [user for user in localServer.users if user.socket and not user.registered]
                             logging.info('Accepting client on {} -- fd: {}, with IP {}'.format(s, conn.fileno(), addr[0]))
                             if len(conn_backlog) > 10:

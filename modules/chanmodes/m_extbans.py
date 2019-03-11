@@ -16,7 +16,7 @@ from modules.m_joinpart import checkMatch
 
 from handle.functions import match, logging
 
-ext_bans = 'TtCOa'
+ext_bans = ['T', 't', 'C', 'O', 'a']
 prefix = '~'
 
 def checkExtMatch(type, action, channel, msg):
@@ -102,7 +102,7 @@ def checkExpiredBans(localServer):
         tmodes = 'b'*len(remove_bans[chan])
         localServer.handle('MODE', '{} -{} {} 0'.format(chan.name, tmodes, bans))
 
-@ircd.Modules.support(('EXTBAN='+prefix+','+str(ext_bans), True)) ### (support string, boolean if support must be sent to other servers)
+@ircd.Modules.support(('EXTBAN='+prefix+','+str(''.join(ext_bans)), True)) ### (support string, boolean if support must be sent to other servers)
 @ircd.Modules.hooks.pre_local_chanmode()
 @ircd.Modules.hooks.pre_remote_chanmode()
 def extbans(self, localServer, channel, modes, params, modebuf, parambuf, paramcount=0):
@@ -127,7 +127,8 @@ def extbans(self, localServer, channel, modes, params, modebuf, parambuf, paramc
             if rawParam[0] != prefix:
                 paramcount += 1
                 continue
-            if rawParam[1] not in ext_bans:
+
+            if rawParam.split(':')[0][1:] not in ext_bans:
                 paramcount += 1
                 continue
             try:
@@ -226,6 +227,18 @@ def join(self, localServer, channel):
                 banChan = b.split(':')[1]
                 ison_banchan = [chan for chan in localServer.channels if chan.name.lower() == banChan.lower() and self in chan.users]
                 if (banChan.lower() == channel.name.lower() or ison_banchan) and not invite_override and not checkMatch(self, localServer, 'e', channel):
+                    self.sendraw(474, '{} :Cannot join channel (+b)'.format(channel.name))
+                    return (False, None, overrides)
+
+        if hasattr(self, 'geodata'):
+            for b in [b for b in channel.bans if b[:8] == '~country']: ### Country ban.
+                banCountry = b.split(':')[1]
+                if self.geodata['country'].lower() == banCountry.lower() or self.geodata['countryCode'].lower() == banCountry.lower() and not checkMatch(self, localServer, 'e', channel) and not invite_override:
+                    self.sendraw(474, '{} :Cannot join channel (+b)'.format(channel.name))
+                    return (False, None, overrides)
+            for b in [b for b in channel.bans if b[:4] == '~isp']: ### ISP ban.
+                banISP = b.split(':')[1]
+                if self.geodata['isp'].lower() == banISP.lower() and not checkMatch(self, localServer, 'e', channel) and not invite_override:
                     self.sendraw(474, '{} :Cannot join channel (+b)'.format(channel.name))
                     return (False, None, overrides)
 

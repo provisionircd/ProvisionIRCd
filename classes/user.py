@@ -41,21 +41,28 @@ def RevIP(ip):
 class blacklist_check(threading.Thread):
     def __init__(self, user, blacklist):
         threading.Thread.__init__(self)
-        try:
-            result = socket.gethostbyname(RevIP(user.ip)+ '.' + blacklist)
-            reason = 'Your IP is blacklisted by {}'.format(blacklist)
-            if user.ip not in user.server.dnsblCache:
-                user.server.dnsblCache[user.ip] = {}
-                user.server.dnsblCache[user.ip]['bl'] = blacklist
-                user.server.dnsblCache[user.ip]['ctime'] = int(time.time())
-            user._send(':{} 304 * :{}'.format(user.server.hostname, reason))
-            msg = '*** DNSBL match for IP {}: {} [nick: {}]'.format(user.ip, blacklist, user.nickname)
-            user.server.snotice('d', msg)
-            user.quit(reason)
-        except:
-            pass
+        self.user = user
+        self.blacklist = blacklist
+    def run(self):
+        user = self.user
+        blacklist = self.blacklist
+        if user.ip not in user.server.dnsblCache:
+            try:
+                result = socket.gethostbyname(RevIP(user.ip)+ '.' + blacklist)
+                reason = 'Your IP is blacklisted by {}'.format(blacklist)
+                if user.ip not in user.server.dnsblCache:
+                    user.server.dnsblCache[user.ip] = {}
+                    user.server.dnsblCache[user.ip]['bl'] = blacklist
+                    user.server.dnsblCache[user.ip]['ctime'] = int(time.time())
+                user._send(':{} 304 * :{}'.format(user.server.hostname, reason))
+                msg = '*** DNSBL match for IP {}: {} [nick: {}]'.format(user.ip, blacklist, user.nickname)
+                user.server.snotice('d', msg)
+                user.quit(reason)
+            except:
+                pass
 
-def DNSBLCheck(user):
+def DNSBLCheck(self):
+    user = self
     localServer = user.server
     if user.ip in localServer.dnsblCache:
         reason = 'Your IP is blacklisted by {}'.format(localServer.dnsblCache[user.ip]['bl']+' [cached]')
@@ -122,8 +129,9 @@ class User:
                                 dnsbl_except = True
                                 break
                     if not dnsbl_except:
+                        #d = DNSBLCheck(self)
+                        #d.start()
                         DNSBLCheck(self)
-
                 TKL.check(self, self.server, self, 'z')
                 TKL.check(self, self.server, self, 'Z')
 

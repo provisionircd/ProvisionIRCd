@@ -77,9 +77,9 @@ class Channel:
             self.key = None
             self.redirect = None
             self.invites = {}
-            self.bans = {}
-            self.excepts = {}
-            self.invex = {}
+            self.bans = OrderedDict({})
+            self.excepts = OrderedDict({})
+            self.invex = OrderedDict({})
 
             self.temp_status = {}
 

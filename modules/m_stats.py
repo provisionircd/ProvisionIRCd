@@ -19,8 +19,9 @@ except ImportError:
 
 #import resource
 #import objgraph
+from handle.functions import is_sslport
 
-stats = 'duCGO'
+stats = 'dpuCGO'
 
 @ircd.Modules.req_modes('o')
 @ircd.Modules.req_flags('stats')
@@ -30,6 +31,7 @@ def show_stats(self, localServer, recv):
         if len(recv) == 1:
             self.sendraw(210, ':/Stats flags:')
             self.sendraw(210, ':d - Displays the local DNSBL cache')
+            self.sendraw(210, ':p - View open ports and their type')
             self.sendraw(210, ':u - View server uptime')
             self.sendraw(210, ':C - View raw server data and info')
             self.sendraw(210, ':G - View the global TKL info')
@@ -83,6 +85,14 @@ def show_stats(self, localServer, recv):
                 self.sendraw(210, ':{} {} {}'.format(entry, localServer.dnsblCache[entry]['bl'], date))
             if len(dnsbl) == 128:
                 self.sendraw(210, ':Showing only first 128 entries. Total entries: {}'.format(total_len))
+
+        elif recv[1] == 'p':
+            for sock in localServer.listen_socks:
+                ip, port = sock.getsockname()
+                options = ', '.join(localServer.conf['listen'][str(port)]['options'])
+                total_clients = [user for user in localServer.users+localServer.servers if user.socket]
+                port_clients = [client for client in total_clients if (client.socket.getsockname()[1] == port or client.socket.getpeername()[1] == port)]
+                self.sendraw(210, '{} {}:{} [options: {}], used by {} client{}'.format(recv[1], ip, port, options, len(port_clients), 's' if len(port_clients) != 1 else ''))
 
         elif recv[1] == 'G':
             for type in [type for type in localServer.tkl if type in 'GZQ']:
