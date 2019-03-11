@@ -186,8 +186,17 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                     param_mode = param_mode.split(',')[0]
                     if param_mode[0] not in localServer.chantypes:
                         continue
-                    if channel.redirect == param_mode or p.lower() == channel.name.lower():
+                    if channel.redirect == param_mode or param_mode.lower() == channel.name.lower():
                         continue
+                    chan_exists = [chan for chan in localServer.channels if chan.name.lower() == param_mode.lower()]
+                    if not chan_exists:
+                        self.sendraw(690, ':Target channel {} does not exist.'.format(param_mode))
+                        continue
+                    if self.chlevel(chan_exists[0]) < 3 and not self.ocheck('o', 'override'):
+                        self.sendraw(690, ':You must be opped on target channel {} to set it as redirect.'.format(chan_exists[0].name))
+                        continue
+                    elif self.chlevel(channel) < modeLevel[m]:
+                        oper_override = True
                     if m not in channel.modes:
                         channel.modes += m
                     modebuf.append(m)
