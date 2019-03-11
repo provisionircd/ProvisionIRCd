@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-/map and /links command
+random quote on connect
 """
 
 import ircd
