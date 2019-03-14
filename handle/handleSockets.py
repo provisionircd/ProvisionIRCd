@@ -88,7 +88,7 @@ class data_handler: #(threading.Thread):
                             dir_path = os.path.dirname(path)
                             os.chdir(dir_path)
                             conn, addr = s.accept()
-                            conn.settimeout(1.5) ### Look into this.
+                            conn.settimeout(2) ### Look into this.
                             conn_backlog = [user for user in localServer.users if user.socket and not user.registered]
                             logging.info('Accepting client on {} -- fd: {}, with IP {}'.format(s, conn.fileno(), addr[0]))
                             if len(conn_backlog) > 10:
@@ -187,8 +187,9 @@ class data_handler: #(threading.Thread):
                 '''
                 pingfreq = 120
                 users = (user for user in localServer.users if user.socket)
-                for user in (user for user in users if time.time() - user.ping > pingfreq and time.time() - user.lastPingSent > pingfreq/2):
-                    user.lastPingSent = int(time.time())
+                for user in (user for user in users if time.time() - user.ping > pingfreq and time.time()*1000 - user.lastPingSent > pingfreq/2):
+                    user.lastPingSent = time.time() * 1000
+                    user.lag_measure = user.lastPingSent
                     try:
                         user._send('PING :{}'.format(localServer.hostname))
                     except OSError as ex:
@@ -293,8 +294,9 @@ class data_handler: #(threading.Thread):
                 # Send out pings
                 pingfreq = 60
                 servers = (server for server in localServer.servers if server.socket and server.hostname)
-                for server in (server for server in servers if time.time() - server.ping > pingfreq and time.time() - server.lastPingSent > pingfreq/2):
-                    server.lastPingSent = int(time.time())
+                for server in (server for server in servers if time.time() - server.ping > pingfreq and time.time() * 1000 - server.lastPingSent > pingfreq/2):
+                    server.lastPingSent = time.time() * 1000
+                    #server.lag_measure = server.lastPingSent
                     try:
                         server._send(':{} PING {} {}'.format(localServer.sid, localServer.hostname, server.hostname))
                     except OSError as ex:

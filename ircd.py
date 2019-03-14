@@ -244,6 +244,7 @@ class Server:
             return
 
         if serverLink:
+            self.creationtime = int(time.time())
             self.introducedBy = None
             self.uplink = None
             self.introducedTo = []
@@ -260,7 +261,9 @@ class Server:
             self.name = ''
             self.hostname = ''
             self.ping = int(time.time())
-            self.lastPingSent = int(time.time())
+            self.lastPingSent = time.time() * 1000
+            #self.lag_measure = self.lastPingSent
+            self.lag = int((time.time() * 1000) - self.lastPingSent)
             self.origin = origin
             self.localServer = origin
             self.localServer.servers.append(self)
@@ -327,8 +330,8 @@ class Server:
                 if not recv:
                     self.recvbuffer = ''
                     continue
-                if self.eos:
-                    self.ping = time.time()
+                #if self.eos:
+                #    self.ping = time.time()
                 raw = ' '.join(recv)
                 command = recv[0].lower()
                 prefix = command[:1]

@@ -2,12 +2,13 @@
 # -*- coding: utf-8 -*-
 
 """
-extbans ~country and ~isp, requires m_extbans to be loaded
+extbans ~C (country) and ~i (ISP), requires m_extbans to be loaded
 """
 
 import ircd
 import json
-import requests
+#import requests ### This module will increase the RAM usage by ~10MB. Ain't that a hoot.
+import urllib.request
 import logging
 import time
 import re
@@ -18,7 +19,7 @@ from handle.functions import match
 trace_bans = 'Ci'
 for e in trace_bans:
     if e in ext_bans:
-        logging.error('Unable to load m_trace: conflicting with existing extban')
+        logging.error('m_trace: "{}" conflicting with existing extban'.format(e))
 
 @ircd.Modules.hooks.local_connect()
 def connect_hook(self, localServer):
@@ -26,9 +27,10 @@ def connect_hook(self, localServer):
         localServer.geodata = {} ### Store info with IP.
     if self.ip not in localServer.geodata:
         url = 'https://extreme-ip-lookup.com/json/'+self.ip
-        response = requests.get(url)
-        json_res = response.json()
-        localServer.geodata[self.ip] = json_res
+        #url = 'http://ip-api.com/json/'+self.ip
+        with urllib.request.urlopen(url) as response:
+            json_res = json.load(response)
+            localServer.geodata[self.ip] = json_res
 
 @ircd.Modules.support(('EXTBAN='+prefix+','+trace_bans, True)) ### (support string, boolean if support must be sent to other servers)
 @ircd.Modules.hooks.pre_local_chanmode()

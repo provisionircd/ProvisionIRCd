@@ -89,7 +89,6 @@ def selfIntroduction(localServer, newServer, outgoing=False):
             for row in localServer.server_support:
                 value = localServer.support[row]
                 info.append('{}{}'.format(row, '={}'.format(value) if value else ''))
-
             newServer._send(':{} PROTOCTL EAUTH={} SID={} {}'.format(localServer.sid, localServer.hostname, localServer.sid, ' '.join(info)))
             newServer._send(':{} PROTOCTL NOQUIT NICKv2 CLK SJOIN SJOIN2 UMODE2 VL SJ3 TKLEXT TKLEXT2 NICKIP ESVID EXTSWHOIS'.format(localServer.sid))
             version = 'P{}-{}'.format(localServer.versionnumber.replace('.', ''), localServer.sid)
@@ -103,7 +102,6 @@ def selfIntroduction(localServer, newServer, outgoing=False):
                 modlist.append(entry)
             if modlist:
                 newServer._send('MODLIST :{}'.format(' '.join(modlist)))
-
             newServer._send('SERVER {} 1 :{} {}'.format(localServer.hostname, version, localServer.name))
             logging.info('{}Introduced myself to {}. Expecting remote sync sequence...{}'.format(Y, newServer.hostname, W))
         localServer.introducedTo.append(newServer)
@@ -147,7 +145,6 @@ def syncData(localServer, newServer, selfRequest=True, local_only=False):
         syncUsers(localServer, newServer, local_only=local_only)
     if localServer.channels:
         syncChannels(localServer, newServer)
-
     try:
         for type in localServer.tkl:
             for entry in localServer.tkl[type]:
@@ -175,7 +172,7 @@ def syncData(localServer, newServer, selfRequest=True, local_only=False):
     if newServer not in localServer.syncDone:
         cloakhash = localServer.conf['settings']['cloak-key']
         cloakhash = hashlib.md5(cloakhash.encode('utf-8')).hexdigest()
-        data = ':{} NETINFO {} {} {} MD5:{} 0 0 0 :{}'.format(localServer.sid, localServer.maxgusers, int(time.time()), localServer.versionnumber.replace('.', ''), cloakhash, localServer.name)
+        data = ':{} NETINFO {} {} {} MD5:{} {} 0 0 :{}'.format(localServer.sid, localServer.maxgusers, int(time.time()), localServer.versionnumber.replace('.', ''), cloakhash, localServer.creationtime, localServer.name)
         newServer._send(data)
         localServer.syncDone.append(newServer)
 
@@ -183,7 +180,6 @@ def syncData(localServer, newServer, selfRequest=True, local_only=False):
         newServer._send(':{} PONG {} {}'.format(localServer.sid, newServer.hostname, localServer.hostname))
     else:
         newServer._send(':{} PING {} {}'.format(localServer.sid, localServer.hostname, newServer.hostname))
-
     return
 
 class Link(threading.Thread):

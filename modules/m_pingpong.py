@@ -49,3 +49,4 @@ def pong(self, localServer, recv):
         ### Received: :test.provisionweb.org PONG test.provisionweb.org :services.dev.provisionweb.org
         source = list(filter(lambda s: s.sid == recv[0][1:] or s.hostname == recv[0][1:], localServer.servers))[0]
         source.ping = int(time.time())
+    self.lag = int((time.time() * 1000) - self.lastPingSent)

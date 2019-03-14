@@ -46,20 +46,20 @@ class blacklist_check(threading.Thread):
     def run(self):
         user = self.user
         blacklist = self.blacklist
-        if user.ip not in user.server.dnsblCache:
-            try:
-                result = socket.gethostbyname(RevIP(user.ip)+ '.' + blacklist)
-                reason = 'Your IP is blacklisted by {}'.format(blacklist)
-                if user.ip not in user.server.dnsblCache:
-                    user.server.dnsblCache[user.ip] = {}
-                    user.server.dnsblCache[user.ip]['bl'] = blacklist
-                    user.server.dnsblCache[user.ip]['ctime'] = int(time.time())
-                user._send(':{} 304 * :{}'.format(user.server.hostname, reason))
+        try:
+            result = socket.gethostbyname(RevIP(user.ip)+ '.' + blacklist)
+            reason = 'Your IP is blacklisted by {}'.format(blacklist)
+            if user.ip not in user.server.dnsblCache:
+                user.server.dnsblCache[user.ip] = {}
+                user.server.dnsblCache[user.ip]['bl'] = blacklist
+                user.server.dnsblCache[user.ip]['ctime'] = int(time.time())
                 msg = '*** DNSBL match for IP {}: {} [nick: {}]'.format(user.ip, blacklist, user.nickname)
                 user.server.snotice('d', msg)
-                user.quit(reason)
-            except:
-                pass
+            if user in user.server.users:
+                user._send(':{} 304 * :{}'.format(user.server.hostname, reason))
+            user.quit(reason)
+        except:
+            pass
 
 def DNSBLCheck(self):
     user = self
@@ -76,8 +76,9 @@ def DNSBLCheck(self):
         return
 
     for x in [x for x in localServer.conf['dnsbl']['list'] if '.' in x]:
-        b = blacklist_check(user, x)
-        b.start()
+        if user in user.server.users:
+            b = blacklist_check(user, x)
+            b.start()
 
 class User:
     def __init__(self, server, sock=None, address=None, is_ssl=None, serverClass=None, params=None):
@@ -158,7 +159,8 @@ class User:
                     self.uid = '{}{}'.format(self.server.sid, ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(6)))
 
                 self.ping = int(time.time())
-                self.lastPingSent = int(time.time())
+                self.lastPingSent = time.time() * 1000
+                self.lag_measure = self.lastPingSent
                 self.server.users.append(self)
                 self.recvbuffer = ''
                 self.validping = False
@@ -600,6 +602,12 @@ class User:
             if banmsg:
                 localServer.notice(self, '*** You are banned from this server: {}'.format(banmsg))
 
+            if int(time.time()) - self.signon < 300:
+                reason = str(localServer.conf['settings']['quitprefix']).strip()
+                if reason.endswith(':'):
+                    reason = reason[:-1]
+                reason += ': '+self.nickname
+
             if error and self.socket and reason:
                 self._send('ERROR :Closing link: [{}] ({})'.format(self.hostname, reason))
 
@@ -642,6 +650,7 @@ class User:
                 channel.usermodes.pop(self)
                 if len(channel.users) == 0 and 'P' not in channel.modes:
                     localServer.channels.remove(channel)
+                    channel.msg_backlog = []
                 self.channels.remove(channel)
 
             watch_notify_offline = [user for user in localServer.users if self.nickname.lower() in [x.lower() for x in user.watchlist]]

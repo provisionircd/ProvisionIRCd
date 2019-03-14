@@ -9,7 +9,7 @@ import ircd
 import os
 import sys
 
-from handle.functions import match, _print
+from handle.functions import match, logging
 
 @ircd.Modules.support('WHOX')
 @ircd.Modules.commands('who')
@@ -121,7 +121,4 @@ def who(self, localServer, recv):
             self.sendraw(352, '{} {} {} {} {} {}{} :{} {}'.format(chan, user.ident, user.cloakhost, localServer.hostname, user.nickname, away, modes, hopcount, user.realname))
         self.sendraw(315, '* :End of /WHO list.')
     except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        _print(e, server=localServer)
+        logging.exception(ex)

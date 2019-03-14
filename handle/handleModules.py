@@ -32,8 +32,6 @@ def ListModules(self):
     return modules
 
 def LoadModules(self):
-    #_print('LoadModules() called', server=self)
-    ### Loading modules from config file
     mods = ListModules(self)
     for m in [m for m in self.conf['modules'] if m in mods]:
         LoadModule(self, m, mods[m])
@@ -68,9 +66,8 @@ def HookToCore(self, callables):
                 if hasattr(callable, "req_class"):
                     req_class = callable.req_class
                 info = (cmd, callable, params, req_modes, req_flags, req_class, module)
-                #print('Adding cmd: {}'.format(info))
                 self.commands.append(info) ### (cmd, callable, params, req_modes, req_flags, req_class, module)
-                #_print('Hooked command "{}" (params: {}, req_modes: {}, req_flags: {}, req_class: {}) to function {}'.format(cmd, params, req_modes, req_flags, req_class, callable), server=self)
+                #logging.info('Hooked command "{}" (params: {}, req_modes: {}, req_flags: {}, req_class: {}) to function {}'.format(cmd, params, req_modes, req_flags, req_class, callable))
 
         hooks = []
         for callable in [callable for callable in channel_modes if callable not in hooks]:
@@ -96,9 +93,9 @@ def HookToCore(self, callables):
                     continue
                 level = int(level)
                 for m in mode:
-                    if (cls and cls.lower() == 'user' and m in self.chstatus) or (not type and m in self.chmodes):
-                        ### Found conflicting channel user-mode. Skipping.
-                        logging.warning('Channel (user)-mode {} already exists.'.format(m))
+                    if m in self.chstatus or m in self.chmodes_string:
+                        ### Found conflicting channel mode. Skipping.
+                        logging.error('Channel mode {} already exists.'.format(m))
                         continue
                     if cls and cls.lower() == 'user':
                         self.chstatus += m[0]
@@ -140,7 +137,7 @@ def HookToCore(self, callables):
                 level = umode[1]
                 desc = umode[2]
                 self.user_modes[mode] = (level, desc)
-                #_print('Hooked user mode {} to core (level: {}, desc: {})'.format(mode, level, desc), server=self)
+                #logging.info('Hooked user mode {} to core (level: {}, desc: {})'.format(mode, level, desc))
 
         ### This does not really needed to be "hooked" here. Just loop over the callables to check if there's an event.
         ### callables, channel_modes, user_modes, events, req_modes, req_flags, req_class, commands, params, module
@@ -152,7 +149,7 @@ def HookToCore(self, callables):
                 info = (event, callable, module)
                 if info not in self.events:
                     self.events.append(info)
-                    #_print('Hooked event {} to core'.format(info), server=self)
+                    #logging.info('Hooked event {} to core'.format(info))
 
         hooks = []
         for callable in [callable for callable in module_hooks if callable not in hooks]:
@@ -177,11 +174,10 @@ def LoadModule(self, name, path):
             self.modules[module] = callables
             name = module.__name__
             update_support(self)
-            #_print('Loaded {}'.format(name), server=self)
+            #logging.info('Loaded {}'.format(name))
     except Exception as ex:
         logging.exception(ex)
-        e = 'Unable to load module {}: {}'.format(name, exc_obj)
-        _print(e, server=self)
+        UnloadModule(self, name)
 
 def UnloadModule(self, name):
     try:
@@ -206,11 +202,10 @@ def UnloadModule(self, name):
                         if hasattr(function, "req_class"):
                             req_class = function.req_class
                         info = (cmd, function, params, req_modes, req_flags, req_class, module)
-                        #print('Removing cmd: {}'.format(info))
                         try:
                             self.commands.remove(info)
                         except ValueError:
-                            _print('REMOVE ERROR: Callable {} not found in commands list.'.format(cmd), server=self)
+                            logging.error('Callable {} not found in commands list.'.format(cmd))
 
                 for function in [function for function in self.modules[module][1] if hasattr(function, 'channel_modes')]:
                     for chmode in list(function.channel_modes):
@@ -235,7 +230,7 @@ def UnloadModule(self, name):
                             if mode in self.channel_modes[type]:
                                 del self.channel_modes[type][mode]
                             else:
-                                _print('REMOVE ERROR: Mode {} from type {} not found in server channel_modes list.'.format(mode, type), server=self)
+                                logging.error('Mode {} from type {} not found in server channel_modes list.'.format(mode, type))
                         update_support(self)
 
                 for function in [function for function in self.modules[module][2] if hasattr(function, 'user_modes')]:
@@ -248,29 +243,28 @@ def UnloadModule(self, name):
                         info = (event, function, module)
                         function.events.remove(event)
                         if info in self.events:
-                            #_print('Removed event {}'.format(info), server=self)
+                            #logging.info('Removed event {}'.format(info))
                             self.events.remove(info)
                         else:
-                            _print('REMOVE ERROR: Unable to remove event {}: not found in events list'.format(info), server=self)
+                            logging.error('Unable to remove event {}: not found in events list'.format(info))
                 for function in [function for function in self.modules[module][10] if hasattr(function, 'hooks')]:
                     for h in list(function.hooks):
                         info = (h[0], h[1], function, module)
                         function.hooks.remove(h)
                         if info in self.hooks:
-                            _print('Removed {}'.format(info), server=self)
+                            logging.info('Removed {}'.format(info))
                             self.hooks.remove(info)
                         else:
-                            _print('REMOVE ERROR: Unable to remove hook {}: not found in events list'.format(info), server=self)
-
+                            logging.error('Unable to remove hook {}: not found in events list'.format(info))
 
                 ### Leftover events.
                 for e in [e for e in list(self.events) if e[2] == module]:
-                   _print('REMOVE ERROR: Event {} was not properly removed (or added double). Removing now.'.format(e), server=self)
+                   logging.error('Event {} was not properly removed (or added double). Removing now.'.format(e))
                    self.events.remove(e)
 
                 ### Leftover hooks.
                 for h in [h for h in list(self.hooks) if h[2] == module]:
-                   _print('REMOVE ERROR: Hook {} was not properly removed (or added double). Removing now.'.format(h), server=self)
+                   logging.error('Hook {} was not properly removed (or added double). Removing now.'.format(h))
                    self.hooks.remove(h)
 
                 for function in [function for function in self.modules[module][4] if hasattr(function, 'req_modes')]:
@@ -283,10 +277,7 @@ def UnloadModule(self, name):
 
                 del self.modules[module]
     except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        _print(e, server=self)
+        logging.exception(ex)
 
 def FindCallables(module):
     itervalues = dict.values

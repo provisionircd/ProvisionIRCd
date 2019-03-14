@@ -101,6 +101,7 @@ def kick(self, localServer, recv, override=False, sync=True):
 
         if len(channel.users) == 0 and 'P' not in channel.modes:
             localServer.channels.remove(channel)
+            channel.msg_backlog = []
 
         for callable in [callable for callable in localServer.events if callable[0].lower() == hook]:
             try:

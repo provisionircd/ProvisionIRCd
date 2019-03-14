@@ -12,8 +12,8 @@ import sys
 
 chmode = 'S'
 
-### Types: 0 = mask, 1 = require param, 2 = optional param, 3 = no param, 4 = special user channel-mode.
-@ircd.Modules.channel_modes(chmode, 3, 2, 'Strip colors from messages') ### ('mode', type, level, 'Mode description', class 'user' or None, prefix, 'param desc')
+### Types: 0 = mask, 1 = require param, 2 = optional param, 3 = no param
+@ircd.Modules.channel_modes(chmode, 3, 2, 'Strip colors from messages') ### ('mode', type, level, 'Mode description')
 @ircd.Modules.hooks.pre_chanmsg()
 def stripmsg_S(self, localServer, channel, msg):
     if chmode not in channel.modes:

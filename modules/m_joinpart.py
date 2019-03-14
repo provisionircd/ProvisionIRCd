@@ -287,6 +287,7 @@ def part(self, localServer, recv, reason=None):
                 broadcastpart = channel.users+[self]
             if len(channel.users) == 0 and 'P' not in channel.modes:
                 localServer.channels.remove(channel)
+                channel.msg_backlog = []
 
             self.broadcast(broadcastpart, 'PART {} {}'.format(channel.name, reason))
 

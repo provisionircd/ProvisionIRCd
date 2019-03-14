@@ -93,7 +93,7 @@ def checkExpiredBans(localServer):
         for ban in [ban for ban in chan.bans if ban[:2] == '~t']:
             minutes = int(ban.split(':')[1]) * 60
             banset = int(chan.bans[ban]['ctime'])
-            if int(time.time()) > (minutes + banset):
+            if int(time.time()) >= (minutes + banset):
                 remove_bans[chan].append(ban)
     for chan in remove_bans:
         if len(remove_bans[chan]) < 1:
@@ -105,11 +105,10 @@ def checkExpiredBans(localServer):
 @ircd.Modules.support(('EXTBAN='+prefix+','+str(''.join(ext_bans)), True)) ### (support string, boolean if support must be sent to other servers)
 @ircd.Modules.hooks.pre_local_chanmode()
 @ircd.Modules.hooks.pre_remote_chanmode()
-def extbans(self, localServer, channel, modes, params, modebuf, parambuf, paramcount=0):
+def extbans(self, localServer, channel, modes, params, modebuf, parambuf):
     try:
-        #paramcount = 0
+        paramcount = 0
         action = ''
-
         for m in modes:
             if m in '-+':
                 action = m
@@ -120,17 +119,12 @@ def extbans(self, localServer, channel, modes, params, modebuf, parambuf, paramc
                 paramcount += 1
                 continue
             param = params[paramcount]
-            if not param.startswith(prefix) or ':' not in param:
+
+            if not re.findall("(^{}[TtCoa]):(.*)".format(prefix), param):
+                logging.info('Param {} is invalid for {}{}'.format(param, action, m))
                 paramcount += 1
                 continue
-            try:
-                param.split(':')[1][0]
-            except:
-                paramcount += 1
-                continue
-            if param.split(':')[0][1:] not in ext_bans:
-                paramcount += 1
-                continue
+
             logging.info('Param for {}{} set: {}'.format(action, m, param))
 
             try:
