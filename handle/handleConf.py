@@ -18,7 +18,7 @@ except ImportError:
     sys.exit()
 
 import handle.handleModules as Modules
-from handle.functions import _print
+from handle.functions import _print, logging
 
 COMMENT_PREFIX = ('#', ';', '//')
 MULTILINE_START = '/*'
@@ -279,19 +279,18 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
             return
 
         if 'modules' in tempconf:
-            #localServer.events = [] # Uncomment this if you encounter issues with events not getting unhooked.
-            #for m in dict(localServer.modules):
-                #_print('Unloading module {}'.format(m.__name__), server=localServer)
-                #Modules.UnloadModule(localServer, m.__name__)
-            #Modules.LoadCommands(localServer)
+            for m in dict(localServer.modules):
+                #logging.info('Unloading module {}'.format(m.__name__))
+                Modules.UnloadModule(localServer, m.__name__)
             modules = Modules.ListModules(localServer)
-            local_modules = [m.__name__ for m in localServer.modules]
+            #local_modules = [m.__name__ for m in localServer.modules]
+            local_modules = []
             for m in [m for m in modules if m in tempconf['modules'] and m not in local_modules]:
                 #print(m)
                 try:
                     Modules.LoadModule(localServer, m, modules[m])
                 except Exception as ex:
-                    _print('Unable to load module \'{}\': {}'.format(m, ex), server=localServer)
+                    logging.info('Unable to load module \'{}\': {}'.format(m, ex))
                     if rehash:
                         localServer.broadcast([user], 'NOTICE {} :*** [info] -- Unable to load module \'{}\': {}'.format(user.nickname, m, ex))
                     continue
@@ -318,7 +317,7 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
         for e in errors:
             s = 'ERROR: '+e
             if localServer.running:
-                _print('ERROR: '+e, server=localServer)
+                logging.error(e)
             else:
                 print(s)
             if rehash:
@@ -335,7 +334,7 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
                 ip, port = sock.getsockname()
                 currently_listening.append(str(port))
             except Exception as ex:
-                _print(ex, server=localServer)
+                logging.exception(ex)
         for port in tempconf['listen']:
             new_ports.append(port)
 
@@ -347,17 +346,17 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
                 try:
                     localServer.listen_socks[localServer.listenToPort(int(p), 'clients')] = 'clients'
                 except Exception as ex:
-                    _print('Unable to listen on port {}: {}'.format(p, ex), server=localServer)
+                    logging.warning('Unable to listen on port {}: {}'.format(p, ex))
 
             elif 'servers' in set(localServer.conf['listen'][p]['options']):
                 try:
                     localServer.listen_socks[localServer.listenToPort(int(p), 'servers')] = 'servers'
                 except Exception as ex:
-                    _print('Unable to listen on port {}: {}'.format(p, ex), server=localServer)
+                    logging.warning('Unable to listen on port {}: {}'.format(p, ex))
         ### Now close ports.
         for p in [p for p in localServer.listen_socks if str(p.getsockname()[1]) not in new_ports]:
             try:
-                _print('Closing {}'.format(p), server=localServer)
+                logging.info('Closing {}'.format(p))
                 del localServer.listen_socks[p]
                 p.close()
             except Exception as ex:
