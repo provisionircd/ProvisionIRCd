@@ -91,7 +91,7 @@ class data_handler: #(threading.Thread):
                             conn.settimeout(2) ### Look into this.
                             conn_backlog = [user for user in localServer.users if user.socket and not user.registered]
                             logging.info('Accepting client on {} -- fd: {}, with IP {}'.format(s, conn.fileno(), addr[0]))
-                            if len(conn_backlog) > 10:
+                            if len(conn_backlog) > 100:
                                 logging.warning('Current connection backlog is >{}, so not allowing any more connections for now. Bye.'.format(len(conn_backlog)))
                                 conn.close()
                                 continue

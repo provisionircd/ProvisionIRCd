@@ -159,12 +159,10 @@ def whowas(self, localServer, recv):
 @ircd.Modules.hooks.remote_quit()
 @ircd.Modules.hooks.local_nickchange()
 @ircd.Modules.hooks.remote_nickchange()
-def savewhowas(*args):
+def savewhowas(self, localServer):
     try:
-        self = args[0]
         if type(self).__name__ == 'Server' or not self.registered:
             return
-        localServer = args[1]
         if not hasattr(localServer, 'whowas'):
             localServer.whowas = {}
         if self.nickname not in localServer.whowas:

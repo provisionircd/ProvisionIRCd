@@ -595,20 +595,20 @@ class User:
                     ### 'quit' event will return a tuple: (success, broadcast)
                     ### broadcast is a list of all users to broadcast to.
                     ### This is useful for modules like m_delayjoin which modifies that list.
-                    success, broadcast = callable[2](self, localServer, reason)
+                    success, broadcast = callable[2](self, localServer)
                 except Exception as ex:
                     logging.exception(ex)
 
             if banmsg:
                 localServer.notice(self, '*** You are banned from this server: {}'.format(banmsg))
 
-            if int(time.time()) - self.signon < 300:
+            if int(time.time()) - self.signon < 300 and self.registered and not error:
                 reason = str(localServer.conf['settings']['quitprefix']).strip()
                 if reason.endswith(':'):
                     reason = reason[:-1]
                 reason += ': '+self.nickname
 
-            if error and self.socket and reason:
+            if self.socket and reason:
                 self._send('ERROR :Closing link: [{}] ({})'.format(self.hostname, reason))
 
             while self.sendbuffer:
@@ -628,7 +628,6 @@ class User:
 
                 if self.socket and reason and not silent:
                     localServer.snotice('c', '*** Client exiting: {} ({}@{}) ({})'.format(self.nickname, self.ident, self.hostname, reason))
-            self.registered = False
 
             for channel in self.channels:
                 if 'j' in channel.modes:
@@ -669,9 +668,11 @@ class User:
             hook = 'local_quit' if self.server == localServer else 'remote_quit'
             for callable in [callable for callable in localServer.hooks if callable[0].lower() == hook]:
                 try:
-                    callable[2](self, localServer, reason)
+                    callable[2](self, localServer)
                 except Exception as ex:
                     logging.exception(ex)
+
+            self.registered = False
             del self
             gc.collect()
             del gc.garbage[:]

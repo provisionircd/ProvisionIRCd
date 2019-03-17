@@ -42,7 +42,6 @@ def quit(self, localServer, recv, showPrefix=True):
     if 'static-quit' in localServer.conf['settings'] and localServer.conf['settings']['static-quit']:
         reason = localServer.conf['settings']['static-quit']
 
-    success = True
     reason = '{}{}'.format(quitprefix+': ' if self.server == localServer and showPrefix else '', reason)
 
-    self.quit(reason, source=source)
+    self.quit(reason, source=source, error=False)

@@ -95,7 +95,7 @@ def hidepart(self, localServer, channel):
         _print(e, server=localServer)
 
 @ircd.Modules.hooks.pre_local_quit()
-def hidequit(self, localServer, reason):
+def hidequit(self, localServer):
     try:
         broadcast = None
         for channel in [channel for channel in self.channels if 'D' in channel.modes]:
