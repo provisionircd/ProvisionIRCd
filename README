@@ -61,5 +61,4 @@ Note: if you want to use Anope, select "unreal40" as the protocol in Anope conf.
 * Channel name casing can be changed with /chgcname <name> <newname>
 
 
-* And many more, but I will not list them all here.
-
+* And many more, but I will not list them all here for now.
