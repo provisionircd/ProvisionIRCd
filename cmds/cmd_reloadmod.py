@@ -54,7 +54,7 @@ def cmd_RELOADMOD(self, localServer, recv):
         if m == 'ircd':
             try:
 
-                self.send('NOTICE', '*** Requesting core reload; also reloading essential handles.', direct=True)
+                self.send('NOTICE', '*** Requesting core reload; also reloading essential handles.')
                 cores = [
                     'classes.user',
                     'handle.handleLink',
@@ -73,7 +73,7 @@ def cmd_RELOADMOD(self, localServer, recv):
                 e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
                 print(e)
         update_support(localServer)
-        self.send('NOTICE', '*** Module \'{}\' reloaded.'.format(recv[1].split('.py')[0]), direct=True)
+        self.send('NOTICE', '*** Module \'{}\' reloaded.'.format(recv[1].split('.py')[0]))
 
     except Exception as ex:
         #exc_type, exc_obj, exc_tb = sys.exc_info()

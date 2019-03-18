@@ -9,3 +9,57 @@ After you editted the confs, simply run ircd.py.
 For anyone interested, there is a live version running on irc.provisionweb.org. (port 6667 plain, 6697 TLS)
 You can oper up with /oper github betatest. Keep in mind that the server may be off-line at any time.
 It is merely a dev/test server meant as a testing environment and the occasional playground.
+
+
+Note: if you want to use Anope, select "unreal40" as the protocol in Anope conf.
+
+
+*** Some special features ***
+
+* IRCv3 support for the following CAPs: account-notify, away-notify, server-time, chghost, echo-message, tls, userhost-in-names, extended-join, backlog* (see below)
+  Yes, multi-prefix is missing since it is hardcoded in the core.
+
+
+* m_extbans for extended bans similar to UnrealIRCd.
+
+  +b ~T text based bans, block or replace a message or word.
+  Example: ~T:replace:xd:xD will replace the retarded 'xd' with 'xD'.
+
+  +b ~t timed bans.
+  Example: ~t:10:<hostmask> will ban a hostmask for 10 minutes.
+
+  +b ~c:#Lamers
+  Prevents users from #Lamers to join your channel.
+
+  +I ~O:operclass
+  Users matching <operclass> may override +i. Wildcards accepted.
+
+  +b/e/I ~a:account
+  Users matching <account> can go through bans (+b), bypass bans (+e) or bypass invite (+I)
+
+
+* m_trace for country and ISP management. It comes with extbans ~C (country) and ~i (ISP).
+
+  To ban or exempt a certain country, you can use +b ~C:country or +e ~C:country.
+  Country must be in full country format (Netherlands) or country code (NL).
+  For example, to ban all Ziggo users, use +b ~i:Ziggo
+  Wildcards are accepted.
+
+
+* You can temporarily give or take channel status by appending ":minutes" after their nickname.
+  For example, to give someone @ status for 1 hour, simply type: /mode #room +o nickname:60
+  The status will be automatically removed after 60 minutes.
+
+
+* "backlog" CAP. With this CAP enabled, you will receive the last 10 channel messages upon joining a channel.
+  This limit is hardcoded, for now. Use with "server-time" CAP to include correct timestamps.
+
+
+* m_callerid (/accept and usermode +g) for server-side 'ignore' system. With usermode +g, only users in your /accept list can private message you.
+
+
+* Channel name casing can be changed with /chgcname <name> <newname>
+
+
+* And many more, but I will not list them all here.
+

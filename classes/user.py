@@ -94,7 +94,6 @@ class User:
             self.svid = '*'
             self.channels = []
             self.modes = ''
-            #self.opermodes = ''
             self.operflags = []
             self.snomasks = ''
             self.swhois = []
@@ -121,6 +120,8 @@ class User:
                 self.addr = address
                 self.ip, self.hostname = self.addr[0], self.addr[0]
                 self.cls = None
+                self.signon = int(time.time())
+                self.registered = False
                 if 'dnsbl' in self.server.conf:
                     #self.sendraw('020', ':Please wait while we process your connection.')
                     dnsbl_except = False
@@ -130,14 +131,11 @@ class User:
                                 dnsbl_except = True
                                 break
                     if not dnsbl_except:
-                        #d = DNSBLCheck(self)
-                        #d.start()
                         DNSBLCheck(self)
+
                 TKL.check(self, self.server, self, 'z')
                 TKL.check(self, self.server, self, 'Z')
 
-                self.registered = False
-                self.signon = int(time.time())
                 throttleTreshhold = int(self.server.conf['settings']['throttle'].split(':')[0])
                 throttleTime = int(self.server.conf['settings']['throttle'].split(':')[1])
                 totalConns = list(filter(lambda u: u.ip == self.ip and int(time.time()) - self.server.throttle[u]['ctime'] <= throttleTime, self.server.throttle))
@@ -271,7 +269,7 @@ class User:
 
                 dont_parse = ['topic', 'swhois']
                 command = recv.split()[0].lower()
-                if command.lower() in dont_parse:
+                if command in dont_parse:
                     parsed = recv.split()
                 else:
                     parsed = self.parse_command(recv)
@@ -338,7 +336,6 @@ class User:
                     if req_flags:
                         for flag in req_flags:
                             if '|' in flag:
-                                ### Either flag is good.
                                 if list(filter(lambda f: f in self.operflags, flag.split('|'))):
                                     forbid = False
                                     break
@@ -370,12 +367,12 @@ class User:
         words = list(filter(None, words))
         return words
 
-    def _send(self, data, direct=False):
+    def _send(self, data):
         if self.socket:
             self.sendbuffer += data + '\r\n'
 
-    def send(self, command, data, direct=False):
-        self._send(':{} {} {} {}'.format(self.server.hostname, command, self.nickname, data), direct=direct)
+    def send(self, command, data):
+        self._send(':{} {} {} {}'.format(self.server.hostname, command, self.nickname, data))
 
     def sendraw(self, numeric, data):
         self.send(str(numeric).rjust(3, '0'), data)
@@ -424,7 +421,6 @@ class User:
                             continue
                         user._send(':{} CHGHOST {} {}'.format(self.fullmask(), info if t == 'ident' else self.ident, info if t == 'host' else self.cloakhost))
                         updated.append(user)
-
             if self.registered:
                 data = ':{} {} {}'.format(self.uid, 'SETHOST' if t == 'host' else 'SETIDENT', self.cloakhost if t == 'host' else self.ident)
                 self.localServer.new_sync(self.localServer, source, data)
@@ -461,7 +457,6 @@ class User:
                 self.quit('Maximum connections for this class reached')
                 return
 
-            #### Check maxperip for the class. Only count local connections.
             clones = list(filter(lambda u: u.registered and u.socket and u.ip == self.ip, self.server.users))
             if len(clones) > int(self.server.conf['allow'][self.cls]['maxperip']):
                 self.quit('Maximum connections from your IP')
@@ -526,7 +521,6 @@ class User:
             self.registered = True
             if self.fingerprint:
                 data = 'MD client {} certfp :{}'.format(self.uid, self.fingerprint)
-                # :irc.foonet.com MD client 001HBEI01 certfp :a6fc0bd6100a776aa3266ed9d5853d6dce563560d8f18869bc7eef811cb2d413
                 self.server.new_sync(self.server, self.server, ':{} {}'.format(self.server.sid, data))
 
             watch_notify = [user for user in self.server.users if self.nickname.lower() in [x.lower() for x in user.watchlist]]
@@ -542,8 +536,6 @@ class User:
         gc.collect()
 
     def __repr__(self):
-        if not hasattr(self, 'server'):
-            self.server.hostname = 'Unknown server hostname'
         return "<User '{}:{}'>".format(self.fullmask(), self.server.hostname)
 
     def fileno(self):
@@ -577,7 +569,7 @@ class User:
         else:
             return 0
 
-    def ocheck(self, mode, flag, data=None):
+    def ocheck(self, mode, flag):
         localServer = self.server if self.socket else self.localServer
         if (mode in self.modes and flag in self.operflags) or self.server.hostname.lower() in set(localServer.conf['settings']['ulines']):
             return True
@@ -689,42 +681,29 @@ class User:
         parsed = self.parse_command(recv)
         command = command.split()[0].lower()
         localServer = self.server if self.socket else self.origin
-        try:
-            cmd = importlib.import_module('cmds.cmd_'+command)
-            if params:
-                getattr(cmd, 'cmd_'+command.upper())(self, localServer, parsed, **params)
-            else:
-                getattr(cmd, 'cmd_'+command.upper())(self, localServer, parsed)
-        except ImportError:
-            for callable in [callable for callable in localServer.commands if callable[0].lower() == command]:
-                ### (cmd, callable, params, req_modes, req_flags, req_class, module)
-                got_params = len(parsed) - 1
-                req_params = callable[2]
-                req_modes = callable[3]
-                req_flags = callable[4]
-                if got_params < req_params:
-                    return self.sendraw(461, ':{} Not enough parameters. Required: {}'.format(command.upper(), req_params))
-
-                ### Check modes.
-                if req_modes:
-                    if 'o' in req_modes and 'o' not in self.modes:
-                        return self.sendraw(481, ':Permission denied - You are not an IRC Operator')
-                    forbid = set(req_modes).difference(set(self.modes))
-                    if forbid:
-                        return self.sendraw(481, ':Permission denied - Required mode not set')
-                ### Check flags.
-                if req_flags:
-                    if '|' in req_flags:
-                        ### Either flag is good.
-                        req_flags = req_flags.split('|') # ['localkill', 'globalkill']
-                    forbid = set(req_flags).difference(set(self.operflags))
-                    if forbid:
-                        return self.sendraw(481, ':Permission denied - You do not have the correct IRC Operator privileges')
-                try:
-                    if params:
-                        callable[1](self, localServer, parsed, **params)
-                    else:
-                        callable[1](self, localServer, parsed)
-
-                except Exception as ex:
-                    logging.exception(ex)
+        for callable in [callable for callable in localServer.commands if callable[0].lower() == command]:
+            got_params = len(parsed) - 1
+            req_params = callable[2]
+            req_modes = callable[3]
+            req_flags = callable[4]
+            if got_params < req_params:
+                return self.sendraw(461, ':{} Not enough parameters. Required: {}'.format(command.upper(), req_params))
+            if req_modes:
+                if 'o' in req_modes and 'o' not in self.modes:
+                    return self.sendraw(481, ':Permission denied - You are not an IRC Operator')
+                forbid = set(req_modes).difference(set(self.modes))
+                if forbid:
+                    return self.sendraw(481, ':Permission denied - Required mode not set')
+            if req_flags:
+                if '|' in req_flags:
+                    req_flags = req_flags.split('|')
+                forbid = set(req_flags).difference(set(self.operflags))
+                if forbid:
+                    return self.sendraw(481, ':Permission denied - You do not have the correct IRC Operator privileges')
+            try:
+                if params:
+                    callable[1](self, localServer, parsed, **params)
+                else:
+                    callable[1](self, localServer, parsed)
+            except Exception as ex:
+                logging.exception(ex)

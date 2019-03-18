@@ -6,24 +6,20 @@
 """
 
 import ircd
-import os
-import sys
 
-from handle.functions import match, _print
+from handle.functions import match, logging
 
 @ircd.Modules.params(2)
 @ircd.Modules.req_modes('o')
-@ircd.Modules.req_flags('localkill|globalkill') ### Either flag will be accepted.
+@ircd.Modules.req_flags('localkill|globalkill')
 @ircd.Modules.commands('kill', 'avadakedavra')
 def kill(self, localServer, recv):
     try:
         if type(self).__name__ == 'Server':
-            ### Servers can override kill any time.
             target = list(filter(lambda u: u.nickname.lower() == recv[2].lower() or u.uid.lower() == recv[2].lower(), localServer.users))
             if not target:
                 return
             quitmsg = ' '.join(recv[3:])[1:]
-            reason = ' '.join(recv[8:])[1:][:-1]
             S = recv[0][1:]
             source = [s for s in localServer.servers+[localServer] if s.sid == S or s.hostname == S]+[u for u in localServer.users if u.uid == S or u.nickname == S]
             if not source:
@@ -36,7 +32,7 @@ def kill(self, localServer, recv):
                 sourceID = source.sid
                 path = source.hostname
             if target[0].socket:
-                target[0].sendraw(304, '{}'.format(':[{}] {}'.format(path, reason)))
+                target[0].sendraw(304, '{}'.format(':[{}] {}'.format(path, quitmsg)))
             data = ':{} KILL {} :{}'.format(sourceID, target[0].uid, quitmsg)
             localServer.new_sync(localServer, self, data)
             target[0].quit(quitmsg, kill=True)
@@ -77,7 +73,4 @@ def kill(self, localServer, recv):
         target[0].quit(quitmsg, kill=True)
 
     except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        _print(e, server=localServer)
+        logging.exception(ex)

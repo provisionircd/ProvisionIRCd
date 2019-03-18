@@ -138,19 +138,6 @@ def write(line, server=None):
     line = line.replace('[34m', '')
     line = line.replace('[35m', '')
     logging.debug(line)
-    return
-    datefile = time.strftime('%Y%m%d')
-    logFile = os.path.abspath(os.path.join(os.path.dirname( __file__ ), '..', 'logs/logs{}.txt'.format(datefile)))
-    logDir = os.path.abspath(os.path.join(logFile, '..'))
-    if not os.path.exists(logDir):
-        os.mkdir(logDir)
-    date = time.strftime('%Y/%m/%d %H:%M:%S')
-    try:
-        target = open(logFile, 'a+')
-        target.write(date+' -> {}{}\n'.format(server.hostname+': ' if server else '', str(line)))
-        target.close
-    except:
-        pass
 
 def match(first, second):
     if not first and not second:
@@ -194,15 +181,13 @@ def checkSpamfilter(self, localServer, target, filterTarget, msg):
                 reason = entry
                 if 'reason' in localServer.conf['spamfilter'][entry] and len(localServer.conf['spamfilter'][entry]['reason']) > 0:
                     reason = localServer.conf['spamfilter'][entry]['reason']
-                ### We have a spamfilter match.
                 if action == 'block':
                     self.sendraw(404, '{} :Spamfilter match: {}'.format(target, reason))
                     return True
                 elif action == 'kill':
-                    localServer.handle('kill', ':{} {} :Spamfilter match: {}'.format(localServer.sid, self.nickname, reason))
+                    localServer.handle('kill', '{} :Spamfilter match: {}'.format(self.nickname, reason))
 
                 elif action == 'gzline':
-                    ### Check duration.
                     duration = localServer.conf['spamfilter'][entry]['duration']
                     duration = valid_expire(duration)
                     data = '+ Z * {} {} {} {} :{}'.format(self.ip, localServer.hostname, str(int(time.time()) + duration), int(time.time()), 'Spamfilter match: {}'.format(reason))

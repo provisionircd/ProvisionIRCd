@@ -54,13 +54,8 @@ def exit_handler():
         sys.exit()
 
 W = '\033[0m'  # white (normal)
-R = '\033[31m' # red
 R2 = '\033[91m' # bright red
-G = '\033[32m' # green
-G2 = '\033[92m' # bright green
-Y = '\033[33m' # yellow
 B = '\033[34m' # blue
-P = '\033[35m' # purple
 
 class Channel:
     def __init__(self, name, params=None):
@@ -80,7 +75,6 @@ class Channel:
             self.bans = OrderedDict({})
             self.excepts = OrderedDict({})
             self.invex = OrderedDict({})
-
             self.temp_status = {}
 
     def __repr__(self):
@@ -250,10 +244,8 @@ class Server:
             self.introducedTo = []
             self.sid = None
             self.netinfo = False
-
             self.linkAccept = False
             self.linkpass = None
-
             self.cls = None
             self.socket = sock
             self.is_ssl = is_ssl
@@ -262,7 +254,6 @@ class Server:
             self.hostname = ''
             self.ping = int(time.time())
             self.lastPingSent = time.time() * 1000
-            #self.lag_measure = self.lastPingSent
             self.lag = int((time.time() * 1000) - self.lastPingSent)
             self.origin = origin
             self.localServer = origin
@@ -447,16 +438,13 @@ class Server:
         if self in localServer.servers:
             logging.info('Removing self {}'.format(self))
             localServer.servers.remove(self)
-
         self.recvbuffer = ''
-        #source = self.uplink if self.uplink else self
         logging.info('Source: {}'.format(source))
         if self.uplink:
             logging.info('Server was uplinked to {}'.format(self.uplink))
         reason = reason[1:] if reason.startswith(':') else reason
         if self in localServer.introducedTo:
             localServer.introducedTo.remove(self)
-
         try:
             if self.hostname and self.eos:
                 logging.info('{}Lost connection to remote server {}: {}{}'.format(R, self.hostname, reason, W))
@@ -542,16 +530,11 @@ class Server:
     def handle(self, cmd, data, params=None):
         p = ' '.join([':'+self.sid, cmd.upper(), data]).split()
         try:
-            handle = importlib.import_module('cmds.cmd_'+cmd.lower())
-            getattr(handle, 'cmd_'+cmd.upper())(self, self.localServer, p)
-            return
-        except ImportError:
             for callable in [callable for callable in self.localServer.commands if callable[0].lower() == cmd.lower()]:
                 if params:
                     callable[1](self, self.localServer, p, **params)
                 else:
                     callable[1](self, self.localServer, p)
-
         except Exception as ex:
             logging.exception(ex)
 
