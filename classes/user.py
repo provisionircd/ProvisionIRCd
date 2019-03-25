@@ -223,10 +223,10 @@ class User:
                         self.ip = Base64toIP(params[12])
                     else:
                         self.ip = params[12]
-                    TKL.check(self, self.origin, self, 'Z')
-                    TKL.check(self, self.origin, self, 'G')
                     self.realname = ' '.join(params[13:])[1:]
                     self.registered = True
+                    TKL.check(self, self.origin, self, 'Z')
+                    TKL.check(self, self.origin, self, 'G')
                     if len(self.origin.users) > self.origin.maxgusers:
                         self.origin.maxgusers = len(self.origin.users)
 
@@ -406,10 +406,6 @@ class User:
             for c in str(info):
                 if c.lower() not in valid:
                     info = info.replace(c, '')
-            if t == 'host' and info:
-                self.cloakhost = info
-            elif t == 'ident' and info:
-                self.ident = info
             if not info:
                 return
             updated = []
@@ -421,9 +417,12 @@ class User:
                             continue
                         user._send(':{} CHGHOST {} {}'.format(self.fullmask(), info if t == 'ident' else self.ident, info if t == 'host' else self.cloakhost))
                         updated.append(user)
-            if self.registered:
-                data = ':{} {} {}'.format(self.uid, 'SETHOST' if t == 'host' else 'SETIDENT', self.cloakhost if t == 'host' else self.ident)
+                data = ':{} {} {}'.format(self.uid, 'SETHOST' if t == 'host' else 'SETIDENT', info)
                 self.localServer.new_sync(self.localServer, source, data)
+            if t == 'host':
+                self.cloakhost = info
+            elif t == 'ident':
+                self.ident = info
         except Exception as ex:
             logging.exception(ex)
 
@@ -594,7 +593,7 @@ class User:
             if banmsg:
                 localServer.notice(self, '*** You are banned from this server: {}'.format(banmsg))
 
-            if int(time.time()) - self.signon < 300 and self.registered and not error:
+            if int(time.time()) - self.signon < 300 and self.registered and not error and self.socket:
                 reason = str(localServer.conf['settings']['quitprefix']).strip()
                 if reason.endswith(':'):
                     reason = reason[:-1]
