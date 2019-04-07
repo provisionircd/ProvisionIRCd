@@ -108,7 +108,6 @@ def checkExpiredBans(localServer):
 def extbans(self, localServer, channel, modes, params, modebuf, parambuf):
     try:
         paramcount = 0
-        action = ''
         for m in modes:
             if m in '-+':
                 action = m
@@ -121,7 +120,7 @@ def extbans(self, localServer, channel, modes, params, modebuf, parambuf):
             param = params[paramcount]
 
             if not re.findall("(^{}[TtCoa]):(.*)".format(prefix), param):
-                logging.info('Param {} is invalid for {}{}'.format(param, action, m))
+                #logging.info('Param {} is invalid for {}{}'.format(param, action, m))
                 paramcount += 1
                 continue
 

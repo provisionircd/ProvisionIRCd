@@ -118,18 +118,14 @@ def mode_del(channel, mode):
 @ircd.Modules.channel_modes('f', 2, 3, 'Set flood protection for your channel', None, None, '[params]') ### ('mode', type, level, 'Mode description', class 'user' or None, prefix, 'param desc')
 @ircd.Modules.hooks.pre_local_chanmode()
 @ircd.Modules.hooks.pre_remote_chanmode()
-def addmode(self, localServer, channel, modes, params, modebuf, parambuf, paramcount=0):
+def addmode(self, localServer, channel, modes, params, modebuf, parambuf):
     try:
         floodTypes = 'jm'
         tempparam = []
-        #paramcount = 0
-        action = ''
+        paramcount = 0
         for m in modes:
             if m in '+-':
                 action = m
-                if not modebuf and m == '+':
-                    modebuf.append(m)
-                continue
             if m != 'f' and m in localServer.parammodes and m not in '+-':
                 paramcount += 1
                 continue

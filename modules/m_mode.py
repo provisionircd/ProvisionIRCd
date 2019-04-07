@@ -140,12 +140,25 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                 continue
             if m in '+-' and action != m:
                 action = m
+                logging.debug('Action set: {}'.format(action))
+                if action != prevaction:
+                    modebuf.append(action)
+                prevaction = action
                 continue
             if not action:
                 action = '+'
-            if m not in '+-' and action != prevaction and ( (m in chmodes or m in localServer.chstatus) or (action == '-' and m in channel.modes) ):
+                logging.debug('No action found, defaulting to +')
+
+            for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_'+hook]:
+                try:
+                    callable[2](self, localServer, channel, recv[1], recv[2:], modebuf, parambuf)
+                except Exception as ex:
+                    logging.exception(ex)
+
+            if m not in '+-' and action != prevaction and ( (m in chmodes or m in localServer.chstatus) or (action in '+-' and m in channel.modes) ):
                 modebuf.append(action)
                 prevaction = action
+                logging.debug('Modebuf now: {}'.format(modebuf))
 
             if m not in localServer.chstatus and m not in '+-':
                 if self.chlevel(channel) < modeLevel[m] and not self.ocheck('o', 'override'):
@@ -371,15 +384,16 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         channel.temp_status[user][m]['action'] = '+'
                     continue
 
-        if not modebuf:
+        #for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_'+hook]:
+        #    try:
+        #        callable[2](self, localServer, channel, recv[1], recv[2:], modebuf, parambuf, action)
+        #    except Exception as ex:
+        #        logging.exception(ex)
+
+        if not re.sub('[+-]', '', ''.join(modebuf)):
             return
-
-        for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_'+hook]:
-            try:
-                callable[2](self, localServer, channel, recv[1], recv[2:], modebuf, parambuf)
-            except Exception as ex:
-                logging.exception(ex)
-
+        while modebuf[-1] in '+-':
+            modebuf = modebuf[:-1]
         if channel.name[0] == '&':
             sync = False
         modes = ''.join(modebuf)
@@ -398,6 +412,8 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                     thook = 'modechar_add'
                 elif action == '-':
                     thook = 'modechar_del'
+                else:
+                    continue
                 for callable in [callable for callable in localServer.hooks if callable[0].lower() == thook]:
                     try:
                         callable[2](channel, m)

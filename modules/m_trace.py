@@ -35,9 +35,9 @@ def connect_hook(self, localServer):
 @ircd.Modules.support(('EXTBAN='+prefix+','+trace_bans, True)) ### (support string, boolean if support must be sent to other servers)
 @ircd.Modules.hooks.pre_local_chanmode()
 @ircd.Modules.hooks.pre_remote_chanmode()
-def extbans(self, localServer, channel, modes, params, modebuf, parambuf, paramcount=0):
+def extbans(self, localServer, channel, modes, params, modebuf, parambuf):
     try:
-        action = ''
+        paramcount = 0
         for m in modes:
             if m in '-+':
                 action = m
@@ -56,7 +56,7 @@ def extbans(self, localServer, channel, modes, params, modebuf, parambuf, paramc
             traceban_check = re.findall("^("+r_string+"):(.*)", param)
             if not traceban_check or not traceban_check[0][1]:
                 paramcount += 1
-                logging.info('Param {} is invalid for {}{}'.format(param, action, m))
+                #logging.info('Param {} is invalid for {}{}'.format(param, action, m))
                 continue
 
             logging.info('Param for {}{} set: {}'.format(action, m, param))
