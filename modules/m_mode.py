@@ -136,29 +136,34 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         logging.warning('Received param mode {}{} without param'.format(action, m))
                         continue
 
-            if m == 'r' and type(self).__name__ != 'Server':
-                continue
             if m in '+-' and action != m:
                 action = m
-                logging.debug('Action set: {}'.format(action))
+                #logging.debug('Action set: {}'.format(action))
                 if action != prevaction:
                     modebuf.append(action)
                 prevaction = action
                 continue
+
             if not action:
                 action = '+'
-                logging.debug('No action found, defaulting to +')
 
-            for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_'+hook]:
-                try:
-                    callable[2](self, localServer, channel, recv[1], recv[2:], modebuf, parambuf)
-                except Exception as ex:
-                    logging.exception(ex)
+            if modeLevel[m] == 6 and (type(self).__name__ != 'Server' and 'o' not in self.modes):
+                continue
+
+            if modeLevel[m] == 7 and type(self).__name__ != 'Server':
+                continue
 
             if m not in '+-' and action != prevaction and ( (m in chmodes or m in localServer.chstatus) or (action in '+-' and m in channel.modes) ):
                 modebuf.append(action)
                 prevaction = action
-                logging.debug('Modebuf now: {}'.format(modebuf))
+
+            if m not in localServer.core_chmodes:
+                ### Core modes (except for +beI) should not be checked against modules.
+                for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_'+hook]:
+                    try:
+                        callable[2](self, localServer, channel, recv[1], recv[2:], modebuf, parambuf)
+                    except Exception as ex:
+                        logging.exception(ex)
 
             if m not in localServer.chstatus and m not in '+-':
                 if self.chlevel(channel) < modeLevel[m] and not self.ocheck('o', 'override'):

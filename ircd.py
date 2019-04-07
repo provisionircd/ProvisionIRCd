@@ -176,11 +176,15 @@ class Server:
                                 "V": (3, "Invite is not permitted on the channel"),
                                 },
                         }
+                self.core_chmodes = 'vhoaq'
                 chmodes_string = ''
                 for t in self.channel_modes:
                     for m in self.channel_modes[t]:
                         chmodes_string += m
+                        if t > 0:
+                            self.core_chmodes += m
                     chmodes_string += ','
+                logging.info('Core modes set: {}'.format(self.core_chmodes))
                 self.chmodes_string = chmodes_string[:-1]
                 self.snomasks = 'cdfjkostzCFGNQS'
                 self.chstatus = 'yqaohv'
