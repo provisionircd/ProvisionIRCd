@@ -447,7 +447,7 @@ class Server:
             localServer.introducedTo.remove(self)
         try:
             if self.hostname and self.eos:
-                logging.info('{}Lost connection to remote server {}: {}{}'.format(R, self.hostname, reason, W))
+                logging.info('{}Lost connection to remote server {}: {}{}'.format(R2, self.hostname, reason, W))
                 if squit:
                     skip = [self]
                     if self.uplink:
@@ -597,7 +597,7 @@ class Server:
         except Exception as ex:
             exc_type, exc_obj, exc_tb = sys.exc_info()
             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            e = '{}EXCEPTION: {} in file {} line {}: {}{}'.format(R, exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj, W)
+            e = '{}EXCEPTION: {} in file {} line {}: {}{}'.format(R2, exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj, W)
             print(e)
             print('Another instance running?')
             sys.exit()
