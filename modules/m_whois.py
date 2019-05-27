@@ -49,19 +49,32 @@ def whois(self, localServer, recv):
         if 'r' in user.modes:
             self.sendraw(307, '{} :is identified for this nick'.format(user.nickname))
 
-        if 'c' not in user.modes or self.ocheck('o', 'override') or user == self:
+        if 'c' not in user.modes or 'o' in self.modes or user == self:
             if user.channels and user.server.hostname not in localServer.conf['settings']['ulines'] and 'S' not in user.modes:
                 channels = []
                 for channel in user.channels:
+                    visible = 1
+                    for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'visible_in_channel']:
+                        try:
+                            visible = callable[2](self, localServer, user, channel)
+                        except Exception as ex:
+                            logging.exception(ex)
+                        if not visible:
+                            break
+                    if not visible:
+                        continue
+
                     prefix = ''
+                    if visible == 2:
+                        prefix += '?'
                     if '^' in user.modes and not self.ocheck('o', 'stealth'):
                         continue
                     if '^' in user.modes:
                         prefix = '^'
                     if 's' in channel.modes or 'p' in channel.modes:
-                        if (user == self or self.ocheck('o', 'override')) and '!' not in prefix:
+                        if (user == self or 'o' in self.modes) and '!' not in prefix and '?' not in prefix:
                             prefix += '?'
-                    if 'c' in user.modes and (self.ocheck('o', 'override') or user == self) and '?' not in prefix:
+                    if 'c' in user.modes and ('o' in self.modes or user == self) and '?' not in prefix:
                         prefix += '!'
                     if 'q' in channel.usermodes[user]:
                         prefix += '~'
@@ -73,7 +86,7 @@ def whois(self, localServer, recv):
                         prefix += '%'
                     if 'v' in channel.usermodes[user]:
                         prefix += '+'
-                    channels.append('{}{}'.format(prefix,channel.name))
+                    channels.append('{}{}'.format(prefix, channel.name))
                 if channels:
                     self.sendraw(319, '{} :{}'.format(user.nickname, ' '.join(channels)))
 
@@ -100,7 +113,7 @@ def whois(self, localServer, recv):
                 self.sendraw(276, '{} :has client certificate fingerprint {}'.format(user.nickname, user.fingerprint))
 
         ### Read below.
-        if 'H' not in user.modes: # or 'o' in self.modes: ### TODO: only exclude oper-whois on +H. Other swhois should be visible.
+        if 'H' not in user.modes or 'o' in self.modes: ### TODO: only exclude oper-whois on +H. Other swhois should be visible.
             for line in user.swhois:
                 self.sendraw(320, '{} :{}'.format(user.nickname,line))
 

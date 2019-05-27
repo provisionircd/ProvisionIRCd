@@ -34,11 +34,21 @@ def who(self, localServer, recv):
             for m in mask.split(','):
                 if match(m, user.nickname) or match(m, user.ident) or match(m, user.cloakhost) or match(m, user.server.hostname):
                     show = True
-
                 chan_match = list(filter(lambda c: c.name.lower() == m.lower() and user in c.users, localServer.channels))
                 if chan_match:
-                    show = True
                     chan = chan_match[0].name
+                    visible = 1
+                    for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'visible_in_channel']:
+                        try:
+                            visible = callable[2](self, localServer, user, chan_match[0])
+                        except Exception as ex:
+                            logging.exception(ex)
+                        if not visible and user != self:
+                            break
+                    if not visible and user != self:
+                        continue
+                    show = True
+
 
                 ### Now we filter out by flag. Flags have higher piority.
                 if flags:
@@ -95,6 +105,19 @@ def who(self, localServer, recv):
                         continue
                     else:
                         channel = c
+
+                    visible = 1
+                    for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'visible_in_channel']:
+                        try:
+                            visible = callable[2](self, localServer, user, channel)
+                        except Exception as ex:
+                            logging.exception(ex)
+                        if not visible:
+                            break
+                    if not visible and user != self:
+                        channel = None
+                        continue
+
                 if not channel:
                     continue
                 #channel = user.channels[0]

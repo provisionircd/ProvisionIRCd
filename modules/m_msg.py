@@ -18,10 +18,11 @@ maxtargets = 20
 
 @ircd.Modules.support('MAXTARGETS='+str(maxtargets))
 @ircd.Modules.commands('privmsg', 'zegding')
-def privmsg(self, localServer, recv, override=False, safe=False):
+def privmsg(self, localServer, recv, override=False, safe=False): ### Check if safe can be removed.
     try:
         if type(self).__name__ == 'Server':
             sourceServer = self
+            sourceID = self.sid
             override = True
             if self != localServer:
                 S = recv[0][1:]
@@ -52,7 +53,6 @@ def privmsg(self, localServer, recv, override=False, safe=False):
             self.flood_penalty += len(msg) * 100
 
         for target in targets[:maxtargets]:
-            sync = True
             if target[0] not in localServer.chantypes:
                 user = list(filter(lambda u: u.nickname.lower() == target.lower() or u.uid.lower() == target.lower(), localServer.users))
 
@@ -64,13 +64,12 @@ def privmsg(self, localServer, recv, override=False, safe=False):
                 if type(self).__name__ == 'User' and checkSpamfilter(self, localServer, user.nickname, 'private', msg):
                     continue
 
-                if user.server == localServer:
-                    sync = False
-
                 if type(self).__name__ == 'User':
                     for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_usermsg']:
                         try:
-                            msg = callable[2](self, localServer, user, msg)
+                            result = callable[2](self, localServer, user, msg)
+                            if result is not None:
+                                msg = result
                             if not msg:
                                 break
                         except Exception as ex:
@@ -91,9 +90,9 @@ def privmsg(self, localServer, recv, override=False, safe=False):
                         except Exception as ex:
                             logging.exception(ex)
 
-                if sync:
+                if user.server != localServer:
                     data = ':{} PRIVMSG {} :{}'.format(sourceID, user.nickname, msg)
-                    localServer.new_sync(localServer, sourceServer, data)
+                    localServer.new_sync(localServer, sourceServer, data, direct=user.server)
 
             else:
                 channel = [channel for channel in localServer.channels if channel.name.lower() == target.lower()]
@@ -136,22 +135,15 @@ def privmsg(self, localServer, recv, override=False, safe=False):
                     self._send(':{} PRIVMSG {} :{}'.format(self.fullmask(), channel.name, msg))
 
                 self.idle = int(time.time())
-
-
-                while len(channel.msg_backlog) >= 10:
-                    channel.msg_backlog = channel.msg_backlog[1:]
-                data = (self.fullmask(), time.time()*10, msg)
-                channel.msg_backlog.append(data)
-
-                if sync:
-                    localServer.new_sync(localServer, sourceServer, ':{} PRIVMSG {} :{}'.format(sourceID, target, msg))
+                localServer.new_sync(localServer, sourceServer, ':{} PRIVMSG {} :{}'.format(sourceID, target, msg))
 
                 ### Check for module hooks (channel messages).
-                for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'chanmsg']:
-                    try:
-                        callable[2](self, localServer, channel, msg)
-                    except Exception as ex:
-                        logging.exception(ex)
+                if type(self).__name__ == 'User':
+                    for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'chanmsg']:
+                        try:
+                            callable[2](self, localServer, channel, msg)
+                        except Exception as ex:
+                            logging.exception(ex)
 
     except Exception as ex:
         logging.exception(ex)
@@ -191,7 +183,6 @@ def notice(self, localServer, recv, override=False, s_sync=True):
             self.flood_penalty += len(msg) * 100
 
         for target in recv[1].split(',')[:maxtargets]:
-            sync = True
             if target[0] == '$' and sourceServer != localServer:
                 server = list(filter(lambda s: s.hostname.lower() == target[1:].lower(), localServer.servers+[localServer]))[0]
                 if server == localServer:
@@ -206,17 +197,15 @@ def notice(self, localServer, recv, override=False, s_sync=True):
                 if not user:
                     self.sendraw(401, '{} :No such user'.format(target))
                     continue
-
-                if type(self).__name__ == 'User' and checkSpamfilter(self, localServer, user[0].nickname, 'private', msg):
+                user = user[0]
+                if type(self).__name__ == 'User' and checkSpamfilter(self, localServer, user.nickname, 'private', msg):
                     continue
 
-                if user[0].server == localServer:
-                    sync = False
 
-                self.broadcast(user, 'NOTICE {} :{}'.format(user[0].nickname, msg))
-
-                if sync:
-                    localServer.new_sync(localServer, sourceServer, ':{} NOTICE {} :{}'.format(sourceID, target, msg))
+                if user.server != localServer:
+                    localServer.new_sync(localServer, sourceServer, ':{} NOTICE {} :{}'.format(sourceID, target, msg, direct=user.server))
+                else:
+                    self.broadcast([user], 'NOTICE {} :{}'.format(user.nickname, msg))
 
                 if type(self).__name__ == 'User':
                     self.idle = int(time.time())
@@ -245,8 +234,10 @@ def notice(self, localServer, recv, override=False, s_sync=True):
                 if type(self).__name__ == 'User':
                     self.idle = int(time.time())
 
-                if sync and s_sync:
+                if s_sync:
                     localServer.new_sync(localServer, sourceServer, ':{} NOTICE {} :{}'.format(sourceID, target, msg))
+                else:
+                    logging.debug('Not syncing because s_sync: {}'.format(msg))
 
     except Exception as ex:
         logging.exception(ex)

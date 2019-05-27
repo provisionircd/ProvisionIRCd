@@ -9,7 +9,7 @@ import ircd
 import os
 import sys
 
-from handle.functions import _print
+from handle.functions import logging
 
 kicklen = 307
 
@@ -81,43 +81,58 @@ def kick(self, localServer, recv, override=False, sync=True):
         if reason[0] == ':':
             reason = reason[1:]
         reason = reason[:kicklen]
+
+
+        broadcast = list(channel.users)
+        ### Check module hooks for visible_in_channel()
+        for u in broadcast:
+            visible = 1
+            for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'visible_in_channel']:
+                try:
+                    visible = callable[2](u, localServer, user, channel)
+                except Exception as ex:
+                    logging.exception(ex)
+                if not visible:
+                    broadcast.remove(u)
+                    logging.debug('/KICK: User {} is not allowed to see {} on channel {}'.format(u.nickname, user.nickname, channel.name))
+                    break
         success = True
         for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_local_kick']:
             try:
                 success = callable[2](self, localServer, user, channel, reason)
-                if not success:
+                if not success and success is not None:
+                    logging.debug('KICK denied by: {}'.format(callable))
                     break
             except Exception as ex:
-                _print('Exception in module {}: {}'.format(callable[2], ex), server=localServer)
-        if not success:
+                logging.exception(ex)
+        if not success and success is not None:
             return
 
         if oper_override:
             self.server.snotice('s', '*** OperOverride by {} ({}@{}) with KICK {} {} ({})'.format(self.nickname, self.ident, self.hostname, channel.name, user.nickname, reason))
-        self.broadcast(channel.users, 'KICK {} {} :{}'.format(channel.name, user.nickname, reason))
+
+        self.broadcast(broadcast, 'KICK {} {} :{}'.format(channel.name, user.nickname, reason))
         user.channels.remove(channel)
         channel.users.remove(user)
         channel.usermodes.pop(user)
 
         if len(channel.users) == 0 and 'P' not in channel.modes:
             localServer.channels.remove(channel)
-            channel.msg_backlog = []
+            del localServer.chan_params[channel]
+            for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'channel_destroy']:
+                try:
+                    callable[2](self, localServer, channel)
+                except Exception as ex:
+                    logging.exception(ex)
 
         for callable in [callable for callable in localServer.events if callable[0].lower() == hook]:
             try:
-                success = callable[1](self, localServer, user, channel, reason)
-                if not success:
-                    break
+                callable[1](self, localServer, user, channel, reason)
             except Exception as ex:
-                _print('Exception in module {}: {}'.format(callable[2], ex), server=localServer)
-        if not success:
-            return
+                logging.exception(ex)
 
         if sync:
             localServer.new_sync(localServer, sourceServer, ':{} KICK {} {} :{}'.format(sourceID, channel.name, user.nickname, reason))
 
     except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        _print(e, server=localServer)
+       logging.exception(ex)

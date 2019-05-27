@@ -54,7 +54,7 @@ def topic(self, localServer, recv, override=False):
             self.sendraw(332, '{} :{}'.format(channel.name, channel.topic))
             self.sendraw(333, '{} {} {}'.format(channel.name, channel.topic_author, channel.topic_time))
         else:
-            if recv[2] == ':':
+            if recv[2] == ':' and len(recv) < 4:
                 text = ''
             if type(self).__name__ == 'User':
                 recv = self.parse_command(' '.join(recv))

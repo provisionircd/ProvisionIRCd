@@ -35,13 +35,9 @@ def sapart(self, localServer, recv):
         return self.sendraw(441, '{} {} :is not on that channel'.format(target[0].nickname, chan))
 
     channel = channel[0]
+    target[0].handle('part', chan)
 
     snomsg = '*** {} ({}@{}) used SAPART to make {} part {}'.format(self.nickname, self.ident, self.hostname, target[0].nickname, channel.name)
     localServer.snotice('S', snomsg)
-
     msg = '*** Your were forced to part {}.'.format(channel.name)
-
-    #p = {'sapart': self}
-    target[0].handle('part', chan)
-
     localServer.notice(target[0], msg)

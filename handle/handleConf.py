@@ -91,7 +91,6 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
             j = json_preprocess(j)
             tempconf = json.loads(j, object_pairs_hook=collections.OrderedDict)
             tempmods = []
-
         if 'me' not in tempconf:
             conferr('\'me\' block not found!')
 
@@ -253,11 +252,10 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
                                 conferr('\'list\' containing DNSBL\'s missing')
 
                 except Exception as ex:
-                    pass
-                #    exc_type, exc_obj, exc_tb = sys.exc_info()
-                #    fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-                #    e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-                #    conferr(e)
+                    exc_type, exc_obj, exc_tb = sys.exc_info()
+                    fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+                    e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
+                    conferr(ex, err_conf=include)
         if 'opers' in tempconf:
             check_opers(tempconf, err_conf=oper_conf)
         if 'link' in tempconf:
@@ -271,29 +269,34 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
                     localServer.excepts[type].append(entry)
 
         ### Checking optional modules.
-        #localServer.modules = {}
-        #localServer.commands = []
-        #localServer.hooks = []
         if 'modules' not in tempconf:
             conferr('You don\'t seem to have any modules loaded. ProvisionIRCd will not function without them.')
             return
 
         if 'modules' in tempconf:
+            local_modules = [m for m in localServer.modules]
             for m in dict(localServer.modules):
                 #logging.info('Unloading module {}'.format(m.__name__))
                 Modules.UnloadModule(localServer, m.__name__)
             modules = Modules.ListModules(localServer)
-            #local_modules = [m.__name__ for m in localServer.modules]
-            local_modules = []
-            for m in [m for m in modules if m in tempconf['modules'] and m not in local_modules]:
-                #print(m)
+            for m in [m for m in local_modules if m not in tempconf['modules']]:
+                tempconf['modules'].append(m.__name__)
+            for m in [m for m in tempconf['modules'] if not m.startswith('modules.')]:
+                m = 'modules.'+m.replace('/', '.')
                 try:
-                    Modules.LoadModule(localServer, m, modules[m])
+                    reload = 1 if m in [mod.__name__ for mod in local_modules] else 0
+                    module = [mod for mod in local_modules if mod.__name__ == m]
+                    if module:
+                        module = module[0]
+                    try:
+                        Modules.LoadModule(localServer, m, modules[m], reload=reload, module=module)
+                    except Exception as ex:
+                        logging.error('Unable to load module \'{}\': {}'.format(m, ex))
+                        if rehash:
+                            localServer.broadcast([user], 'NOTICE {} :*** [info] -- Unable to load module \'{}\': {}'.format(user.nickname, m, ex))
+                        continue
                 except Exception as ex:
-                    logging.info('Unable to load module \'{}\': {}'.format(m, ex))
-                    if rehash:
-                        localServer.broadcast([user], 'NOTICE {} :*** [info] -- Unable to load module \'{}\': {}'.format(user.nickname, m, ex))
-                    continue
+                    logging.exception(ex)
 
     except KeyError as ex:
         exc_type, exc_obj, exc_tb = sys.exc_info()
@@ -356,7 +359,7 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
         ### Now close ports.
         for p in [p for p in localServer.listen_socks if str(p.getsockname()[1]) not in new_ports]:
             try:
-                logging.info('Closing {}'.format(p))
+                logging.info('Closing port {}'.format(p))
                 del localServer.listen_socks[p]
                 p.close()
             except Exception as ex:

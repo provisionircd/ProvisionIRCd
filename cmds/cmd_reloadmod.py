@@ -23,9 +23,9 @@ def cmd_RELOADMOD(self, localServer, recv):
     found_module = None
     if '/' in recv[1]:
         rootpath = recv[1].split('/')[0]
-        modname = recv[1].split('/')[1].split('.py')[0]
+        modname = 'modules.'+recv[1].split('/')[1].split('.py')[0]
         try:
-            modname = '/'.join(recv[1].split('/')[1:])
+            modname = 'modules.'+'.'.join(recv[1].split('/')[1:])
         except:
             pass
         path_string = '{}'.format(rootpath)
@@ -36,15 +36,16 @@ def cmd_RELOADMOD(self, localServer, recv):
         m = recv[1]
     try:
         found_module = [module for module in localServer.modules if module.__name__ == modname]
-        module = importlib.import_module(m)
-        imp.reload(module)
         if modname and rootpath != 'cmds':
             if found_module:
                 module = found_module[0]
                 ### First, unload.
-                Modules.UnloadModule(localServer, modname)
+                result = Modules.UnloadModule(localServer, modname)
+                if type(result) == str:
+                    return self.send('NOTICE', '*** Unable to reload module "{}". Check logs for more information: {}'.format(modname, result))
+
                 ### Then, load.
-                Modules.LoadModule(localServer, modname, module.__file__)
+                Modules.LoadModule(localServer, modname, module.__file__, reload=True, module=module)
             else:
                 ### Module is not yet loaded. Check if it exists.
                 path = '{}/{}.py'.format(p, path_string.replace('.', '/'))

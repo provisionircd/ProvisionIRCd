@@ -14,7 +14,7 @@ from handle.functions import match, logging
 
 nicklen = 33
 
-def init(localServer):
+def init(localServer, reload=False):
     localServer.nickflood = {}
     localServer.nicklen = nicklen
 
@@ -59,10 +59,9 @@ def cmdnick(self, localServer, recv, override=False, sanick=False):
         if sanick:
             override = True
 
-        if self in localServer.nickflood and len(localServer.nickflood[self]) >= int(localServer.conf['settings']['nickflood'].split(':')[0]) and not 'o' not in self.modes and not override:
-            self.flood_penalty += 100000
+        if self in localServer.nickflood and len(localServer.nickflood[self]) >= int(localServer.conf['settings']['nickflood'].split(':')[0]) and 'o' not in self.modes and not override:
+            self.flood_penalty += 150000
             return self.sendraw(438, '{} :Nick change too fast. Please wait a while before attempting again.'.format(nick))
-
 
         inUse =  list(filter(lambda u: u.nickname.lower() == nick.lower(), localServer.users))
         if inUse and nick == self.nickname:
@@ -77,8 +76,7 @@ def cmdnick(self, localServer, recv, override=False, sanick=False):
                 if match(entry.split('@')[1].lower(), nick.lower()):
                     self.sendraw(432, '{} :Erroneous nickname ({})'.format(nick, localServer.tkl['Q'][entry]['reason']))
                     msg = '*** Q:Line Rejection -- Forbidden nick {} from client {} {}'.format(nick, self.ip, '[Current nick: {}]'.format(self.nickname) if self.nickname != '*' else '')
-                    localServer.snotice('Q', msg)
-                    return
+                    return localServer.snotice('Q', msg)
 
         users = [self]
         for channel in self.channels:
@@ -88,6 +86,18 @@ def cmdnick(self, localServer, recv, override=False, sanick=False):
             for user in channel.users:
                 if user not in users and user != self:
                     users.append(user)
+
+            if sourceServer == localServer: ### pre_local_nickchanage
+                success = 1
+                for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_'+hook]:
+                    try:
+                        success = callable[2](self, localServer)
+                        if not success and success is not None: ### None will default to True.
+                            break
+                    except Exception as ex:
+                        logging.exception(ex)
+                if not success:
+                    return
 
         if self.registered:
             if self not in localServer.nickflood:
@@ -104,7 +114,28 @@ def cmdnick(self, localServer, recv, override=False, sanick=False):
                 msg = '*** Your nick has been forcefully changed by  {}.'.format(sanick.nickname)
                 localServer.handle('NOTICE', '{} :{}'.format(self.nickname, msg))
 
-            self.broadcast(users, 'NICK :{}'.format(nick))
+            ### Check module hooks for visible_in_channel()
+            all_broadcast = [self]
+            for channel in self.channels:
+                for user in channel.users:
+                    if user not in all_broadcast and user != self:
+                        all_broadcast.append(user)
+            for u in [u for u in all_broadcast if u != self]:
+                visible = 0
+                for channel in self.channels:
+                    for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'visible_in_channel']:
+                        try:
+                            visible = callable[2](u, localServer, self, channel)
+                            logging.debug('Is {} visible for {} on {}? :: {}'.format(self.nickname, u.nickname, channel.name, visible))
+                        except Exception as ex:
+                            logging.exception(ex)
+                    if visible: ### Break out of the channels loop. No further checks are required.
+                        break
+                if not visible:
+                    logging.debug('User {} is not allowed to see {} on any channel, not sending nickchange.'.format(u.nickname, self.nickname))
+                    all_broadcast.remove(u)
+
+            self.broadcast(all_broadcast, 'NICK :{}'.format(nick))
             localServer.new_sync(localServer, sourceServer, ':{} NICK {} {}'.format(self.uid, nick, int(time.time())))
 
             watch_notify_offline = [user for user in localServer.users if self.nickname.lower() in [x.lower() for x in user.watchlist]]

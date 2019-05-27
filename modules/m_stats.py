@@ -21,7 +21,7 @@ except ImportError:
 #import objgraph
 from handle.functions import is_sslport
 
-stats = 'dpuCGO'
+stats = 'depuCGO'
 
 @ircd.Modules.req_modes('o')
 @ircd.Modules.req_flags('stats')
@@ -31,6 +31,7 @@ def show_stats(self, localServer, recv):
         if len(recv) == 1:
             self.sendraw(210, ':/Stats flags:')
             self.sendraw(210, ':d - Displays the local DNSBL cache')
+            self.sendraw(210, ':e - View exceptions list')
             self.sendraw(210, ':p - View open ports and their type')
             self.sendraw(210, ':u - View server uptime')
             self.sendraw(210, ':C - View raw server data and info')
@@ -86,6 +87,11 @@ def show_stats(self, localServer, recv):
             if len(dnsbl) == 128:
                 self.sendraw(210, ':Showing only first 128 entries. Total entries: {}'.format(total_len))
 
+        elif recv[1] == 'e':
+            for t in localServer.excepts:
+                for mask in localServer.excepts[t]:
+                    self.sendraw(223, '{} {}'.format(t, mask))
+
         elif recv[1] == 'p':
             for sock in localServer.listen_socks:
                 ip, port = sock.getsockname()
@@ -97,7 +103,7 @@ def show_stats(self, localServer, recv):
         elif recv[1] == 'G':
             for type in [type for type in localServer.tkl if type in 'GZQ']:
                 for mask in localServer.tkl[type]:
-                    display = mask.split('@')[1] if type == 'Q'  else mask
+                    display = mask.split('@')[1] if type == 'Q' else mask
                     self.sendraw(223, '{} {} {} {} {} :{}'.format(type, display, int(localServer.tkl[type][mask]['expire'])-int(time.time()) if localServer.tkl[type][mask]['expire'] != '0' else '0', localServer.tkl[type][mask]['ctime'], localServer.tkl[type][mask]['setter'], localServer.tkl[type][mask]['reason']))
 
         elif recv[1] == 'O':

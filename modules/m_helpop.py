@@ -15,6 +15,7 @@ from handle.functions import _print
 @ircd.Modules.commands('helpop', 'help', 'ircdhelp', 'hlep', 'hepl')
 def help(self, localServer, recv):
     try:
+        help = 1
         self.sendraw(292, ': -')
         self.sendraw(292, ': §~¤§¤~~¤§¤~~¤§¤~~¤§¤~~¤§¤~~¤§¤~~¤§¤~§')
         self.sendraw(292, ': ~~~~~~~~~ ProvisionIRCd Help ~~~~~~~~~')
@@ -42,6 +43,7 @@ def help(self, localServer, recv):
                 desc = info[1]
                 self.sendraw(292, ': {} = {} ({})'.format(mode, desc, level))
             self.sendraw(292, ': -')
+            return
         elif recv[1].lower() == 'chmodes':
             self.sendraw(292, ': v <nickname> - Give/take voice')
             self.sendraw(292, ': h <nickname> - Give/take halfop status')
@@ -69,6 +71,17 @@ def help(self, localServer, recv):
                 param_desc = None if len(info) != 3 else info[2]
                 self.sendraw(292, ': {}{} = {} [{}]'.format(mode, ' '+param_desc if param_desc else '', desc, level))
             self.sendraw(292, ': -')
+            return
+
+        ### Loop over modules to check if they have a 'helpop' attr.
+        for m in [m for m in localServer.modules if hasattr(m, 'helpop')]:
+            if recv[1].lower() in m.helpop:
+                for line in m.helpop[recv[1].lower()].split('\n'):
+                    self.sendraw(292, ':'+line)
+                self.sendraw(292, ':-')
+                return
+        self.sendraw(292, ':No help available for {}.'.format(recv[1]))
+        self.sendraw(292, ':-')
 
     except Exception as ex:
         exc_type, exc_obj, exc_tb = sys.exc_info()

@@ -18,7 +18,7 @@ import sys
 chantypes = '#+&'
 chanlen = 33
 
-def init(localServer):
+def init(localServer, reload=False):
     ### Other modules also require this information, like /privmsg and /notice
     localServer.chantypes = chantypes
 
@@ -77,6 +77,7 @@ def join(self, localServer, recv, override=False, skipmod=None, sourceServer=Non
             recv = recv[1:]
             override = True
             hook = 'remote_join'
+            logging.warning('Remote JOIN received instead of SJOIN')
         elif not sourceServer:
             sourceServer = self.server
 
@@ -91,7 +92,7 @@ def join(self, localServer, recv, override=False, skipmod=None, sourceServer=Non
             regex = re.compile('\x1d|\x1f|\x02|\x12|\x0f|\x16|\x03(?:\d{1,2}(?:,\d{1,2})?)?', re.UNICODE)
             chan = regex.sub('', chan).strip()
             channel = list(filter(lambda c: c.name.lower() == chan.lower(), localServer.channels))
-            if channel and channel[0] in self.channels or not chan:
+            if channel and self in channel[0].users or not chan:
                 continue
 
             if len(chan) == 1 and not override:
@@ -127,7 +128,6 @@ def join(self, localServer, recv, override=False, skipmod=None, sourceServer=Non
                 new = Channel(chan)
                 localServer.channels.append(new)
                 channel = [new]
-                channel[0].msg_backlog = [] ### For CAP backlog
             channel = channel[0]
 
             invite_override = False
@@ -135,13 +135,10 @@ def join(self, localServer, recv, override=False, skipmod=None, sourceServer=Non
                 invite_override = channel.invites[self]['override']
 
             success = True
-            broadcastjoin = None
             overrides = []
-            for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_local_join' and callable[3] != skipmod]:
+            for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_'+hook and callable[3] != skipmod]:
                 try:
-                    success, temp_broadcastjoin, overrides = callable[2](self, localServer, channel)
-                    if type(temp_broadcastjoin) == list and broadcastjoin is None:
-                        broadcastjoin = temp_broadcastjoin
+                    success, overrides = callable[2](self, localServer, channel)
                     if not success:
                         break
                 except Exception as ex:
@@ -183,22 +180,37 @@ def join(self, localServer, recv, override=False, skipmod=None, sourceServer=Non
                     self.sendraw(473, '{} :Cannot join channel (+i)'.format(channel.name))
                     continue
 
+            if not channel.users:
+                localServer.chan_params[channel] = {}
             if not channel.users and (self.server.eos or self.server == localServer) and channel.name[0] != '+':
                 channel.usermodes[self] = 'o'
             else:
                 channel.usermodes[self] = ''
-
-            if type(broadcastjoin) != list:
-                broadcastjoin = channel.users+[self]
 
             channel.users.append(self)
             self.channels.append(channel)
             if self in channel.invites:
                 del channel.invites[self]
 
-            for user in broadcastjoin:
+            broadcast = list(channel.users)
+            ### Check module hooks for visible_in_channel()
+            for u in [u for u in broadcast if u != self]:
+                visible = 1
+                for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'visible_in_channel']:
+                    try:
+                        visible = callable[2](u, localServer, self, channel)
+                        #logging.debug('/JOIN: Can {} see {} ? :: {}'.format(u, self, visible))
+                    except Exception as ex:
+                        logging.exception(ex)
+                    if not visible:
+                        broadcast.remove(u)
+                        logging.debug('Join of {} hidden from {} in {}'.format(self.nickname, u.nickname, channel.name))
+                        logging.debug('{} returned {}'.format(callable, visible))
+                        break
+
+            for user in broadcast:
                 data = ':{}!{}@{} JOIN {}{}'.format(self.nickname, self.ident, self.cloakhost, channel.name, ' {} :{}'.format(self.svid, self.realname) if 'extended-join' in user.caplist else '')
-                user._send(':{}!{}@{} JOIN {}{}'.format(self.nickname, self.ident, self.cloakhost, channel.name, ' {} :{}'.format(self.svid, self.realname) if 'extended-join' in user.caplist else ''))
+                user._send(data)
 
             if channel.topic_time != 0:
                 self.handle('TOPIC', channel.name)
@@ -208,28 +220,13 @@ def join(self, localServer, recv, override=False, skipmod=None, sourceServer=Non
             for mode in [mode for mode in localServer.chprefix if mode in channel.usermodes[self]]:
                 prefix += localServer.chprefix[mode]
 
-            if channel.name[0] != '&' and broadcastjoin and (sourceServer.eos or sourceServer == localServer):
+            if channel.name[0] != '&' and (sourceServer.eos or sourceServer == localServer):
                 data = ':{} SJOIN {} {}{} :{}{}'.format(sourceServer.sid, channel.creation, channel.name, ' +{}'.format(channel.modes) if channel.modes and channel.users == [self] else '', prefix, self.uid)
                 localServer.new_sync(localServer, sourceServer, data)
 
             if channel.users == [self] and channel.name[0] != '+':
                 sourceServer.handle('MODE', '{} +nt'.format(channel.name))
 
-            if 'backlog' in self.caplist:
-                if channel.msg_backlog:
-                    self._send(':{} PRIVMSG {} :Displaying backlog for #Home'.format(localServer.hostname, channel.name))
-                for entry in channel.msg_backlog:
-                    prefix = ''
-                    timestamp = int(entry[1]/10)
-                    if 'server-time' in self.caplist:
-                        prefix = '@time={}.{}Z '.format(time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(timestamp)), round(entry[1]%1000))
-                    data = '{}:{} PRIVMSG {} :{}'.format(prefix, entry[0], channel.name, entry[2])
-                    self._send(data)
-                if channel.msg_backlog:
-                    self._send(':{} PRIVMSG {} :Done displaying last {} messages.'.format(localServer.hostname, channel.name, len(channel.msg_backlog)))
-
-            success = True
-            broadcastjoin = channel.users+[self]
             for callable in [callable for callable in localServer.hooks if callable[0].lower() == hook and callable[3] != skipmod]:
                 try:
                     callable[2](self, localServer, channel)
@@ -273,25 +270,41 @@ def part(self, localServer, recv, reason=None):
 
             channel = channel[0]
 
-            broadcastpart = channel.users+[self]
-            for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_local_part']:
-                try:
-                    success, broadcastpart = callable[2](self, localServer, channel)
-                except Exception as ex:
-                    logging.exception(ex)
-
             self.channels.remove(channel)
             channel.usermodes.pop(self)
             channel.users.remove(self)
-            if type(broadcastpart) != list:
-                broadcastpart = channel.users+[self]
+
+            broadcast = list(channel.users)+[self]
+            ### Check module hooks for visible_in_channel()
+            for u in [u for u in broadcast if u != self]:
+                visible = 1
+                for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'visible_in_channel']:
+                    try:
+                        visible = callable[2](u, localServer, self, channel)
+                        #logging.debug('/PART: Can {} see {} ? :: {}'.format(u, self, visible))
+                    except Exception as ex:
+                        logging.exception(ex)
+                    if not visible:
+                        broadcast.remove(u)
+                        logging.debug('Part of {} hidden from {} in {}'.format(self.nickname, u.nickname, channel.name))
+                        logging.debug('{} returned {}'.format(callable, visible))
+                        break
+
+            self.broadcast(broadcast, 'PART {} {}'.format(channel.name, reason))
+            for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_local_part']:
+                try:
+                    callable[2](self, localServer, channel)
+                except Exception as ex:
+                    logging.exception(ex)
             if len(channel.users) == 0 and 'P' not in channel.modes:
                 localServer.channels.remove(channel)
-                channel.msg_backlog = []
+                del localServer.chan_params[channel]
+                for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'channel_destroy']:
+                    try:
+                        callable[2](self, localServer, channel)
+                    except Exception as ex:
+                        logging.exception(ex)
 
-            self.broadcast(broadcastpart, 'PART {} {}'.format(channel.name, reason))
-
-            broadcastpart = channel.users+[self]
             for callable in [callable for callable in localServer.hooks if callable[0].lower() == hook]:
                 try:
                     callable[2](self, localServer, channel)

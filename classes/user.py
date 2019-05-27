@@ -180,7 +180,7 @@ class User:
                 elif 'dontresolve' not in self.server.conf['settings'] or ('dontresolve' in self.server.conf['settings'] and not self.server.conf['settings']['dontresolve']):
                     try:
                         self.hostname = socket.gethostbyaddr(self.ip)[0]
-                        self.hostname[1]
+                        self.hostname.split('.')[1]
                         self.server.hostcache[self.ip] = {}
                         self.server.hostcache[self.ip]['host'] = self.hostname
                         self.server.hostcache[self.ip]['ctime'] = int(time.time())
@@ -238,7 +238,7 @@ class User:
                     #self.server.snotice('C', msg)
                 except Exception as ex:
                     logging.exception(ex)
-            logging.info('New user class {} successfully created'.format(self))
+            #logging.info('New user class {} successfully created'.format(self))
             gc.collect()
 
         except Exception as ex:
@@ -254,11 +254,13 @@ class User:
             while self.recvbuffer.find('\n') != -1:
                 recv = self.recvbuffer[:self.recvbuffer.find('\n')]
                 self.recvbuffer = self.recvbuffer[self.recvbuffer.find('\n')+1:]
-                recv = recv.rstrip()
+                recv = recv.rstrip(' \n\r')
                 if not recv:
                     continue
 
                 localServer = self.server
+                command = recv.split()[0].lower()
+
                 self.ping = int(time.time())
 
                 self.flood_penalty += 1500 + len(recv)
@@ -268,9 +270,8 @@ class User:
                     self.flood_penalty_time = int(time.time())
 
                 dont_parse = ['topic', 'swhois']
-                command = recv.split()[0].lower()
                 if command in dont_parse:
-                    parsed = recv.split()
+                    parsed = recv.split(' ')
                 else:
                     parsed = self.parse_command(recv)
 
@@ -574,7 +575,7 @@ class User:
             return True
         return False
 
-    def quit(self, reason, error=True, banmsg=None, kill=False, broadcast=None, silent=False, source=None):
+    def quit(self, reason, error=True, banmsg=None, kill=False, silent=False, source=None):
         try:
             self.recvbuffer = ''
             localServer = self.localServer if not self.socket else self.server
@@ -583,10 +584,7 @@ class User:
                 sourceServer = sourceServer.uplink
             for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_local_quit']:
                 try:
-                    ### 'quit' event will return a tuple: (success, broadcast)
-                    ### broadcast is a list of all users to broadcast to.
-                    ### This is useful for modules like m_delayjoin which modifies that list.
-                    success, broadcast = callable[2](self, localServer)
+                    callable[2](self, localServer)
                 except Exception as ex:
                     logging.exception(ex)
 
@@ -603,7 +601,7 @@ class User:
                 self._send('ERROR :Closing link: [{}] ({})'.format(self.hostname, reason))
 
             while self.sendbuffer:
-                logging.info('User {} has sendbuffer remaining: {}'.format(self, self.sendbuffer.rstrip()))
+                #logging.info('User {} has sendbuffer remaining: {}'.format(self, self.sendbuffer.rstrip()))
                 try:
                     sent = self.socket.send(bytes(self.sendbuffer + '\n', 'utf-8'))
                     self.sendbuffer = self.sendbuffer[sent:]
@@ -620,28 +618,48 @@ class User:
                 if self.socket and reason and not silent:
                     localServer.snotice('c', '*** Client exiting: {} ({}@{}) ({})'.format(self.nickname, self.ident, self.hostname, reason))
 
-            for channel in self.channels:
-                if 'j' in channel.modes:
-                    self.handle('PART', '{}'.format(channel.name))
-                    continue
+            for channel in [channel for channel in self.channels if 'j' in channel.modes]:
+                self.handle('PART', '{}'.format(channel.name))
+                continue
 
-            if type(broadcast) != list: ### This must be checked against type.
-                broadcast = []
-                for channel in self.channels:
-                    for user in channel.users:
-                        if user not in broadcast and user != self:
-                            broadcast.append(user)
+            ### Check module hooks for visible_in_channel()
+            all_broadcast = [self]
+            for channel in self.channels:
+                for user in channel.users:
+                    if user not in all_broadcast and user != self:
+                        all_broadcast.append(user)
+            inv_checked = 0
+            for u in [u for u in all_broadcast if u != self]:
+                visible = 0
+                for channel in [chan for chan in self.channels if not visible]:
+                    for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'visible_in_channel']:
+                        try:
+                            visible = callable[2](u, localServer, self, channel)
+                            inv_checked = 1
+                            #logging.debug('Is {} visible for {} on {}? :: {}'.format(self.nickname, u.nickname, channel.name, visible))
+                        except Exception as ex:
+                            logging.exception(ex)
+                    if visible: ### Break out of the channels loop. No further checks are required.
+                        break
+                if not visible and inv_checked:
+                    logging.debug('User {} is not allowed to see {} on any channel, not sending quit.'.format(u.nickname, self.nickname))
+                    all_broadcast.remove(u)
 
             if self.nickname != '*' and self.ident != '' and reason:
-                self.broadcast(broadcast, 'QUIT :{}'.format(reason))
+                self.broadcast(all_broadcast, 'QUIT :{}'.format(reason))
 
             for channel in list(self.channels):
                 channel.users.remove(self)
                 channel.usermodes.pop(self)
+                self.channels.remove(channel)
                 if len(channel.users) == 0 and 'P' not in channel.modes:
                     localServer.channels.remove(channel)
-                    channel.msg_backlog = []
-                self.channels.remove(channel)
+                    del localServer.chan_params[channel]
+                    for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'channel_destroy']:
+                        try:
+                            callable[2](self, localServer, channel)
+                        except Exception as ex:
+                            logging.exception(ex)
 
             watch_notify_offline = [user for user in localServer.users if self.nickname.lower() in [x.lower() for x in user.watchlist]]
             for user in watch_notify_offline:

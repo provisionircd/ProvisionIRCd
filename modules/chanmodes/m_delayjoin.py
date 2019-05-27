@@ -6,210 +6,212 @@ provides chmode +D (delay join)
 """
 
 import ircd
-import threading
 import os
 import sys
 
 chmode = 'D'
 
-from handle.functions import _print
+from handle.functions import logging
 
-parts_showed = {}
-joins_showed = {}
+can_see = {}
+
+@ircd.Modules.req_modes('o')
+@ircd.Modules.commands('delaydebug')
+def debug(self, localServer, recv):
+    global can_see
+    chan = '#Home'
+    chan_class = [c for c in localServer.channels if c.name.lower() == chan.lower()][0]
+    if chan_class not in can_see:
+        localServer.notice(self, '* State could not be found for {}'.format(chan_class))
+        return
+    localServer.notice(self, '*** State of {}:'.format(chan_class.name))
+    localServer.notice(self, can_see[chan_class])
 
 ### Types: 0 = mask, 1 = require param, 2 = optional param, 3 = no param, 4 = special user channel-mode.
-@ircd.Modules.channel_modes(chmode, 3, 3, 'Delay join message until the user speaks or receives channel status') ### ('mode', type, level, 'Mode description', class 'user' or None, prefix, 'param desc')
+@ircd.Modules.channel_modes(chmode, 3, 4, 'Delay join message until the user speaks or receives channel status') ### ('mode', type, level, 'Mode description', class 'user' or None, prefix, 'param desc')
 @ircd.Modules.hooks.pre_chanmsg()
 def showjoin(self, localServer, channel, msg):
-    if 'D' not in channel.modes:
-        return msg
-    if self in channel.delayjoins:
-        channel.delayjoins.remove(self)
-        broadcast = [user for user in channel.users if user not in joins_showed[channel][self] and user != self]
-        self.broadcast(broadcast, 'JOIN :{}'.format(channel.name))
-        for user in broadcast:
-            joins_showed[channel][self][user] = True
-            if user in parts_showed[channel][self]:
-                del parts_showed[channel][self][user]
+    if chmode in channel.modes:
+        global can_see
+        for user in [user for user in channel.users if self not in can_see[channel][user] and user != self]:
+            logging.debug('/privmsg: Allowing visibility state for {} to {}'.format(self.nickname, user.nickname))
+            data = ':{}!{}@{} JOIN {}{}'.format(self.nickname, self.ident, self.cloakhost, channel.name, ' {} :{}'.format(self.svid, self.realname) if 'extended-join' in user.caplist else '')
+            user._send(data)
+            can_see[channel][user].append(self)
     return msg
 
-@ircd.Modules.hooks.visible_in_channel() ### Returns True or False depending if <user> should be visible on <channel>
+@ircd.Modules.hooks.visible_in_channel() ### Returns True or False depending if <user> should be visible on <channel> for <self>
 def visible_in_chan(self, localServer, user, channel):
-    if chmode in channel.modes and user in channel.delayjoins and self not in joins_showed[channel][user]:
-        if self.chlevel(channel) < 2:
-            return 0
-    return 1
+    global can_see
+    if chmode not in channel.modes or (chmode in channel.modes and self.chlevel(channel) > 2 or user == self): # or ('o' in self.modes and user.chlevel(channel) <= 2)):
+        if chmode in channel.modes and user not in can_see[channel][self]:
+            can_see[channel][self].append(user)
+        return 1
+    if not can_see:
+        return 1
+    #if self in can_see[channel]:
+    #    logging.debug('User {} can see the following users on {}: {}'.format(self.nickname, channel.name, can_see[channel][self]))
+    if self in can_see[channel] and user in can_see[channel][self]:
+        logging.debug('visible_in_chan() dict, returning 1')
+        return 1
+    return 0
 
 @ircd.Modules.hooks.pre_local_join()
+@ircd.Modules.hooks.pre_remote_join()
 def hidejoin(self, localServer, channel):
-    ### NoneType issues? Always make sure to return a tuple!
-    overrides = []
     try:
-        if 'D' not in channel.modes:
-            return (True, None, overrides)
-        if self not in parts_showed[channel]:
-            parts_showed[channel][self] = {}
-        if self not in joins_showed[channel]:
-            joins_showed[channel][self] = {}
-        if not hasattr(channel, 'delayjoins'):
-            channel.delayjoins = []
-        if self not in channel.delayjoins:
-            channel.delayjoins.append(self)
-        broadcast = [user for user in channel.users if user.chlevel(channel) > 1]+[self]
-        for user in broadcast:
-            joins_showed[channel][self][user] = True
-        return (True, broadcast, overrides) ### Bool 1: is the join allowed? Param 2: list of users to broadcast the join to.
-
+        if chmode in channel.modes:
+            global can_see
+            if channel not in can_see:
+                can_see[channel] = {}
+            if self not in can_see[channel]:
+                can_see[channel][self] = []
+            ### <self> just joined <channel>. They can see everyone currently on the channel.
+            can_see[channel][self] = list(channel.users) ### /!\ Do NOT RE-ASSIGN the list. Make a copy! /!\
+            for user in [user for user in channel.users if user != self]:
+                if visible_in_chan(user, localServer, self, channel) and self not in can_see[channel][user]:
+                    can_see[channel][user].append(self)
+                    logging.debug('/join: User {} can see {}'.format(user.nickname, self.nickname))
+        return (1, 0)
     except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        _print(e, server=localServer)
+            logging.exception(ex)
 
-@ircd.Modules.hooks.pre_local_part()
+@ircd.Modules.hooks.local_part()
+@ircd.Modules.hooks.remote_part()
 def hidepart(self, localServer, channel):
-    if 'D' not in channel.modes:
-        return (True, None)
-    try:
-        all_part = False
-        if self not in joins_showed[channel]:
-            joins_showed[channel][self] = {}
-            ### Show part to everyone.
-            all_part = True
-        if self not in parts_showed[channel]:
-            parts_showed[channel][self] = {}
+    if chmode in channel.modes:
+        global can_see
+        if channel not in can_see:
+            logging.error('CRITICAL ERROR: channel {} is not found in the can_see dict!'.format(channel.name))
+            return
+        can_see[channel][self] = []
+        for user in [user for user in channel.users if user in can_see[channel] and self in can_see[channel][user] and user.chlevel(channel) < 2]:
+            logging.debug('/part: User {} can not see {} anymore.'.format(user.nickname, self.nickname))
+            can_see[channel][user].remove(self)
+        #logging.debug('/PART: current state for {}: {}'.format(channel.name, can_see[channel]))
 
-        #broadcast = [user for user in channel.users if all_part or user in joins_showed[channel][self] and (self in parts_showed[channel] and user not in parts_showed[channel][self])]
-        broadcast = [user for user in channel.users if all_part or user in joins_showed[channel][self]]
-        for user in broadcast:
-            parts_showed[channel][self][user] = True
-            if user in joins_showed[channel][self]:
-                del joins_showed[channel][self][user]
-        if self in channel.delayjoins:
-            channel.delayjoins.remove(self)
-        return (True, broadcast)
-    except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        _print(e, server=localServer)
-
-@ircd.Modules.hooks.pre_local_quit()
+@ircd.Modules.hooks.local_quit()
+@ircd.Modules.hooks.remote_quit()
 def hidequit(self, localServer):
-    try:
-        broadcast = None
-        for channel in [channel for channel in self.channels if 'D' in channel.modes]:
-            if not broadcast:
-                broadcast = []
-            for user in [user for user in channel.users if user in joins_showed[channel][self] and user not in parts_showed[channel][self] and user != self and user not in broadcast]:
-                broadcast.append(user)
-            if hasattr(channel, 'delayjoins') and self in list(channel.delayjoins):
-                channel.delayjoins.remove(self)
-                continue
-        return (True, broadcast)
-    except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        _print(e, server=localServer)
+    global can_see
+    for channel in [chan for chan in self.channels if chmode in chan.modes]:
+        del can_see[channel][self]
+        for user in [user for user in channel.users if user in can_see[channel] and self in can_see[channel][user] and user.chlevel(channel) < 2]:
+            logging.debug('/quit: User {} can not see {} anymore.'.format(user.nickname, self.nickname))
+            can_see[channel][user].remove(self)
+        #logging.debug('/QUIT: current state for {}: {}'.format(channel.name, can_see[channel]))
 
 @ircd.Modules.hooks.modechar_add()
-def set_D(channel, mode):
+def set_D(localServer, self, channel, mode):
     if mode == chmode:
-        if channel not in joins_showed:
-            joins_showed[channel] = {}
-        if channel not in parts_showed:
-            parts_showed[channel] = {}
+        if 'u' in channel.modes:
+            localServer.notice(self, 'Mode +D cannot be set: channel has +u')
+            return 0
+        global can_see
+        if channel not in can_see:
+            can_see[channel] = {}
+
+        for user1 in [u for u in channel.users if u not in can_see[channel]]:
+            can_see[channel][user1] = []
+            for user2 in [user2 for user2 in channel.users if user2 not in can_see[channel][user1]]:
+                can_see[channel][user1].append(user2)
+                logging.debug('Mode set, so user {} is visible to {}'.format(user2.nickname, user1.nickname))
+    return 1
 
 @ircd.Modules.hooks.modechar_del()
-def unset_D(channel, mode):
+def unset_D(localServer, self, channel, mode):
     if mode == chmode:
-        for delayed_user in [delayed_user for delayed_user in channel.users if delayed_user in list(channel.delayjoins)]:
-            show_joins(delayed_user, channel)
-            channel.delayjoins.remove(delayed_user)
+        global can_see
+        can_see = {}
 
 @ircd.Modules.hooks.pre_local_chanmode()
 @ircd.Modules.hooks.pre_remote_chanmode()
-def chmode_D(self, localServer, channel, modes, params, modebuf, parambuf, paramcount=0):
-    try:
+def chmode_D(self, localServer, channel, modebuf, parambuf, action, m, param):
+    global can_see
+    if m == chmode:
         if not hasattr(channel, 'delayjoins') or not channel.delayjoins:
             channel.delayjoins = []
-        #paramcount = 0
-        action = ''
-        for m in modebuf:
-            if m in '+-':
-                action = m
+        if action == '-':
+            ### Show user joins to whoever needs them.
+            for user in channel.users:
+                for user2 in [user2 for user2 in channel.users if user2 not in can_see[channel][user] and user != user2]:
+                    logging.debug('/MODE unset: Showing join from {} to {}'.format(user2.nickname, user.nickname))
+                    data = ':{}!{}@{} JOIN {}{}'.format(user2.nickname, user2.ident, user2.cloakhost, channel.name, ' {} :{}'.format(user2.svid, user2.realname) if 'extended-join' in user.caplist else '')
+                    user._send(data)
+                    can_see[channel][user].append(user2)
+            return
+
+    if m not in localServer.chstatus or chmode not in channel.modes:
+        return
+    user = [user for user in channel.users if user.nickname == param or user.uid == param]
+    if not user:
+        return logging.error('No class found for {}{} param {}'.format(action, m, param))
+    user = user[0]
+    if action == '+' or action == '-':
+        ### <user> should be visible to all users on <channel>
+        logging.debug('/MODE: current state for {} {}: {}'.format(channel, user, can_see[channel][user]))
+        for u in channel.users:
+            ### Send JOIN to <u> if not already known.
+            if user == u:
                 continue
+            if user not in can_see[channel][u]:
+                logging.debug('/MODE: Show join {} from {} to {}'.format(channel.name, user.nickname, u.nickname))
+                data = ':{}!{}@{} JOIN {}{}'.format(user.nickname, user.ident, user.cloakhost, channel.name, ' {} :{}'.format(user.svid, user.realname) if 'extended-join' in u.caplist else '')
+                u._send(data)
+                can_see[channel][u].append(user)
 
-            if action in '+-' and chmode in channel.modes and m in localServer.chstatus:
-                try:
-                    p = parambuf[paramcount].split(':')[0]
-                except IndexError:
-                    paramcount += 1
-                    continue
+            ### Can <user> see <u> too?
+            if user.chlevel(channel) > 2 and u not in can_see[channel][user]:
+                ### Yes.
+                logging.debug('/MODE2: Show join {} from {} to {}'.format(channel.name, u.nickname, user.nickname))
+                data = ':{}!{}@{} JOIN {}{}'.format(u.nickname, u.ident, u.cloakhost, channel.name, ' {} :{}'.format(u.svid, u.realname) if 'extended-join' in user.caplist else '')
+                user._send(data)
+                can_see[channel][user].append(u)
 
-                user = list(filter(lambda u: u.uid == p or u.nickname.lower() == p.lower(), channel.users))
-                if not user:
-                    paramcount += 1
-                    continue
-                user = user[0]
-                if action == '-':
-                    for delayed_user in list(channel.delayjoins):
-                        show_parts(delayed_user, channel)
+        ###
+        if action == '-': ### Not tested.
+            for u in [u for u in channel.users if u != user]:
+                logging.debug('User {} got status removed. Hiding {}?'.format(user.nickname, u.nickname))
+                if user.chlevel(channel) < 3 and u in can_see[channel][user]:
+                    ### Hide <u> from <user>
+                    u.broadcast([user], 'PART :{}'.format(channel.name))
+                    can_see[channel][user].remove(u)
 
-                if action == '+':
-                    for delayed_user in list(channel.delayjoins):
-                        if delayed_user == user:
-                            show_joins(delayed_user, channel)
-                            channel.delayjoins.remove(delayed_user)
-                            continue
-                        if user.chlevel(channel) >= 2:
-                            show_joins(delayed_user, channel, user)
 
-    except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        _print(e, server=localServer)
+@ircd.Modules.hooks.local_kick()
+@ircd.Modules.hooks.remote_kick()
+def hide_kick(self, localServer, user, channel, reason):
+    global can_see
+    if channel not in can_see:
+        logging.error('CRITICAL ERROR: channel {} is not found in the can_see dict!'.format(channel.name))
+        return
+    can_see[channel][user] = []
+    for u in [u for u in channel.users if u in can_see[channel] and user in can_see[channel][u]]:
+        logging.debug('/kick: User {} can not see {} anymore.'.format(u.nickname, user.nickname))
+        can_see[channel][u].remove(user)
 
-def show_joins(delayed_user, channel, user=None):
-    if delayed_user not in joins_showed[channel]:
-        joins_showed[channel][delayed_user] = {}
-    users = [user for user in channel.users if user not in joins_showed[channel][delayed_user] and user != delayed_user] if not user else [user]
-    for user in [user for user in users if user not in joins_showed[channel][delayed_user]]:
-        joins_showed[channel][delayed_user][user] = True
-        delayed_user.broadcast([user], 'JOIN :{}'.format(channel.name))
-        if user in parts_showed[channel][delayed_user]:
-            del parts_showed[channel][delayed_user][user]
-
-def show_parts(delayed_user, channel):
-    if delayed_user not in parts_showed[channel]:
-        parts_showed[channel][delayed_user] = {}
-    for user in [user for user in channel.users if user not in parts_showed[channel][delayed_user] and user.chlevel(channel) < 2 and user != delayed_user]:
-        parts_showed[channel][delayed_user][user] = True
-        delayed_user.broadcast([user], 'PART :{}'.format(channel.name))
-        if user in joins_showed[channel][delayed_user]:
-            del joins_showed[channel][delayed_user][user]
-
-@ircd.Modules.hooks.pre_local_kick()
-def kick(self, localServer, user, channel, reason):
-    if chmode not in channel.modes:
-        return True
-    show_joins(user, channel)
-    ### Because this is a kick event, we will delete it from joins_showed dict.
-    if user in joins_showed[channel]:
-        del joins_showed[channel][user]
-    return True
-
-def init(self):
-    for chan in [chan for chan in self.channels if chmode in chan.modes]:
-        joins_showed[chan] = {}
-        parts_showed[chan] = {}
+def init(self, reload=False):
+    global can_see
+    if can_see or reload:
+        return
+    can_see = {}
+    for chan in self.channels:
+        if chan not in can_see:
+            can_see[chan] = {}
+        for user in [user for user in chan.users if user not in can_see[chan]]:
+            can_see[chan][user] = []
 
 def unload(self):
-    for channel in [channel for channel in self.channels if chmode in channel.modes]:
-        if channel not in joins_showed:
-            return
-        for delayed_user in list(channel.delayjoins):
-            show_joins(delayed_user, channel)
-            channel.delayjoins.remove(delayed_user)
+    global can_see
+    for channel in [channel for channel in self.channels if hasattr(channel, 'delayjoins') and channel in can_see]:
+        if not hasattr(channel, 'delayjoins') or not channel.delayjoins:
+            channel.delayjoins = []
+        ### Show user joins to whoever needs them.
+        for user in channel.users:
+            for user2 in [user2 for user2 in channel.users if user2 not in can_see[channel][user]]:
+                logging.debug('Module unload: Showing join from {} to {}'.format(user2, user))
+                data = ':{}!{}@{} JOIN {}{}'.format(user2.nickname, user2.ident, user2.cloakhost, channel.name, ' {} :{}'.format(user2.svid, user2.realname) if 'extended-join' in user.caplist else '')
+                user._send(data)
+                can_see[channel][user].append(user2)
+
+    can_see = {}

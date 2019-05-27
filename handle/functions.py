@@ -30,7 +30,7 @@ def initlogging(localServer):
     logging.addLevelName(logging.WARNING, Y+"%s" % logging.getLevelName(logging.WARNING))
     logging.addLevelName(logging.ERROR, R2+"%s" % logging.getLevelName(logging.ERROR))
     logging.addLevelName(logging.INFO, W+"%s" % logging.getLevelName(logging.INFO))
-    logging.addLevelName(logging.DEBUG, B+"%s" % logging.getLevelName(logging.INFO))
+    logging.addLevelName(logging.DEBUG, W+"%s" % logging.getLevelName(logging.DEBUG))
 
 class TKL:
     def check(self, localServer, user, type):
@@ -56,7 +56,12 @@ class TKL:
                         if type.lower() in 'gz' and user.server == localServer:
                             ### Local ban on local user.
                             banmsg = localServer.tkl[type][mask]['reason']
-                            user.quit('User has been banned from using this server', error=True, banmsg=banmsg)
+                            setter = localServer.tkl[type][mask]['setter']
+                            if user.socket:
+                                if user.registered:
+                                    localServer.notice(user, '*** You are banned from this server: [{}] {}'.format(setter, banmsg))
+                                user.sendraw(304, '{}'.format(':[{}] {}'.format(setter, banmsg)))
+                            user.quit('User has been banned from using this server', error=True)
                         return
         except Exception as ex:
             logging.exception(ex)
@@ -103,8 +108,9 @@ class TKL:
             for user in list(localServer.users):
                 TKL.check(self, localServer, user, tkltype)
 
-            data = ':{} TKL + {} {} {} {} {} {} :{}'.format(localServer.sid, tkltype, ident, mask, setter, expire, ctime, reason)
-            localServer.new_sync(localServer, self, data)
+            if tkltype in 'GZQ':
+                data = ':{} TKL + {} {} {} {} {} {} :{}'.format(localServer.sid, tkltype, ident, mask, setter, expire, ctime, reason)
+                localServer.new_sync(localServer, self, data)
             return
 
         except Exception as ex:
@@ -354,7 +360,7 @@ def check_flood(localServer, target):
                     user.quit('Excess Flood2', error=True)
                     return
 
-                flood_penalty_treshhold = 1000000
+                flood_penalty_treshhold = 1000000 if 'o' not in user.modes else 2000000
                 if int(time.time()) - user.flood_penalty_time > 60:
                     user.flood_penalty = 0
                     user.flood_penalty_time = 0

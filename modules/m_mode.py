@@ -31,6 +31,8 @@ parambuf = []
 maxmodes = 24
 
 def makeMask(localServer, data):
+    if not data:
+        return
     nick, ident, host = '', '', ''
     nick = data.split('!')[0]
     if nick == '' or '@' in nick or ('.' in nick and '@' not in data):
@@ -40,7 +42,8 @@ def makeMask(localServer, data):
     try:
         if '@' in data:
             ident = data.split('@')[0]
-            if '!' in ident:ident = data.split('@')[0].split('!')[1]
+            if '!' in ident:
+                ident = data.split('@')[0].split('!')[1]
         else:
             ident = data.split('!')[1].split('@')[0]
     except:
@@ -66,7 +69,7 @@ def makeMask(localServer, data):
 
 oper_override = False
 def processModes(self, localServer, channel, recv, sync=True, sourceServer=None, sourceUser=None):
-    #print('processModes(): {}'.format(recv))
+    logging.debug('processModes(): {}'.format(recv))
     try:
         if sourceServer != localServer or (type(sourceUser).__name__ == 'User' and sourceUser.server != localServer):
             hook = 'remote_chanmode'
@@ -84,21 +87,19 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
     except Exception as ex:
         logging.exception(ex)
     try:
-        chstatus = localServer.chstatus
         global modebuf, parambuf, action, prevaction, commandQueue
         modebuf, parambuf, commandQueue = [], [], []
         action = ''
         prevaction = ''
         paramcount = -1
         chmodes = localServer.chstatus
-        ## Setting paramModes
-        paramModes = localServer.chstatus
+        localServer.parammodes = localServer.chstatus
         for x in range(0, 4):
             for m in [m for m in localServer.channel_modes[x] if m not in chmodes]:
                 chmodes += m
-                if str(x) in '012' and m not in paramModes:
-                    paramModes += m
-        localServer.parammodes = paramModes
+                if str(x) in '012' and m not in localServer.parammodes:
+                    localServer.parammodes += m
+
         global oper_override
         extban_prefix = None
         if 'EXTBAN' in localServer.support:
@@ -125,50 +126,51 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
             for m in localServer.channel_modes[t]:
                 level = localServer.channel_modes[t][m][0]
                 modeLevel[m] = level
-        for m in [m for m in recv[1] if m in chmodes+'+-']:
+        for m in [m for m in recv[1] if m in chmodes+'+-' or m in channel.modes]:
+            param_mode = None
             if m in localServer.parammodes:
-                if (action == '+') or (action == '-' and m not in localServer.channel_modes[2] and m not in localServer.channel_modes[3]):
+                if (action == '+') or (action == '-' and m not in list(localServer.channel_modes[2])+list(localServer.channel_modes[3])):
+                #if (action == '+') or (action == '-' and m in list(localServer.channel_modes[0])+list(localServer.channel_modes[1])):
                     paramcount += 1
                     if len(recv[2:]) > paramcount:
                         param_mode = recv[2:][paramcount]
                         logging.info('Param for {}{}: {}'.format(action, m, param_mode))
-                    else:
+                    elif m not in localServer.channel_modes[0]:
                         logging.warning('Received param mode {}{} without param'.format(action, m))
                         continue
-
             if m in '+-' and action != m:
                 action = m
                 #logging.debug('Action set: {}'.format(action))
                 if action != prevaction:
+                    if modebuf and modebuf[-1] in '-+':
+                        modebuf = modebuf[1:]
                     modebuf.append(action)
+                    #logging.debug('Modebuf now: {}'.format(modebuf))
                 prevaction = action
                 continue
 
             if not action:
                 action = '+'
-
-            if modeLevel[m] == 6 and (type(self).__name__ != 'Server' and 'o' not in self.modes):
+            if m in modeLevel and modeLevel[m] == 6 and (type(self).__name__ != 'Server' and 'o' not in self.modes):
                 continue
-
-            if modeLevel[m] == 7 and type(self).__name__ != 'Server':
+            if m in modeLevel and modeLevel[m] == 7 and type(self).__name__ != 'Server':
                 continue
-
             if m not in '+-' and action != prevaction and ( (m in chmodes or m in localServer.chstatus) or (action in '+-' and m in channel.modes) ):
                 modebuf.append(action)
                 prevaction = action
-
             if m not in localServer.core_chmodes:
                 ### Core modes (except for +beI) should not be checked against modules.
                 for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_'+hook]:
                     try:
-                        callable[2](self, localServer, channel, recv[1], recv[2:], modebuf, parambuf)
+                        #callable[2](self, localServer, channel, recv[1], recv[2:], modebuf, parambuf)
+                        #logging.debug('Calling {} with action {}'.format(callable, action))
+                        callable[2](self, localServer, channel, modebuf, parambuf, action, m, param_mode)
                     except Exception as ex:
                         logging.exception(ex)
-
             if m not in localServer.chstatus and m not in '+-':
-                if self.chlevel(channel) < modeLevel[m] and not self.ocheck('o', 'override'):
+                if m in modeLevel and self.chlevel(channel) < modeLevel[m] and not self.ocheck('o', 'override'):
                     continue
-                elif self.chlevel(channel) < modeLevel[m]:
+                elif m in modeLevel and self.chlevel(channel) < modeLevel[m] and modeLevel[m] != 6:
                     oper_override = True
 
             if action == '+' and (m in chmodes or type(self).__name__ == 'Server'):
@@ -188,7 +190,7 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         modebuf.append(m)
                         parambuf.append(param_mode)
                         channel.limit = int(param_mode)
-                        continue
+                        #continue
 
                 elif m == 'k' and not channel.key:
                     if channel.key == param_mode:
@@ -198,7 +200,7 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                     modebuf.append(m)
                     parambuf.append(param_mode)
                     channel.key = param_mode
-                    continue
+                    #continue
 
                 elif m == 'L' and channel.limit:
                     param_mode = param_mode.split(',')[0]
@@ -220,10 +222,8 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                     modebuf.append(m)
                     parambuf.append(param_mode)
                     channel.redirect = param_mode
-                    continue
-                elif m == 'O':
-                    if type(self).__name__ != 'Server' and 'o' not in self.modes:
-                        continue
+                    #continue
+
                 elif m in 'beI':
                     if param_mode.startswith(extban_prefix):
                         continue
@@ -252,15 +252,15 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         data[mask]['ctime'] = int(time.time())
                         continue
 
-                elif m in chstatus:
+                elif m in localServer.chstatus:
                     timed = False
                     # + status
+                    if m == 'h':
+                        continue
                     temp_user = param_mode
-                    ### Check to see for timed shit.
                     try:
                         t = param_mode.split(':')
                         temp_user = t[0]
-                        ### This is only temporary.
                         try:
                             channel.temp_status
                         except:
@@ -290,17 +290,18 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         channel.temp_status[user][m] = {}
                         channel.temp_status[user][m]['ctime'] = int(time.time()) + timed
                         channel.temp_status[user][m]['action'] = '-'
-                    continue
-                if m not in channel.modes and m not in modebuf and m in localServer.channel_modes[3]:
-                    modebuf.append(m)
-                    channel.modes += m
+
+                if m not in channel.modes and (m in list(localServer.channel_modes[3])+list(localServer.channel_modes[2])):
+                    #logging.debug('Current modebuf: {}'.format(modebuf))
+                    if m in localServer.core_chmodes or m in localServer.channel_modes[3]: ### Modules handle modebuf.append, except type [3]
+                        modebuf.append(m)
+                        channel.modes += m
                     if m == 'O' and len(channel.users) > 2:
                         for user in [user for user in channel.users if 'o' not in user.modes]:
                             cmd = ('KICK', '{} {} :Opers only'.format(channel.name, user.nickname))
                             commandQueue.append(cmd)
-                    continue
 
-            elif action == '-' and (m in chmodes or type(self).__name__ == 'Server'):
+            elif action == '-' and ((m in chmodes or m in channel.modes) or type(self).__name__ == 'Server'):
                 ###
                 ### REMOVING CHANNEL MODES
                 ###
@@ -326,8 +327,11 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                     elif m == 'P' and len(channel.users) == 0:
                         localServer.channels.remove(channel)
 
-                    channel.modes = channel.modes.replace(m, '')
-                    modebuf.append(m)
+                    if m in channel.modes:
+                        #logging.debug('Mode {} is a core mode?'.format(m))
+                        channel.modes = channel.modes.replace(m, '')
+                        modebuf.append(m)
+                        #logging.debug('Modebuf after core: {}'.format(modebuf))
 
                 elif m in 'beI':
                     mask = makeMask(localServer, param_mode)
@@ -345,8 +349,8 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         del data[param_mode]
                         parambuf.append(param_mode)
                         modebuf.append(m)
-                    continue
-                elif m in chstatus:
+                    #continue
+                elif m in localServer.chstatus:
                     timed = False
                     # -qaohv
                     temp_user = param_mode
@@ -361,14 +365,14 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                             timed = valid_expire(t[1])
                     except:
                         pass
-                    user = list(filter(lambda u: u.uid == temp_user or u.nickname.lower() == temp_user.lower(), channel.users))
+                    user = list(filter(lambda u: temp_user and u.uid == temp_user or u.nickname.lower() == temp_user.lower(), channel.users))
                     if not user:
                         continue
                     else:
                         user = user[0]
                     if m not in channel.usermodes[user]:
                         continue
-                    if 'S' in user.modes and not self.ocheck('o', 'override'):
+                    if 'S' in user.modes and user.server.hostname in localServer.conf['settings']['ulines'] and not self.ocheck('o', 'override'):
                         self.sendraw(974, '{} :{} is a protected service bot'.format(m, user.nickname))
                         continue
                     elif 'S' in user.modes:
@@ -387,18 +391,21 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         channel.temp_status[user][m] = {}
                         channel.temp_status[user][m]['ctime'] = int(time.time()) + timed
                         channel.temp_status[user][m]['action'] = '+'
-                    continue
 
-        #for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_'+hook]:
-        #    try:
-        #        callable[2](self, localServer, channel, recv[1], recv[2:], modebuf, parambuf, action)
-        #    except Exception as ex:
-        #        logging.exception(ex)
+            if m in localServer.core_chmodes:
+                ### Finally, call modules for core modes.
+                for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_'+hook]:
+                    try:
+                        callable[2](self, localServer, channel, modebuf, parambuf, action, m, param_mode)
+                    except Exception as ex:
+                        logging.exception(ex)
+            continue
 
         if not re.sub('[+-]', '', ''.join(modebuf)):
             return
         while modebuf[-1] in '+-':
             modebuf = modebuf[:-1]
+
         if channel.name[0] == '&':
             sync = False
         modes = ''.join(modebuf)
@@ -419,20 +426,38 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                     thook = 'modechar_del'
                 else:
                     continue
+                total_modes.append(m)
+                if m in list(localServer.channel_modes[1])+list(localServer.channel_modes[2]):
+                    if action == '+':
+                        if m in localServer.core_chmodes:
+                            logging.debug('1 Storing param of {}: {}'.format(m, parambuf[paramcount]))
+                            localServer.chan_params[channel][m] = parambuf[paramcount]
+                        elif m not in localServer.chan_params[channel]:
+                            logging.debug('2 Storing param of {}: {}'.format(m, parambuf[paramcount]))
+                            localServer.chan_params[channel][m] = parambuf[paramcount]
+
+                    elif action == '-' and m in localServer.chan_params[channel]:
+                        logging.debug('Forgetting param of {}: {}'.format(m, localServer.chan_params[channel][m]))
+                        del localServer.chan_params[channel][m]
                 for callable in [callable for callable in localServer.hooks if callable[0].lower() == thook]:
                     try:
-                        callable[2](channel, m)
+                        result = callable[2](localServer, self, channel, m)
+                        if (not result and result is not None) and m in total_modes:
+                            total_modes.remove(m)
+                            if thook == 'modechar_add' and m in channel.modes:
+                                channel.modes = channel.modes.replace(m, '')
+                            elif thook == 'modechar_del' and m not in channel.modes:
+                                channel.modes += m
                     except Exception as ex:
                         logging.exception(ex)
                 for callable in [callable for callable in localServer.hooks if callable[0].lower() == hook]:
                     try:
                         callable[2](self, localServer, channel, modes, parambuf)
                     except Exception as ex:
-                        logging.exception(ex, callable)
+                        logging.exception(ex)
                 if m in localServer.parammodes and (m not in localServer.channel_modes[2] or action == '+'):
                     total_params.append(parambuf[paramcount])
                     paramcount += 1
-                total_modes.append(m)
                 totalLength = len(''.join(total_modes)+' '+' '.join(total_params))
                 mode_amount = len(re.sub('[+-]', '', ''.join(total_modes)))
                 if mode_amount >= maxmodes or totalLength >= 400:
@@ -487,9 +512,7 @@ def mode(self, localServer, recv, override=False, handleParams=None):
         else:
             sourceServer = self.server
             sourceUser = self
-        #recv = ' '.join(recv).split() # Why?
 
-        chstatus = localServer.chstatus
         if len(recv) == 2 and recv[1][:1] in localServer.chantypes:
             if recv[1][0] == '+':
                 return
@@ -500,7 +523,11 @@ def mode(self, localServer, recv, override=False, handleParams=None):
             if 's' in channel.modes and self not in channel.users and not self.ocheck('o', 'override'):
                 return
             params = []
+            show_params = []
             for m in channel.modes:
+                if m in localServer.chan_params[channel]:
+                    show_params.append(localServer.chan_params[channel][m])
+                '''
                 if m == 'l':
                     params.append(str(channel.limit))
                 elif m == 'L':
@@ -530,7 +557,9 @@ def mode(self, localServer, recv, override=False, handleParams=None):
                         params.append(fparams)
                 elif m == 'k':
                     params.append(channel.key)
-            self.sendraw(324, '{} +{} {}'.format(channel.name, channel.modes,' '.join(params) if len(params) > 0 and (self in channel.users or 'o' in self.modes) else ''))
+                '''
+            #self.sendraw(324, '{} +{} {}'.format(channel.name, channel.modes, ' '.join(params) if params and (self in channel.users or 'o' in self.modes) else ''))
+            self.sendraw(324, '{} +{} {}'.format(channel.name, channel.modes, ' '.join(show_params) if show_params and (self in channel.users or 'o' in self.modes) else ''))
             self.sendraw(329, '{} {}'.format(channel.name, channel.creation))
             return
 
@@ -734,7 +763,7 @@ def chgumode(self, localServer, recv, override, sourceServer=None, sourceUser=No
                         target.modes = target.modes.replace(mode, '')
         if 'o' in target.modes:
             target.modes = 'o'+target.modes.replace('o', '')
-        if ' '.join(modes)[-1] in '+-':
+        if len(modes) > 1 and ' '.join(modes)[-1] in '+-':
             del modes[-1]
         modes = ''.join(modes)
         if len(modes) > 1:

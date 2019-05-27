@@ -7,12 +7,9 @@ blocks random nicknames
 
 ### A lower score means more matches, and also more innocent kills.
 ### A higher score will result in less matches, but also less innocent kills.
-max_score = 2
+max_score = 3
 
 import ircd
-
-from handle.functions import match, _print
-
 
 stringdict = {
 	"aj": "fqtvxz",
@@ -487,7 +484,6 @@ def antirandom_nick(*args, **kwargs):
     recv = args[2]
     nick = str(recv[1]).strip()
     score = randomness(nick.lower())
-    max_score = 3
     if score >= max_score:
         self.quit('Please provide a valid nickname', error=True)
         mask = '{}!{}@{}'.format(nick, '*' if not self.ident else self.ident, self.hostname)
@@ -503,12 +499,11 @@ def user(self, localServer, recv):
         return
     ident = str(recv[1][:12]).strip()
     score = randomness(ident.lower())
-    max_score = 3
-    if score >= max_score:
-        self.quit('Please provide a valid nickname', error=True)
+    if score >= max_score+1: ### Less strict for idents.
+        self.quit('Please provide a valid ident', error=True)
         localServer.snotice('s', '*** Randomness match for {}[{}] with score {} (/user)'.format(self.fullmask(), self.ip, score))
 
     ### Aleatory checks on ident? Why the hell not.
-    if ident[0].isalpha() and ident[1:].isdigit() and len(ident) > 3:
+    if ident[0].isalpha() and ident[1:].isdigit() and len(ident) > 4:
         self.quit('Please provide a valid ident', error=True)
-        localServer.snotice('s', '*** Aleatory match for {}!{}@*[{}]'.format(self.nickname, ident, self.ip))
+        localServer.snotice('s', '*** Aleatory ident match for {}!{}@*[{}]'.format(self.nickname, ident, self.ip))

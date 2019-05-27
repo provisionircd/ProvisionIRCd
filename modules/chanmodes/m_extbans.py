@@ -105,107 +105,84 @@ def checkExpiredBans(localServer):
 @ircd.Modules.support(('EXTBAN='+prefix+','+str(''.join(ext_bans)), True)) ### (support string, boolean if support must be sent to other servers)
 @ircd.Modules.hooks.pre_local_chanmode()
 @ircd.Modules.hooks.pre_remote_chanmode()
-def extbans(self, localServer, channel, modes, params, modebuf, parambuf):
+#def extbans(self, localServer, channel, modes, params, modebuf, parambuf):
+def extbans(self, localServer, channel, modebuf, parambuf, action, m, param):
     try:
-        paramcount = 0
-        for m in modes:
-            if m in '-+':
-                action = m
-                continue
-            if m not in localServer.parammodes:
-                continue
-            if m not in 'beI':
-                paramcount += 1
-                continue
-            param = params[paramcount]
+        if m not in 'beI' or action != '+':
+            return
+        if not param:
+            logging.error('ERROR: invalid param received for {}{}: {}'.format(action, m, param))
+            return
+        if not re.findall("(^{}[Ttcoa]):(.*)".format(prefix), param):
+            #logging.info('Param {} is invalid for {}{}'.format(param, action, m))
+            return
 
-            if not re.findall("(^{}[TtCoa]):(.*)".format(prefix), param):
-                #logging.info('Param {} is invalid for {}{}'.format(param, action, m))
-                paramcount += 1
-                continue
+        logging.info('Param for {}{} set: {}'.format(action, m, param))
 
-            logging.info('Param for {}{} set: {}'.format(action, m, param))
+        try:
+            setter = self.fullmask()
+        except:
+            setter = self.hostname
 
-            try:
-                setter = self.fullmask()
-            except:
-                setter = self.hostname
+        if m == 'b':
+            if param[:2] not in ['~T', '~c', '~t']:
+                return
+            if param[:2] == '~T':
+                ### Text block.
+                if param.split(':')[1] not in ['block', 'replace'] or len(param.split(':')) < 3:
+                    return
+                bAction = param.split(':')[1]
+                if not param.split(':')[2:][0]:
+                    return
+                if bAction == 'replace':
+                    ### Replace requires an additional parameter: ~T:replace:match:replacement
+                    if len(param.split(':')) < 4:
+                        return
+                    if not param.split(':')[3]:
+                        return
+            elif param[:2] == '~c':
+                ### Channel block.
+                if len(param.split(':')) < 2:
+                    return
+                chanBan = param.split(':')[1]
+                if chanBan[0] not in localServer.chantypes or chanBan[0] not in '+%@&~':
+                    logging.info('Channel {} is invalid for {}{} {}'.format(chanBan, action, m, param))
+                    return
+                tempchan = list(filter(lambda c: c.name.lower() == chanBan.lower(), localServer.channels))
+                if tempchan and len(channel.users) > 2:
+                    tempchan = tempchan[0]
+                    ### tempchan users are forbidden on channel.
+                    for user in [user for user in channel.users if tempchan in user.channels and user.chlevel(channel) < 2 and not user.ocheck('o', 'override') and not checkMatch(user, localServer, 'e', channel)]:
+                        cmd = ('KICK', '{} {} :Users from {} are not welcome here'.format(channel.name, user.nickname, tempchan.name))
+                        commandQueue.append(cmd)
 
-            if m == 'b':
-                if param[:2] not in ['~T', '~c', '~t']:
-                    paramcount += 1
-                    continue
-                if param[:2] == '~T':
-                    ### Text block.
-                    if param.split(':')[1] not in ['block', 'replace'] or len(param.split(':')) < 3:
-                        paramcount += 1
-                        continue
-                    bAction = param.split(':')[1]
-                    if not param.split(':')[2:]:
-                        paramcount += 1
-                        continue
-                    if bAction == 'replace':
-                        ### Replace requires an additional parameter: ~T:replace:match:replacement
-                        if len(param.split(':')) < 4:
-                            paramcount += 1
-                            continue
-                        if not param.split(':')[3]:
-                            paramcount += 1
-                            continue
-                elif param[:2] == '~c':
-                    ### Channel block.
-                    if len(param.split(':')) < 2:
-                        paramcount += 1
-                        continue
-                    chanBan = param.split(':')[1]
-                    if chanBan[0] not in localServer.chantypes:
-                        logging.info('Channel {} is invalid for {}{} {}'.format(chanBan, action, m, param))
-                        paramcount += 1
-                        continue
-                    tempchan = list(filter(lambda c: c.name.lower() == chanBan.lower(), localServer.channels))
-                    if tempchan and len(channel.users) > 2:
-                        tempchan = tempchan[0]
-                        ### tempchan users are forbidden on channel.
-                        for user in [user for user in channel.users if tempchan in user.channels and user.chlevel(channel) < 2 and not user.ocheck('o', 'override') and not checkMatch(user, localServer, 'e', channel)]:
-                            cmd = ('KICK', '{} {} :Users from {} are not welcome here'.format(channel.name, user.nickname, tempchan.name))
-                            commandQueue.append(cmd)
+            elif param[:2] == '~t':
+                ### Timed bans.
+                if len(param.split(':')) < 3:
+                    return
+                bTime = param.split(':')[1]
+                if not bTime.isdigit():
+                    return
+                banmask = makeMask(localServer, param.split(':')[2])
+                param = '{}:{}'.format(':'.join(param.split(':')[:2]), banmask)
 
-                elif param[:2] == '~t':
-                    ### Timed bans.
-                    if len(param.split(':')) < 3:
-                        paramcount += 1
-                        continue
-                    bTime = param.split(':')[1]
-                    if not bTime.isdigit():
-                        paramcount += 1
-                        continue
-                    banmask = makeMask(localServer, param.split(':')[2])
-                    param = '{}:{}'.format(':'.join(param.split(':')[:2]), banmask)
+        elif m == 'I':
+            if param[:2] == '~O':
+                if len(param.split(':')) < 2:
+                    return
 
-            elif m == 'I':
-                if param[:2] == '~O':
-                    if len(param.split(':')) < 2:
-                        paramcount += 1
-                        continue
-                else:
-                    paramcount += 1
-                    continue
-
-            c = None
-            if m == 'b':
-                c = channel.bans
-            elif m == 'I':
-                c = channel.invex
-            elif m == 'e':
-                c = channel.excepts
-            if c is not None:
-                paramcount += 1
-                if action == '+' and param not in c:
-                    modebuf.append(m)
-                    parambuf.append(param)
-                    c[param] = {}
-                    c[param]['setter'] = setter
-                    c[param]['ctime'] = int(time.time())
+        if m == 'b':
+            c = channel.bans
+        elif m == 'I':
+            c = channel.invex
+        elif m == 'e':
+            c = channel.excepts
+        if param not in c:
+            modebuf.append(m)
+            parambuf.append(param)
+            c[param] = {}
+            c[param]['setter'] = setter
+            c[param]['ctime'] = int(time.time())
 
     except Exception as ex:
         logging.exception(ex)
@@ -223,14 +200,14 @@ def join(self, localServer, channel):
                 ison_banchan = [chan for chan in localServer.channels if chan.name.lower() == banChan.lower() and self in chan.users]
                 if (banChan.lower() == channel.name.lower() or ison_banchan) and not invite_override and not checkMatch(self, localServer, 'e', channel):
                     self.sendraw(474, '{} :Cannot join channel (+b)'.format(channel.name))
-                    return (False, None, overrides)
+                    return (False, overrides)
 
             for b in [b for b in c.bans if b[:2] == '~c']:
                 banChan = b.split(':')[1]
                 ison_banchan = [chan for chan in localServer.channels if chan.name.lower() == banChan.lower() and self in chan.users]
                 if (banChan.lower() == channel.name.lower() or ison_banchan) and not invite_override and not checkMatch(self, localServer, 'e', channel):
                     self.sendraw(474, '{} :Cannot join channel (+b)'.format(channel.name))
-                    return (False, None, overrides)
+                    return (False, overrides)
 
         for b in [b for b in channel.bans if b[:2] == '~t' and not invite_override and not checkMatch(self, localServer, 'e', channel)]:
             mask = b.split(':')[2]
@@ -243,7 +220,7 @@ def join(self, localServer, channel):
                 ban = 1
             if ban:
                 self.sendraw(474, '{} :Cannot join channel (+b)'.format(channel.name))
-                return (False, None, overrides)
+                return (False, overrides)
 
         for i in channel.invex:
             if i.startswith('~O'):
@@ -254,21 +231,55 @@ def join(self, localServer, channel):
                 account = i.split(':')[1]
                 if 'i' in channel.modes and ('r' in self.modes and (hasattr(self, 'svid') and match(account, self.svid))) and 'b' not in overrides:
                     overrides.append('i')
+            if i.startswith('~c'):
+                chan_ban = i.split(':')[1]
+                prefix = chan_ban[0] if chan_ban[0] in '+%@&~' else ''
+                chan_ban = re.sub('[:*!~&@%+]', '', chan_ban)
+                chan_ban_class = [c for c in localServer.channels if c.name.lower() == chan_ban.lower()]
+                if chan_ban_class and 'i' not in overrides:
+                    chan_ban_class = chan_ban_class[0]
+                    if prefix == '+' and self.chlevel(chan_ban_class) >= 1:
+                        overrides.append('i')
+                    elif prefix == '%' and self.chlevel(chan_ban_class) >= 2:
+                        overrides.append('i')
+                    elif prefix == '@' and self.chlevel(chan_ban_class) >= 3:
+                        overrides.append('i')
+                    elif prefix == '&' and self.chlevel(chan_ban_class) >= 4:
+                        overrides.append('i')
+                    elif prefix == '~' and self.chlevel(chan_ban_class) >= 5:
+                        overrides.append('i')
 
         for e in channel.excepts:
             if e.startswith('~a'):
                 account = e.split(':')[1]
                 if ('r' in self.modes and (hasattr(self, 'svid') and match(account, self.svid))) and 'b' not in overrides:
                     overrides.append('b')
+            if e.startswith('~c'):
+                chan_ban = e.split(':')[1]
+                prefix = chan_ban[0] if chan_ban[0] in '+%@&~' else ''
+                chan_ban = re.sub('[:*!~&@%+]', '', chan_ban)
+                chan_ban_class = [c for c in localServer.channels if c.name.lower() == chan_ban.lower()]
+                if chan_ban_class and 'b' not in overrides:
+                    chan_ban_class = chan_ban_class[0]
+                    if prefix == '+' and self.chlevel(chan_ban_class) >= 1:
+                        overrides.append('b')
+                    elif prefix == '%' and self.chlevel(chan_ban_class) >= 2:
+                        overrides.append('b')
+                    elif prefix == '@' and self.chlevel(chan_ban_class) >= 3:
+                        overrides.append('b')
+                    elif prefix == '&' and self.chlevel(chan_ban_class) >= 4:
+                        overrides.append('b')
+                    elif prefix == '~' and self.chlevel(chan_ban_class) >= 5:
+                        overrides.append('b')
 
         for b in channel.bans:
             if b.startswith('~a'):
                 account = b.split(':')[1]
                 if ('r' in self.modes and (hasattr(self, 'svid') and match(account, self.svid))) and 'b' not in overrides:
                     self.sendraw(474, '{} :Cannot join channel (+b)'.format(channel.name))
-                    return (False, None, overrides)
+                    return (False, overrides)
 
-        return (True, None, overrides)
+        return (True, overrides)
 
     except Exception as ex:
         logging.exception(ex)

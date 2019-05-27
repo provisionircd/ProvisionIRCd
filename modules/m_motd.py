@@ -85,5 +85,5 @@ def send_motd(localServer, destination):
             local_motd.append(line)
     destination._send('MOTD {} {}'.format(localServer.hostname, local_motd))
 
-def init(self):
+def init(self, reload=False):
     self.remote_request = {}

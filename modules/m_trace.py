@@ -35,52 +35,40 @@ def connect_hook(self, localServer):
 @ircd.Modules.support(('EXTBAN='+prefix+','+trace_bans, True)) ### (support string, boolean if support must be sent to other servers)
 @ircd.Modules.hooks.pre_local_chanmode()
 @ircd.Modules.hooks.pre_remote_chanmode()
-def extbans(self, localServer, channel, modes, params, modebuf, parambuf):
+def tracebans(self, localServer, channel, modebuf, parambuf, action, m, param):
     try:
-        paramcount = 0
-        for m in modes:
-            if m in '-+':
-                action = m
-                continue
-            if m not in localServer.parammodes:
-                continue
-            if m not in 'beI':
-                paramcount += 1
-                continue
+        if m not in 'beI' or action != '+':
+            return
+        if not param:
+            logging.error('ERROR: invalid param received for {}{}: {}'.format(action, m, param))
+            return
+        r_string = ''
+        for r in trace_bans:
+            r_string += '{}{}|'.format(prefix, r)
+        r_string = r_string[:-1]
+        traceban_check = re.findall("^("+r_string+"):(.*)", param)
+        if not traceban_check or not traceban_check[0][1]:
+            return
 
-            param = params[paramcount]
-            r_string = ''
-            for r in trace_bans:
-                r_string += '{}{}|'.format(prefix, r)
-            r_string = r_string[:-1]
-            traceban_check = re.findall("^("+r_string+"):(.*)", param)
-            if not traceban_check or not traceban_check[0][1]:
-                paramcount += 1
-                #logging.info('Param {} is invalid for {}{}'.format(param, action, m))
-                continue
+        logging.info('Param for {}{} set: {}'.format(action, m, param))
 
-            logging.info('Param for {}{} set: {}'.format(action, m, param))
+        try:
+            setter = self.fullmask()
+        except:
+            setter = self.hostname
 
-            try:
-                setter = self.fullmask()
-            except:
-                setter = self.hostname
-
-            c = None
-            if m == 'b':
-                c = channel.bans
-            elif m == 'I':
-                c = channel.invex
-            elif m == 'e':
-                c = channel.excepts
-            if c is not None:
-                paramcount += 1
-                if action == '+' and param not in c:
-                    modebuf.append(m)
-                    parambuf.append(param)
-                    c[param] = {}
-                    c[param]['setter'] = setter
-                    c[param]['ctime'] = int(time.time())
+        if m == 'b':
+            c = channel.bans
+        elif m == 'I':
+            c = channel.invex
+        elif m == 'e':
+            c = channel.excepts
+        if param not in c:
+            modebuf.append(m)
+            parambuf.append(param)
+            c[param] = {}
+            c[param]['setter'] = setter
+            c[param]['ctime'] = int(time.time())
 
     except Exception as ex:
         logging.exception(ex)
@@ -112,18 +100,18 @@ def join(self, localServer, channel):
                 isp = b.split(':')[1]
                 if match(isp.lower(), localServer.geodata[self.ip]['isp'].lower()) and not checkMatch(self, localServer, 'e', channel) and 'b' not in overrides:
                     self.sendraw(474, '{} :Cannot join channel (+b)'.format(channel.name))
-                    return (False, None, overrides)
+                    return (False, overrides)
 
             for b in [b for b in channel.bans if b.startswith('~C')]: ### Country ban.
                 country = b.split(':')[1]
                 if (match(country.lower(), localServer.geodata[self.ip]['country'].lower()) or match(country.lower(), localServer.geodata[self.ip]['countryCode'].lower())) and not checkMatch(self, localServer, 'e', channel) and 'b' not in overrides:
                     self.sendraw(474, '{} :Cannot join channel (+b)'.format(channel.name))
-                    return (False, None, overrides)
+                    return (False, overrides)
             for b in [b for b in channel.bans if b.startswith('~i')]: ### ISP ban.
                 isp = b.split(':')[1]
                 if match(isp.lower(), localServer.geodata[self.ip]['isp'].lower()) and not checkMatch(self, localServer, 'e', channel) and 'b' not in overrides:
                     self.sendraw(474, '{} :Cannot join channel (+b)'.format(channel.name))
-                    return (False, None, overrides)
+                    return (False, overrides)
 
             for i in channel.invex:
                 if i.startswith('~C'):
@@ -135,7 +123,7 @@ def join(self, localServer, channel):
                     if 'i' in channel.modes and match(isp, localServer.geodata[self.ip]['isp'].lower()) and 'i' not in overrides:
                         overrides.append('i')
 
-        return (True, None, overrides)
+        return (True, overrides)
 
     except Exception as ex:
         logging.exception(ex)

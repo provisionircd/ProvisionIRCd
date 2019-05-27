@@ -4,6 +4,7 @@
 import imp
 import os
 import sys
+import importlib
 
 import gc
 gc.enable()
@@ -12,10 +13,12 @@ from handle.functions import _print, update_support, logging
 
 def ListModules(self):
     modules = {}
+
     for file in [file for file in os.listdir(self.modules_dir) if not file.startswith('__') and file.startswith('m_')]:
         path = os.path.join(self.modules_dir, file)
-        file = file.split('.py')[:1][0]
+        file = 'modules.'+file.split('.py')[:1][0]
         modules[file] = path
+
     import ntpath
     bla = os.walk(self.modules_dir)
     for x in bla:
@@ -26,7 +29,7 @@ def ListModules(self):
         for file in [file for file in os.listdir(fullpath) if not file.startswith('__') and file.startswith('m_')]:
             path = os.path.join(fullpath, file)
             folder = os.path.basename(os.path.dirname(path))
-            file = '{}/{}'.format(folder, file.split('.py')[:1][0])
+            file = 'modules.{}.{}'.format(folder, file.split('.py')[:1][0])
             modules[file] = path
             folder = ''
     return modules
@@ -48,7 +51,6 @@ def HookToCore(self, callables):
         module_hooks = callables[10]
         #print('HOOKS: {}'.format(hooks))
         module = callables[11]
-
         for callable in [callable for callable in commands if callable not in hooks]:
             hooks.append(callable)
             for cmd in [cmd for cmd in callable.commands if cmd not in self.commands]:
@@ -67,14 +69,14 @@ def HookToCore(self, callables):
                     req_class = callable.req_class
                 info = (cmd, callable, params, req_modes, req_flags, req_class, module)
                 self.commands.append(info) ### (cmd, callable, params, req_modes, req_flags, req_class, module)
-                #logging.info('Hooked command "{}" (params: {}, req_modes: {}, req_flags: {}, req_class: {}) to function {}'.format(cmd, params, req_modes, req_flags, req_class, callable))
+                logging.info('Hooked command "{}" (params: {}, req_modes: {}, req_flags: {}, req_class: {}) to function {}'.format(cmd, params, req_modes, req_flags, req_class, callable))
 
         hooks = []
         for callable in [callable for callable in channel_modes if callable not in hooks]:
             hooks.append(callable)
             update_support(self)
             ### Tuple: ('mode', type, level, 'Mode description', class 'user' or None, prefix, 'param desc')
-            for chmode in [chmode for chmode in callable.channel_modes if chmode[0] not in self.channel_modes]:
+            for chmode in [chmode for chmode in callable.channel_modes if chmode[0] not in self.chmodes_string]:
                 mode = chmode[0]
                 type = chmode[1]
                 level = chmode[2]
@@ -137,7 +139,7 @@ def HookToCore(self, callables):
                 level = umode[1]
                 desc = umode[2]
                 self.user_modes[mode] = (level, desc)
-                #logging.info('Hooked user mode {} to core (level: {}, desc: {})'.format(mode, level, desc))
+                logging.info('Hooked user mode {} to core (level: {}, desc: {})'.format(mode, level, desc))
 
         ### This does not really needed to be "hooked" here. Just loop over the callables to check if there's an event.
         ### callables, channel_modes, user_modes, events, req_modes, req_flags, req_class, commands, params, module
@@ -163,25 +165,37 @@ def HookToCore(self, callables):
     except Exception as ex:
         logging.exception(ex)
 
-def LoadModule(self, name, path):
+def LoadModule(self, name, path, reload=False, module=None):
+    #logging.debug('Name: {}'.format(name))
+    #logging.debug('Path: {}'.format(path))
+    #logging.debug('Reload: {}'.format(reload))
+    #logging.debug('Module: {}'.format(module))
+    package = name.replace('/', '.')
+    #logging.debug('Package: {}'.format(package))
     try:
         with open(path) as mod:
-            module = imp.load_module(name, mod, path, ('.py', 'U', imp.PY_SOURCE))
+            #module = imp.load_module(name, mod, path, ('.py', 'U', imp.PY_SOURCE))
+            if reload:
+                importlib.reload(module)
+                logging.debug('Requesting reload from importlib')
+            else:
+                module = importlib.import_module(package)
             if hasattr(module, 'init'):
-                getattr(module, 'init')(self)
+                getattr(module, 'init')(self, reload=reload)
             callables = FindCallables(module)
             HookToCore(self, callables)
             self.modules[module] = callables
             name = module.__name__
             update_support(self)
-            #logging.info('Loaded {}'.format(name))
+            logging.info('Loaded: {}'.format(name))
     except Exception as ex:
         logging.exception(ex)
         UnloadModule(self, name)
+        raise
 
 def UnloadModule(self, name):
     try:
-        for module in dict(self.modules):
+        for module in [module for module in list(self.modules) if module.__name__ == name]:
             m = module.__name__
             if m == name:
                 if hasattr(module, 'unload'):
@@ -208,7 +222,7 @@ def UnloadModule(self, name):
                             logging.error('Callable {} not found in commands list.'.format(cmd))
 
                 for function in [function for function in self.modules[module][1] if hasattr(function, 'channel_modes')]:
-                    for chmode in list(function.channel_modes):
+                    for chmode in [m for m in list(function.channel_modes) if m[0] in self.chmodes_string]:
                         ### ('mode', type, level, 'Mode description', class 'user' or None, prefix, 'param desc')
                         #self.channel_modes[3][m] = (level, desc)
                         mode = chmode[0]
@@ -230,14 +244,15 @@ def UnloadModule(self, name):
                             if mode in self.channel_modes[type]:
                                 del self.channel_modes[type][mode]
                             else:
-                                logging.error('Mode {} from type {} not found in server channel_modes list.'.format(mode, type))
+                                ### This happens because Python "remembers" the modules' global variables on reload (including functions):
+                                ### https://docs.python.org/3/library/importlib.html#importlib.reload
+                                ### So FindCallables() will append new functions if the name differs.
+                                logging.error('Mode {} from type {} not found in server channel_modes list: {} ({})'.format(mode, type, self.channel_modes[type], m))
                         update_support(self)
-
                 for function in [function for function in self.modules[module][2] if hasattr(function, 'user_modes')]:
                     for umode in list(function.user_modes):
                         mode = umode[0]
                         del self.user_modes[mode]
-
                 for function in [function for function in self.modules[module][3] if hasattr(function, 'events')]:
                     for event in list(function.events):
                         info = (event, function, module)
@@ -275,9 +290,12 @@ def UnloadModule(self, name):
                     for a in list(function.req_flags):
                         function.req_flags.remove(a)
 
-                del self.modules[module]
+                logging.info('Unloaded: {}'.format(m))
+                return 1
+
     except Exception as ex:
         logging.exception(ex)
+        return str(ex)
 
 def FindCallables(module):
     itervalues = dict.values
@@ -398,6 +416,7 @@ import inspect
 all_hooks = [
             'pre_local_join',
             'local_join',
+            'pre_remote_join', ### Why? Not like you can block a remote join.
             'remote_join',
             'pre_local_part',
             'local_part',
@@ -405,6 +424,8 @@ all_hooks = [
             'pre_local_kick',
             'local_kick',
             'remote_kick',
+            'channel_destroy',
+            'pre_local_nickchange',
             'local_nickchange',
             'remote_nickchange',
             'pre_local_quit',

@@ -16,10 +16,24 @@ defAction = {
     'j': 'i'
 }
 
+chmode = "f"
+info = """Format: +f [amount:type:secs][action:duration] --- duration is in minutes.
+-
+Example: +f 3:j:10 (3 join in 10 sec, default is +i for 1 minute)
+Example: +f 3:j:10:i:2 (3 joins in 10 sec, sets channel to +i for 2 minutes)
+Example: +f 3:j:10:R:5 (3 joins in 10 sec, sets channel to +R for 5 minutes)
+-
+Example: +f 3:m:10 (3 messages in 10 sec, default action is kick)
+Example: +f 5:m:3:b:1 (5 messages in 3 sec, will ban/kick for 1 minute)
+Example: +f 10:m:5:m:2 (10 messages in 5 sec, will set +m for 2 minutes)
+"""
+
+helpop = {"chmodef": info}
+
 @ircd.Modules.hooks.loop()
 def checkExpiredFloods(localServer):
     ### Checking for timed-out flood protection.
-    channels = (channel for channel in localServer.channels if 'f' in channel.modes and 'm' in channel.chmodef)
+    channels = (channel for channel in localServer.channels if chmode in channel.modes and 'm' in channel.chmodef)
     for chan in channels:
         if chan.chmodef['m']['action'] == 'm' and 'm' in chan.modes:
             if chan.chmodef['m']['actionSet'] and int(time.time()) - chan.chmodef['m']['actionSet'] > chan.chmodef['m']['duration']*60:
@@ -31,7 +45,7 @@ def checkExpiredFloods(localServer):
                 #print('Resetting flood for {} on {}'.format(user,chan))
                 del chan.messageQueue[user]
 
-    channels = (channel for channel in localServer.channels if 'f' in channel.modes and 'j' in channel.chmodef)
+    channels = (channel for channel in localServer.channels if chmode in channel.modes and 'j' in channel.chmodef)
     for chan in channels:
         for entry in (entry for entry in dict(chan.joinQueue)):
             if int(time.time()) - chan.joinQueue[entry]['ctime'] > chan.chmodef['j']['time']:
@@ -48,7 +62,7 @@ def checkExpiredFloods(localServer):
 
 @ircd.Modules.hooks.chanmsg()
 def msg(self, localServer, channel, msg):
-    if 'f' in channel.modes and 'm' in channel.chmodef and self.chlevel(channel) < 3 and not self.ocheck('o', 'override'):
+    if chmode in channel.modes and 'm' in channel.chmodef and self.chlevel(channel) < 2 and 'o' not in self.modes:
         if self not in channel.messageQueue:
             channel.messageQueue[self] = {}
             channel.messageQueue[self]['ctime'] = time.time()
@@ -66,25 +80,6 @@ def msg(self, localServer, channel, msg):
                 channel.chmodef['m']['actionSet'] = int(time.time())
             del channel.messageQueue[self]
 
-@ircd.Modules.commands('helpop')
-def show_help(self, localServer, recv):
-    if len(recv) < 1 or recv[1].lower() != 'chmodef':
-        return
-    s = """Format: +f [amount:type:secs][action:duration] --- duration is in minutes.
--
-Example: +f 3:j:10 (3 join in 10 sec, default is +i for 1 minute)
-Example: +f 3:j:10:i:2 (3 joins in 10 sec, sets channel to +i for 2 minutes)
-Example: +f 3:j:10:R:5 (3 joins in 10 sec, sets channel to +R for 5 minutes)
--
-Example: +f 3:m:10 (3 messages in 10 sec, default action is kick)
-Example: +f 5:m:3:b:1 (5 messages in 3 sec, will ban/kick for 1 minute)
-Example: +f 10:m:5:m:2 (10 messages in 5 sec, will set +m for 2 minutes)
-"""
-    for x in s.split('\n'):
-        self.sendraw(292, ':'+x)
-    self.sendraw(292, ':-')
-    return
-
 @ircd.Modules.hooks.local_join()
 def join(self, localServer, channel):
     if not hasattr(channel, 'chmodef'):
@@ -93,7 +88,7 @@ def join(self, localServer, channel):
         channel.messageQueue = {}
     if not hasattr(channel, 'joinQueue'):
         channel.joinQueue = {}
-    if 'f' in channel.modes and 'j' in channel.chmodef and not self.ocheck('o', 'override') and self.server.eos:
+    if chmode in channel.modes and 'j' in channel.chmodef and not self.ocheck('o', 'override') and self.server.eos:
             r = int(round(time.time() * 1000))
             channel.joinQueue[r] = {}
             channel.joinQueue[r]['ctime'] = int(time.time())
@@ -106,8 +101,8 @@ def join(self, localServer, channel):
                 channel.chmodef['j']['actionSet'] = int(time.time())
 
 @ircd.Modules.hooks.modechar_del()
-def mode_del(channel, mode):
-    if mode == 'f':
+def mode_del(localServer, self, channel, mode):
+    if mode == chmode:
         channel.chmodef = {}
     if mode == 'i':
         channel.joinQueue = {}
@@ -115,131 +110,122 @@ def mode_del(channel, mode):
         channel.messageQueue = {}
 
 ### Types: 0 = mask, 1 = require param, 2 = optional param, 3 = no param, 4 = special user channel-mode.
-@ircd.Modules.channel_modes('f', 2, 3, 'Set flood protection for your channel', None, None, '[params]') ### ('mode', type, level, 'Mode description', class 'user' or None, prefix, 'param desc')
+@ircd.Modules.channel_modes(chmode, 2, 3, 'Set flood protection for your channel (/helpop chmodef for more info)', None, None, '[params]') ### ('mode', type, level, 'Mode description', class 'user' or None, prefix, 'param desc')
 @ircd.Modules.hooks.pre_local_chanmode()
 @ircd.Modules.hooks.pre_remote_chanmode()
-def addmode(self, localServer, channel, modes, params, modebuf, parambuf):
+def addmode_f(self, localServer, channel, modebuf, parambuf, action, m, param):
     try:
         floodTypes = 'jm'
         tempparam = []
-        paramcount = 0
-        for m in modes:
-            if m in '+-':
-                action = m
-            if m != 'f' and m in localServer.parammodes and m not in '+-':
-                paramcount += 1
+        if m != chmode or action != '+':
+            return
+        for p in param.split(','):
+            if len(p) < 2:
                 continue
-            if m == 'f' and action == '+':
-                for p in params[paramcount].split(','):
-                    if len(p) < 2:
-                        paramcount += 1
-                        continue
-                    if p[0] == '-':
-                        type = p[1]
-                        #print('Removing flood type: ', type)
-                        if type not in floodTypes or type not in channel.chmodef:
-                            #print('Type {} not found in {}'.format(type, channel.chmodef))
-                            paramcount += 1
-                            continue
-                        del channel.chmodef[type]
-                        #print('Success! Returning {}'.format(type))
-                        if len(channel.chmodef) == 0:
-                            #print('No more protections set. Removing \'f\' completely')
-                            self.handle('MODE', '{} -f'.format(channel.name))
-                            break
-                        modebuf.append(m)
-                        parambuf.append('-{}'.format(type))
-                        paramcount += 1
-                        continue
+            if p[0] == '-':
+                type = p[1]
+                #print('Removing flood type: ', type)
+                if type not in floodTypes or type not in channel.chmodef:
+                    #print('Type {} not found in {}'.format(type, channel.chmodef))
+                    continue
+                del channel.chmodef[type]
+                #print('Success! Returning {}'.format(type))
+                if len(channel.chmodef) == 0:
+                    #print('No more protections set. Removing \'f\' completely')
+                    self.handle('MODE', '{} -f'.format(channel.name))
+                    break
+                modebuf.append(m)
+                parambuf.append('-{}'.format(type))
+                p = []
+                for t in channel.chmodef:
+                    p.append('{}:{}:{}'.format(channel.chmodef[t]['amount'], t, channel.chmodef[t]['time']))
+                localServer.chan_params[channel][m] = ','.join(p)
+                continue
 
-                    if len(p.split(':')) < 3:
-                        #print('Invalid param format: ', p)
-                        paramcount += 1
-                        continue
-                    if not p.split(':')[0].isdigit():
-                        #print('Amount must be a number: ', p.split(':')[0])
-                        paramcount += 1
-                        continue
-                    if p.split(':')[1] not in floodTypes:
-                        #print('Invalid flood type: ', p.split(':')[1])
-                        paramcount += 1
-                        continue
-                    if not p.split(':')[2].isdigit():
-                        #print('Seconds must be a number (really!)')
-                        paramcount += 1
-                        continue
+            if len(p.split(':')) < 3:
+                continue
+            if not p.split(':')[0].isdigit():
+                continue
+            if p.split(':')[1] not in floodTypes:
+                continue
+            if not p.split(':')[2].isdigit():
+                continue
 
-                    duration = 1
-                    type = p.split(':')[1]
-                    fAction = defAction[type]
+            duration = 1
+            type = p.split(':')[1]
+            fAction = defAction[type]
+            try:
+                fAction = p.split(':')[3]
+            except:
+                pass
+            try:
+                duration = int(p.split(':')[4])
+            except:
+                pass
+            amount = int(p.split(':')[0])
+            secs = int(p.split(':')[2])
+            if chmode in channel.modes and type in channel.chmodef:
+                #print('Updating current protection from {}'.format(channel.chmodef))
+                if amount == channel.chmodef[type]['amount'] and secs == channel.chmodef[type]['time'] and fAction == channel.chmodef[type]['action'] and duration == channel.chmodef[type]['duration']:
+                    continue
+                del channel.chmodef[type]
+            if fAction:
+                if type == 'm' and fAction not in ['m', 'b']:
+                    ### Invalid action, reverting to default.
+                    fAction = None
+                elif type == 'j' and fAction not in ['i', 'R']:
+                    ### Invalid action, reverting to default.
+                    fAction = None
+                if fAction:
                     try:
-                        fAction = p.split(':')[3]
-                    except:
-                        pass
-                    try:
-                        duration = int(p.split(':')[4])
-                    except:
-                        pass
-                    amount = int(p.split(':')[0])
-                    secs = int(p.split(':')[2])
-                    if 'f' in channel.modes and type in channel.chmodef:
-                        #print('Updating current protection from {}'.format(channel.chmodef))
-                        if amount == channel.chmodef[type]['amount'] and secs == channel.chmodef[type]['time'] and fAction == channel.chmodef[type]['action'] and duration == channel.chmodef[type]['duration']:
-                            #print('Protection is the same. Doing nothing.')
-                            paramcount += 1
-                            continue
-                        del channel.chmodef[type]
-                    if fAction:
-                        if type == 'm' and fAction not in ['m', 'b']:
-                            ### Invalid action, reverting to default.
+                        duration = p.split(':')[4]
+                        if not duration.isdigit():
+                            #print('Invalid duration "{}" unsetting action'.format(duration))
                             fAction = None
-                        elif type == 'j' and fAction not in ['i', 'R']:
-                            ### Invalid action, reverting to default.
-                            fAction = None
-                        if fAction:
-                            try:
-                                duration = p.split(':')[4]
-                                if not duration.isdigit():
-                                    #print('Invalid duration "{}" unsetting action'.format(duration))
-                                    fAction = None
-                                else:
-                                    duration = int(duration)
-                                    #print('Duration for {} set to: {}'.format(fAction, duration))
-                            except Exception as ex:
-                                #print('Alternative action was given, but no duration. Unsetting action')
-                                fAction = None
+                        else:
+                            duration = int(duration)
+                            #print('Duration for {} set to: {}'.format(fAction, duration))
+                    except Exception as ex:
+                        #print('Alternative action was given, but no duration. Unsetting action')
+                        fAction = None
 
-                    channel.chmodef[type] = {}
-                    channel.chmodef[type]['amount'] = amount
-                    channel.chmodef[type]['time'] = secs
-                    channel.chmodef[type]['duration'] = duration
-                    if not fAction:
-                        p = ':'.join(p.split(':')[:3])
-                        ### Default action
-                        if type == 'm':
-                            channel.chmodef[type]['action'] = 'kick'
-                        elif type == 'j':
-                            channel.chmodef[type]['action'] = 'i'
-                            channel.chmodef[type]['actionSet'] = None
+            channel.chmodef[type] = {}
+            channel.chmodef[type]['amount'] = amount
+            channel.chmodef[type]['time'] = secs
+            channel.chmodef[type]['duration'] = duration
+            if not fAction:
+                p = ':'.join(p.split(':')[:3])
+                ### Default action
+                if type == 'm':
+                    channel.chmodef[type]['action'] = 'kick'
+                elif type == 'j':
+                    channel.chmodef[type]['action'] = 'i'
+                    channel.chmodef[type]['actionSet'] = None
 
-                    else:
-                        channel.chmodef[type]['action'] = str(fAction)
-                        channel.chmodef[type]['actionSet'] = None
+            else:
+                channel.chmodef[type]['action'] = str(fAction)
+                channel.chmodef[type]['actionSet'] = None
 
-                    #print('Success! Returning {}'.format(p))
-                    if m not in channel.modes:
-                        channel.modes += m
-                    tempparam.append(p)
-                    if len(tempparam) == 1 and m not in modebuf:
-                        modebuf.append(m)
-                    #paramcount += 1
-                if tempparam and ','.join(tempparam) not in parambuf:
-                    parambuf.append(','.join(tempparam))
+            #print('Success! Returning {}'.format(p))
+            if m not in channel.modes:
+                channel.modes += m
+            tempparam.append(p)
+
+            p = []
+            for t in channel.chmodef:
+                p.append('{}:{}:{}'.format(channel.chmodef[t]['amount'], t, channel.chmodef[t]['time']))
+            localServer.chan_params[channel][m] = ','.join(p)
+
+            if len(tempparam) == 1 and m not in modebuf:
+                modebuf.append(m)
+            #paramcount += 1
+        if tempparam and ','.join(tempparam) not in parambuf:
+            parambuf.append(','.join(tempparam))
 
     except Exception as ex:
         logging.exception(ex)
 
-def init(localServer):
+def init(localServer, reload=False):
     for chan in [chan for chan in localServer.channels if not hasattr(chan, 'chmodef')]:
         chan.chmodef = {}
     for chan in [chan for chan in localServer.channels if not hasattr(chan, 'messageQueue')]:

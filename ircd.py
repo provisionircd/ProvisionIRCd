@@ -112,11 +112,11 @@ class Server:
                 self.sync_queue = {}
                 self.creationtime = int(time.time())
 
-                self.versionnumber = '1.1'
-                self.version = 'ProvisionIRCd-{}-beta'.format(self.versionnumber)
+                self.versionnumber = '1.3'
+                self.version = 'ProvisionIRCd-{}'.format(self.versionnumber)
                 self.hostinfo = 'Python {}'.format(sys.version.split('\n')[0].strip())
 
-                self.caps = ['account-notify', 'away-notify', 'server-time', 'chghost', 'echo-message', 'tls', 'userhost-in-names', 'extended-join', 'backlog']
+                self.caps = ['account-notify', 'away-notify', 'server-time', 'chghost', 'echo-message', 'tls', 'userhost-in-names', 'extended-join']
                 self.socket = None
                 self.introducedBy = None
                 self.uplink = None
@@ -206,6 +206,11 @@ class Server:
                     second += self.chprefix[key]
                 first += ')'
                 self.chprefix_string = '{}{}'.format(first, second)
+                self.parammodes = self.chstatus
+                for x in range(0, 4):
+                    for m in [m for m in self.channel_modes[x] if str(x) in '012' and m not in self.parammodes]:
+                        self.parammodes += m
+                self.chan_params = {}
                 self.maxlist = {}
                 self.maxlist['b'] = 500
                 self.maxlist['e'] = 500
@@ -266,7 +271,7 @@ class Server:
     def fileno(self):
         return self.socket.fileno()
 
-    def new_sync(self, localServer, skip, data):
+    def new_sync(self, localServer, skip, data, direct=None):
         try:
             if type(skip) != list:
                 skip = [skip]
@@ -276,6 +281,14 @@ class Server:
             if data.split()[1] in ['UID', 'SID']:
                 data = data.split()
                 data = '{} {} {}'.format(' '.join(data[:3]), str(int(data[3]) + 1), ' '.join(data[4:]))
+            if direct: ### Private messages and notices.
+                dest = direct if direct.socket else direct.uplink
+                if direct.socket:
+                    logging.info('Directly linked to us, no more hops needed.')
+                else:
+                    logging.info('Server has hopcount of {}, sending to {} first.'.format(direct.hopcount, direct.uplink))
+                dest._send(data)
+                return
 
             for server in [server for server in localServer.servers if server.socket and server not in skip]:
                 if not server.eos:
@@ -306,7 +319,7 @@ class Server:
                 self.sendbuffer += data + '\r\n'
                 ignore = ['PRIVMSG', 'NOTICE', 'PING', 'PONG']
                 try:
-                    if data.split()[0] not in ['PING', 'PONG'] and data.split()[1] not in ['PING', 'PONG']:
+                    if data.split()[0] not in ['PING', 'PONG']:
                         if len(data) > 1 and data.split()[1] not in ignore:
                             #pass
                             logging.info('{}{} <<<-- {}{}'.format(B, self.hostname if self.hostname != '' else self, data, W))
@@ -486,7 +499,8 @@ class Server:
                 user.quit('Unknown connection')
 
             additional_servers = [server for server in localServer.servers if server.introducedBy == self or server.uplink == self]
-            logging.info('Also quitting additional servers: {}'.format(additional_servers))
+            if additional_servers:
+                logging.info('Also quitting additional servers: {}'.format(additional_servers))
             users = [user for user in localServer.users if user.server and (user.server == self or user.server in additional_servers)]
             for user in users:
                 server1 = self.hostname

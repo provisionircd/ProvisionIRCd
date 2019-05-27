@@ -41,7 +41,10 @@ def sjoin(self, localServer, recv):
 
         if not self.eos:
             localServer.new_sync(localServer, self, raw)
-
+        localServer.parammodes = localServer.chstatus
+        for x in range(0, 4):
+            for m in [m for m in localServer.channel_modes[x] if str(x) in '012' and m not in localServer.parammodes]:
+                localServer.parammodes += m
         memberlist = []
         banlist = []
         excepts = []
@@ -74,18 +77,6 @@ def sjoin(self, localServer, recv):
         timestamp = int(recv[2])
 
         localChan = None
-
-        pc = 5
-        for m in modes:
-            if m == 'k':
-                key = recv[pc]
-                pc += 1
-            if m == 'l':
-                limit = recv[pc]
-                pc += 1
-            if m == 'f':
-                floodparam = recv[pc]
-                pc += 1
 
         for member in memberlist:
             membernick = []
@@ -130,41 +121,34 @@ def sjoin(self, localServer, recv):
         if not localChan:
             return
         if timestamp < localChan.creation and not source.eos:
-            finalModes = ' '.join(recv[3:]).split(':')[0].split()[0]
-            for p in finalModes.split()[1:]:
-                giveParams.append(p)
-
             # Remote channel is dominant. Replacing modes with remote channel
             # Clear the local modes.
             #
             logging.info('Remote channel {} is dominant. Replacing modes with remote channel'.format(channel))
             localChan.creation = timestamp
             localChan.name = channel
+            pc = 5
             for m in localChan.modes:
-                if m not in modes and m in localServer.channel_modes[3]:
+                if m not in modes and m in list(localServer.channel_modes[2])+list(localServer.channel_modes[3]):
                     removeModes.append(m)
                     continue
-                if m == 'k' and key != localChan.key:
-                    removeParams.append(localChan.key)
+                ### Remote info is different, remove old one first.
+                if m in localServer.channel_modes[1] and localServer.chan_params[localChan][m] != recv[pc]:
+                    removeParams.append(localServer.chan_params[localChan][m])
                     removeModes.append(m)
-                elif m == 'l' and limit != localChan.limit:
-                    removeModes.append(m)
-                elif m == 'f' and not floodparam:
-                    removeModes.append(m)
+                if m in localServer.parammodes:
+                    pc += 1
 
+            pc = 5
             for m in modes:
                 if m not in localChan.modes and m in localServer.channel_modes[3]:
                     giveModes.append(m)
                     continue
-                elif m in localServer.channel_modes[2]: ### This type of mode will overwrite existing modes.
+                if m in localServer.parammodes:
                     giveModes.append(m)
-                if m == 'k' and key != localChan.key:
-                    giveModes.append(m)
-                    giveParams.append(key)
-                if m == 'l':
-                    giveParams.append(limit)
-                if m == 'f' and floodparam:
-                    giveParams.append(floodparam)
+                    giveParams.append(recv[pc])
+                    logging.debug('SJOIN: Mode {} has param: {}'.format(m, recv[pc]))
+                    pc += 1
 
             # Removing local channel user modes.
             for user in localChan.users:
@@ -225,19 +209,14 @@ def sjoin(self, localServer, recv):
                     if '+' in member:
                         giveModes.append('v')
                         giveParams.append(rawUid)
-
+                pc = 5
                 for m in modes:
                     if m not in localChan.modes:
                         giveModes.append(m)
+                        if m in localServer.parammodes:
+                            giveParams.append(recv[pc])
+                            pc += 1
                         continue
-                    elif m in localServer.channel_modes[2]:
-                        giveModes.append(m)
-                    if m == 'k':
-                        giveParams.append(key)
-                    if m == 'l':
-                        giveParams.append(limit)
-                    if m == 'f' and floodparam:
-                        giveParams.append(floodparam)
 
                 for b in [b for b in banlist if b not in localChan.bans]:
                     giveModes.append('b')

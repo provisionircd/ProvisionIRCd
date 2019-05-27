@@ -26,21 +26,12 @@ B = '\033[34m' # blue
 P = '\033[35m' # purple
 
 def syncChannels(localServer, newServer):
-    for c in localServer.channels:
-        if len(c.users) == 0 or c.name[0] == '&':
-            continue
+    for c in [c for c in localServer.channels if c.users and c.name[0] != '&']:
         modeparams = []
         for mode in c.modes:
-            if mode == 'k' and c.key:
-                modeparams.append(c.key)
-            if mode == 'l':
-                modeparams.append(str(c.limit))
-            if mode == 'f':
-                p = []
-                for t in c.chmodef:
-                    p.append('{}:{}:{}'.format(c.chmodef[t]['amount'], t, c.chmodef[t]['time']))
-                modeparams.append(','.join(p))
-        modeparams = ' {}'.format(' '.join(modeparams)) if len(modeparams) > 0 else '{}'.format(' '.join(modeparams))
+            if mode in localServer.chan_params[c]:
+                modeparams.append(localServer.chan_params[c][mode])
+        modeparams = ' {}'.format(' '.join(modeparams)) if modeparams else '{}'.format(' '.join(modeparams))
         memberlist, banlist, excepts, invex, prefix = [], [], [], [], ''
         for user in [user for user in c.users if '^' not in user.modes]:
             if 'q' in c.usermodes[user]:
@@ -53,29 +44,16 @@ def syncChannels(localServer, newServer):
                 prefix += '%'
             if 'v' in c.usermodes[user]:
                 prefix += '+'
-
             member = '{}{}'.format(prefix, user.uid)
             prefix = ''
             memberlist.append(member)
-
-        if not memberlist:
-            continue
-
         memberlist = ' '.join(memberlist)
-        for b in c.bans:
-            banlist.append(b)
-        for e in c.excepts:
-            excepts.append(e)
-        for I in c.invex:
-            invex.append(I)
-
-        b = ' '.join(['&' + x for x in banlist])
-        e = ' '.join(['"' + x for x in excepts])
-        I = ' '.join(["'" + x for x in invex])
+        b = ' '.join(['&' + x for x in [x for x in c.bans]])
+        e = ' '.join(['"' + x for x in [x for x in c.excepts]])
+        I = ' '.join(["'" + x for x in [x for x in c.invex]])
         data = '{} {} +{}{} :{} {} {} {}'.format(c.creation, c.name, c.modes, modeparams, memberlist, b, e, I)
-
         newServer._send(':{} SJOIN {}'.format(localServer.sid, data))
-        if c.topic != '':
+        if c.topic:
             data = ':{} TOPIC {} {} {} :{}'.format(localServer.sid, c.name, c.topic_author, c.topic_time, c.topic)
             newServer._send(data)
 

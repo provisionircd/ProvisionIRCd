@@ -13,7 +13,7 @@ import sys
 from handle.functions import _print
 
 maxwatch = 256
-def init(localServer):
+def init(localServer, reload=False):
     localServer.maxwatch = maxwatch
 
 @ircd.Modules.support('WATCH='+str(maxwatch))

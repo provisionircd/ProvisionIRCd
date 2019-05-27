@@ -63,7 +63,14 @@ class data_handler: #(threading.Thread):
                 read_servers = [server for server in list(localServer.servers) if server.socket]
                 write_servers = [server for server in list(localServer.servers) if server.socket and server.sendbuffer]
 
-                read, write, error = select.select(list(self.listen_socks) + read_users + read_servers, write_users + write_servers, read_users + read_servers + write_users + write_servers + list(self.listen_socks), 1.0)
+                try:
+                    read, write, error = select.select(list(self.listen_socks) + read_users + read_servers, write_users + write_servers, read_users + read_servers + write_users + write_servers + list(self.listen_socks), 1.0)
+                except ValueError:
+                    for fd in [fd for fd in list(localServer.users) if fd.socket and not fd.registered]:
+                        fd.quit('Limit reached')
+                    logging.info('Cleanup done')
+                    continue
+
                 for s in error:
                     logging.error('Error occurred in {}'.format(s))
                 for s in write:
@@ -88,10 +95,10 @@ class data_handler: #(threading.Thread):
                             dir_path = os.path.dirname(path)
                             os.chdir(dir_path)
                             conn, addr = s.accept()
-                            conn.settimeout(2) ### Look into this.
+                            conn.settimeout(3) ### Look into this.
                             conn_backlog = [user for user in localServer.users if user.socket and not user.registered]
                             logging.info('Accepting client on {} -- fd: {}, with IP {}'.format(s, conn.fileno(), addr[0]))
-                            if len(conn_backlog) > 100:
+                            if len(conn_backlog) > 500:
                                 logging.warning('Current connection backlog is >{}, so not allowing any more connections for now. Bye.'.format(len(conn_backlog)))
                                 conn.close()
                                 continue
@@ -325,7 +332,7 @@ class data_handler: #(threading.Thread):
             except Exception as ex:
                 logging.exception(ex)
 
-        logging.warning('data_handler loop broke! This should only happen if you reload the core, or after /restart.')
+        logging.warning('data_handler loop broke! This should only happen after /restart.')
 
 def read_socket(localServer, sock):
     try:
@@ -336,7 +343,7 @@ def read_socket(localServer, sock):
         try:
             recv = sock.socket.recv(buffer_len).decode('utf-8')
         except Exception as ex:
-            logging.exception(ex)
+            #logging.exception(ex)
             sock.quit('Read error: {}'.format(ex))
             return
 

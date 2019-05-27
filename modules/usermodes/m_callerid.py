@@ -96,7 +96,7 @@ def callerid(self, localServer, recv):
 
         if sync:
             data = ':{} {}'.format(self.uid, ' '.join(recv))
-            localServer.syncToServers(localServer, self.server, data)
+            localServer.new_sync(localServer, self.server, data)
 
     except Exception as ex:
         logging.exception(ex)
