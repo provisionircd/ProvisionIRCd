@@ -181,7 +181,10 @@ def LoadModule(self, name, path, reload=False, module=None):
             else:
                 module = importlib.import_module(package)
             if hasattr(module, 'init'):
-                getattr(module, 'init')(self, reload=reload)
+                try:
+                    getattr(module, 'init')(self, reload=reload)
+                except Exception as ex:
+                    logging.exception(ex)
             callables = FindCallables(module)
             HookToCore(self, callables)
             self.modules[module] = callables
