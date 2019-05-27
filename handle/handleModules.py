@@ -199,7 +199,10 @@ def UnloadModule(self, name):
             m = module.__name__
             if m == name:
                 if hasattr(module, 'unload'):
-                    getattr(module, 'unload')(self)
+                    try:
+                        getattr(module, 'unload')(self)
+                    except Excption as ex:
+                        logging.exception(ex)
                 for function in [function for function in self.modules[module][0] if hasattr(function, 'commands')]:
                     for cmd in list(function.commands):
                         function.commands.remove(cmd)
