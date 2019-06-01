@@ -420,9 +420,10 @@ def events(*command_list):
 
 import inspect
 all_hooks = [
+            'pre_command',
             'pre_local_join',
             'local_join',
-            'pre_remote_join', ### Why? Not like you can block a remote join.
+            'pre_remote_join', ### Why? Not like you can block a remote join. Oh, for m_delayjoin to hide joins.
             'remote_join',
             'pre_local_part',
             'local_part',
