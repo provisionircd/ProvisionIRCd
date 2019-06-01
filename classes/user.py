@@ -309,6 +309,7 @@ class User:
                     except KeyError:
                         pass
                 false_cmd = True
+
                 ### pre_command hook.
                 allow = 1
                 for callable in [callable for callable in self.server.hooks if callable[0].lower() == 'pre_command' and callable[1].lower() == command.lower()]:
