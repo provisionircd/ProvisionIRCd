@@ -309,6 +309,16 @@ class User:
                     except KeyError:
                         pass
                 false_cmd = True
+                ### pre_command hook.
+                allow = 1
+                for callable in [callable for callable in self.server.hooks if callable[0].lower() == 'pre_command' and callable[1].lower() == command.lower()]:
+                    try:
+                        allow = callable[2](self, localServer, parsed)
+                    except Exception as ex:
+                        logging.exception(ex)
+                if not allow and allow is not None:
+                    continue
+
                 for callable in [callable for callable in localServer.commands if callable[0].lower() == command.lower()]:
                     try:
                         got_params = len(parsed) - 1
