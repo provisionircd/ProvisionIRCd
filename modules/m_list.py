@@ -9,9 +9,6 @@ import time
 @ircd.Modules.support('ELIST=U')
 @ircd.Modules.commands('list')
 def list(self, localServer, recv):
-    if int(time.time()) - self.signon < 60:
-        localServer.notice(self, '*** Please wait a while before requesting channel list.')
-        return self.sendraw(323, ':End of /LIST')
     self.flood_safe = True
     self.sendraw(321, 'Channel :Users  Name')
     minusers, maxusers = None, None
