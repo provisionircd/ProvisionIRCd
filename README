@@ -51,10 +51,6 @@ Note: if you want to use Anope, select "unreal40" as the protocol in Anope conf.
   The status will be automatically removed after 60 minutes.
 
 
-* "backlog" CAP. With this CAP enabled, you will receive the last 10 channel messages upon joining a channel.
-  This limit is hardcoded, for now. Use with "server-time" CAP to include correct timestamps.
-
-
 * m_callerid (/accept and usermode +g) for server-side 'ignore' system. With usermode +g, only users in your /accept list can private message you.
 
 
