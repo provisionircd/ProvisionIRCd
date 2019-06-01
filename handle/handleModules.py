@@ -457,7 +457,6 @@ all_hooks = [
             ]
 
 class hooks:
-
     def test_hook(*h):
         d = inspect.stack()[0][3]
         def add(function):
