@@ -16,10 +16,10 @@ awaylen = 307
 @ircd.Modules.commands('away')
 def away(self, localServer, recv, override=False):
     if type(self).__name__ == 'Server':
+        sourceServer = self
         self = list(filter(lambda u: u.uid == recv[0][1:] or u.nickname == recv[0][1:], localServer.users))[0]
         data = ' '.join(recv)
         recv = recv[1:]
-        sourceServer = self
     else:
         data = ':{} {} :{}'.format(self.uid, ''.join(recv[0]), ' '.join(recv[1:]))
         sourceServer = self.server
