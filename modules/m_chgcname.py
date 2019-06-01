@@ -16,7 +16,6 @@ def cmd_CHGCNAME(self, localServer, recv):
         self = list(filter(lambda u: u.uid == recv[0][1:] or u.nickname == recv[0][1:], localServer.users))[0]
         ### Cut the recv to match original syntax. (there's now an extra :UID at the beginning.
         recv = recv[1:]
-        override = True
     else:
         sourceServer = self.server
     name = recv[2]
@@ -39,9 +38,12 @@ def cmd_CHGCNAME(self, localServer, recv):
     if name.lower() != channel.name.lower():
         return localServer.notice(self, 'Only case changing is allowed.')
 
-    localServer.notice(self, 'Channel {} successfully changed to {}'.format(channel.name, name))
+    if sourceServer == localServer:
+        localServer.notice(self, 'Channel {} successfully changed to {}'.format(channel.name, name))
 
-    msg = '*** {} ({}@{}) used CHGCNAME to change channel name {} to {}'.format(self.nickname, self.ident, self.hostname, channel.name, name)
-    localServer.snotice('s', msg)
-
+    localServer.new_sync(localServer, sourceServer, ':{} CHGCNAME {} {}'.format(self.uid, channel.name, name))
+    old_name = channel.name
     channel.name = name
+    if sourceServer == localServer:
+        msg = '*** {} ({}@{}) used CHGCNAME to change channel name {} to {}'.format(self.nickname, self.ident, self.hostname, old_name, name)
+        localServer.snotice('s', msg)

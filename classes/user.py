@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 try:
     import faulthandler
     faulthandler.enable()
@@ -284,15 +281,17 @@ class User:
                 if type(self).__name__ == 'User' and command != 'nick' and command != 'user' and command != 'pong' and command != 'cap' and command != 'starttls' and not self.registered:
                     return self.sendraw(462, 'You have not registered')
                 if command == 'pong':
-                    if self.socket in self.server.pings:
+                    if self in self.server.pings:
                         ping = recv.split()[1]
                         if ping.startswith(':'):
                             ping = ping[1:]
-                        if self.server.pings[self.socket] == ping:
-                            del self.server.pings[self.socket]
+                        if self.server.pings[self] == ping:
+                            del self.server.pings[self]
                             self.validping = True
                             if self.ident != '' and self.nickname != '*' and (self.cap_end or not self.sends_cap):
                                 self.welcome()
+                        else:
+                            self.quit('Unauthorized connection')
                 try:
                     cmd = importlib.import_module('cmds.cmd_'+command.lower())
                     getattr(cmd, 'cmd_'+command.upper())(self, localServer, parsed)
@@ -495,18 +494,18 @@ class User:
             show_support(self, self.server)
             if self.ssl:
                 self.send('NOTICE', ':*** You are connected to {} with {}-{}'.format(self.server.hostname, self.socket.version(), self.socket.cipher()[0]))
-            self.handle('lusers')
-            self.handle('motd')
-            if self.fingerprint:
-                self.send('NOTICE', ':*** Your SSL fingerprint is {}'.format(self.fingerprint))
-
             msg = '*** Client connecting: {} ({}@{}) {{{}}} [{}{}]'.format(self.nickname, self.ident, self.hostname, self.cls, 'secure' if self.ssl else 'plain', ' '+self.socket.cipher()[0] if self.ssl else '')
             self.server.snotice('c', msg)
 
             binip = IPtoBase64(self.ip)
-
             data = '{} {} {} {} {} {} 0 +{} {} {} {} :{}'.format(self.nickname, self.server.hopcount, self.signon, self.ident, self.hostname, self.uid, self.modes, self.cloakhost, self.cloakhost, binip, self.realname)
             self.server.new_sync(self.server, self.server, ':{} UID {}'.format(self.server.sid, data))
+
+            self.registered = True
+            self.handle('lusers')
+            self.handle('motd')
+            if self.fingerprint:
+                self.send('NOTICE', ':*** Your SSL fingerprint is {}'.format(self.fingerprint))
 
             modes = []
             for mode in self.server.conf['settings']['modesonconnect']:
@@ -518,7 +517,6 @@ class User:
                 p = {'override': True}
                 self.handle('mode', '{} +{}'.format(self.nickname, ''.join(modes)), params=p)
 
-            self.registered = True
             if self.fingerprint:
                 data = 'MD client {} certfp :{}'.format(self.uid, self.fingerprint)
                 self.server.new_sync(self.server, self.server, ':{} {}'.format(self.server.sid, data))

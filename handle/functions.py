@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 import os
 import sys
 import time
@@ -45,7 +42,7 @@ class TKL:
                     host = '{}@{}'.format('*' if type.lower() == 'z' else user.ident, user.ip if type.lower() == 'z' else user.hostname)
                     try:
                         for e in localServer.conf['except']['tkl']:
-                            if match(e, host):
+                            if match(e, host) and user.server == localServer:
                                 ex = True
                                 break
                     except:
@@ -336,15 +333,17 @@ def check_flood(localServer, target):
 
             if not hasattr(user, 'flood_safe') or not user.flood_safe:
                 if (len(user.recvbuffer) >= recvq or len(user.sendbuffer) >= sendq) and int(time.time()) - user.signon > 2: #and (user.registered and int(time.time()) - user.signon > 3):
-                    ### user.recvbuffer is what the user is sending to the server.
+                    ### user.recvbuffer is what the user is sending to the server. (what the server receives)
                     flood_type = 'recvq' if len(user.recvbuffer) >= recvq else 'sendq'
                     flood_amount = len(user.recvbuffer) if flood_type == 'recvq' else len(user.sendbuffer)
                     flood_limit = recvq if flood_type == 'recvq' else sendq
                     if user.registered:
                         localServer.snotice('f', '*** Flood1 -- {} ({}@{}) has reached their max {} ({}) while the limit is {}'\
                         .format(user.nickname, user.ident, user.hostname, 'RecvQ' if flood_type == 'recvq' else 'SendQ', flood_amount, flood_limit))
-                    user.quit('Excess Flood1', error=True)
+                    user.quit('Excess Flood1')
                     return
+            else:
+                logging.debug('Flood_safe for {}: {}'.format(user, '<< '+user.sendbuffer if user.sendbuffer else '>> '+user.recvbuffer))
 
                 buffer_len = len(user.recvbuffer.split('\n'))
                 max_len = (sendq/2)/10/2
@@ -357,7 +356,7 @@ def check_flood(localServer, target):
                     if user.registered:
                         localServer.snotice('f', '*** Flood2 -- {} ({}@{}) has reached their max buffer length ({}) while the limit is {}'\
                         .format(user.nickname, user.ident, user.hostname, buffer_len, max_cmds))
-                    user.quit('Excess Flood2', error=True)
+                    user.quit('Excess Flood2')
                     return
 
                 flood_penalty_treshhold = 1000000 if 'o' not in user.modes else 2000000

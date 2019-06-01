@@ -11,7 +11,7 @@ from handle.functions import _print
 
 @ircd.Modules.params(1)
 @ircd.Modules.commands('names')
-def names(self, localServer, recv, override=False):
+def names(self, localServer, recv, override=False, flood_safe=False):
     channel = list(filter(lambda c: c.name.lower() == recv[1].lower(), localServer.channels))
     if not channel:
         return self.sendraw(401, '{} :No such channel'.format(recv[1]))
@@ -50,7 +50,11 @@ def names(self, localServer, recv, override=False):
         entry = '{}{}'.format(user.nickname, string)
         users.append(prefix+''+entry)
 
+        if flood_safe:
+            self.flood_safe = True
         if len(users) >= 24:
+            if flood_safe:
+                self.flood_safe = True
             self.sendraw(353, '= {} :{}'.format(channel.name, ' '.join(users)))
             users = []
             continue

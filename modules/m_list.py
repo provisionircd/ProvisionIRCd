@@ -1,16 +1,17 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 /list command
 """
 
 import ircd
+import time
 
 @ircd.Modules.support('SAFELIST')
 @ircd.Modules.support('ELIST=U')
 @ircd.Modules.commands('list')
 def list(self, localServer, recv):
+    if int(time.time()) - self.signon < 60:
+        localServer.notice(self, '*** Please wait a while before requesting channel list.')
+        return self.sendraw(323, ':End of /LIST')
     self.flood_safe = True
     self.sendraw(321, 'Channel :Users  Name')
     minusers, maxusers = None, None
@@ -26,10 +27,10 @@ def list(self, localServer, recv):
             continue
         if minusers is not None and len(channel.users) < int(minusers):
             continue
-        if 's' in channel.modes and (self not in channel.users and not self.ocheck('o', 'override')):
+        if 's' in channel.modes or 'p' in channel.modes and (self not in channel.users and 'o' not in self.modes):
+            if 'p' in channel.modes:
+                self.sendraw(322, '* {} :'.format(len(channel.users)))
             continue
-        if 'p' in channel.modes and (self not in channel.users and not self.ocheck('o', 'override')):
-            self.sendraw(322, '* {} :'.format(channel.name, len(channel.users)))
         else:
             self.sendraw(322, '{} {} :[+{}] {}'.format(channel.name, len(channel.users), channel.modes, channel.topic))
     self.sendraw(323, ':End of /LIST')

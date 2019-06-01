@@ -35,7 +35,7 @@ Note: if you want to use Anope, select "unreal40" as the protocol in Anope conf.
   Users matching <operclass> may override +i. Wildcards accepted.
 
   +b/e/I ~a:account
-  Users matching <account> can go through bans (+b), bypass bans (+e) or bypass invite (+I)
+  Users matching <account> will be banned (+b), bypass bans (+e) or bypass invite (+I)
 
 
 * m_trace for country and ISP management. It comes with extbans ~C (country) and ~i (ISP).

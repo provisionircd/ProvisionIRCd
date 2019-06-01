@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 /watch command
 """
@@ -45,6 +42,7 @@ def watch(self, localServer, recv):
                 nick = entry[1:]
                 if entry[0] == '+':
                     if len(self.watchlist) >= localServer.maxwatch:
+                        return self.sendraw(512, 'Maximum size of WATCH-list is {} entries'.format(localServer.maxwatch))
                         continue
 
                     if nick.lower() not in watch_lower:

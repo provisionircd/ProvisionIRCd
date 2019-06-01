@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 provides chmode +H (backlog support)
 """
@@ -75,7 +72,6 @@ def chmode_H(self, localServer, channel, modebuf, parambuf, action, m, param):
                 modebuf.append(m)
                 parambuf.append(param)
                 channel.modes += m
-                #localServer.chan_params[channel][m] = param
             else:
                 channel.msg_backlog = {}
     except Exception as ex:

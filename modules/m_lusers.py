@@ -14,7 +14,9 @@ def lusers(self, localServer, recv):
     invisible = len(list(filter(lambda c: 'i' in c.modes, localServer.users)))
     opers = len(list(filter(lambda c: 'o' in c.modes and 'H' not in c.modes and 'S' not in c.modes, localServer.users)))
     lusers = len(list(filter(lambda u: u.server == localServer and u.registered, localServer.users)))
-    unknown = len(list(filter(lambda u: not u.registered, localServer.users)))
+    unknown_users = [u for u in localServer.users if not u.registered]
+    unknown_servers = [s for s in localServer.servers if not s.eos]
+    unknown = len(unknown_users+unknown_servers)
     self.sendraw(251, ':There {} {} user{} and {} invisible on {} server{}'.format('are' if len(localServer.users) != 1 else 'is', len(localServer.users), 's' if len(localServer.users) != 1 else '', invisible, servers, 's' if servers != 1 else ''))
     self.sendraw(252, '{} :IRC Operator{} online'.format(opers, 's' if opers != 1 else ''))
     if unknown > 0:

@@ -72,7 +72,9 @@ def whois(self, localServer, recv):
                     if '^' in user.modes:
                         prefix = '^'
                     if 's' in channel.modes or 'p' in channel.modes:
-                        if (user == self or 'o' in self.modes) and '!' not in prefix and '?' not in prefix:
+                        if user != self and self not in channel.users and 'o' not in self.modes:
+                            continue
+                        if '!' not in prefix and '?' not in prefix:
                             prefix += '?'
                     if 'c' in user.modes and ('o' in self.modes or user == self) and '?' not in prefix:
                         prefix += '!'

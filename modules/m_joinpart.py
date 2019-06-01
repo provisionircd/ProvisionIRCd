@@ -214,7 +214,8 @@ def join(self, localServer, recv, override=False, skipmod=None, sourceServer=Non
 
             if channel.topic_time != 0:
                 self.handle('TOPIC', channel.name)
-            self.handle('NAMES', channel.name)
+            p = {'flood_safe': True}
+            self.handle('NAMES', channel.name, params=p)
 
             prefix = ''
             for mode in [mode for mode in localServer.chprefix if mode in channel.usermodes[self]]:

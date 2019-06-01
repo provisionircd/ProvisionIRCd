@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 try:
     import faulthandler
     faulthandler.enable()
@@ -60,15 +57,16 @@ class data_handler: #(threading.Thread):
                 read_users = [user for user in list(localServer.users) if user.socket and user.fileno() != -1]
                 write_users = [user for user in list(localServer.users) if user.sendbuffer and user.socket and user.fileno() != -1]
 
-                read_servers = [server for server in list(localServer.servers) if server.socket]
-                write_servers = [server for server in list(localServer.servers) if server.socket and server.sendbuffer]
+                read_servers = [server for server in list(localServer.servers) if server.socket and server.fileno() != -1]
+                write_servers = [server for server in list(localServer.servers) if server.socket and server.sendbuffer and server.fileno() != -1]
 
                 try:
                     read, write, error = select.select(list(self.listen_socks) + read_users + read_servers, write_users + write_servers, read_users + read_servers + write_users + write_servers + list(self.listen_socks), 1.0)
-                except ValueError:
+                except ValueError as ex:
                     for fd in [fd for fd in list(localServer.users) if fd.socket and not fd.registered]:
                         fd.quit('Limit reached')
                     logging.info('Cleanup done')
+                    logging.exception(ex)
                     continue
 
                 for s in error:
@@ -79,8 +77,9 @@ class data_handler: #(threading.Thread):
                         try:
                             sent = s.socket.send(bytes(s.sendbuffer, 'utf-8'))
                             s.sendbuffer = s.sendbuffer[sent:]
-                            if type(s).__name__ == 'User':
+                            if type(s).__name__ == 'User' and (hasattr(s, 'flood_safe') and s.flood_safe):
                                 s.flood_safe = False
+                                logging.debug('Flood_safe for {} unset.'.format(s))
                         except Exception as ex:
                             s.quit('Write error: {}'.format(str(ex)))
                             continue
@@ -95,23 +94,24 @@ class data_handler: #(threading.Thread):
                             dir_path = os.path.dirname(path)
                             os.chdir(dir_path)
                             conn, addr = s.accept()
-                            conn.settimeout(3) ### Look into this.
+                            port = conn.getsockname()[1]
+                            is_ssl = is_sslport(localServer, port)
                             conn_backlog = [user for user in localServer.users if user.socket and not user.registered]
                             logging.info('Accepting client on {} -- fd: {}, with IP {}'.format(s, conn.fileno(), addr[0]))
                             if len(conn_backlog) > 500:
                                 logging.warning('Current connection backlog is >{}, so not allowing any more connections for now. Bye.'.format(len(conn_backlog)))
                                 conn.close()
                                 continue
-                            port = conn.getsockname()[1]
-                            is_ssl = is_sslport(localServer, port)
+                            conn.settimeout(3) ### Look into this.
+                            u = User(localServer, conn, addr, is_ssl)
                             if is_ssl:
                                 is_ssl = 0
                                 version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
                                 if int(version) >= 36:
-                                    conn = sslctx.wrap_socket(conn, server_side=True)
+                                    u.socket = sslctx.wrap_socket(u.socket, server_side=True)
                                     is_ssl = 1
                                 else:
-                                    conn = ssl.wrap_socket(conn,
+                                    u.socket = ssl.wrap_socket(u.socket,
                                                             server_side=True,
                                                             certfile=server_cert, keyfile=server_key, ca_certs=ca_certs,
                                                             suppress_ragged_eofs=True,
@@ -120,14 +120,15 @@ class data_handler: #(threading.Thread):
                                                             )
                                     is_ssl = 1
                                 try:
-                                    fp = conn.getpeercert(True)
+                                    fp = u.socket.getpeercert(True)
                                     if fp:
                                         ssl_fingerprint = hashlib.sha256(repr(fp).encode('utf-8')).hexdigest()
                                         logging.info('Fingerprint: {}'.format(ssl_fingerprint))
                                 except Exception as ex:
                                     logging.exception(ex)
-                            conn.setblocking(1)
-                            u = User(localServer, conn, addr, is_ssl)
+
+                            u.socket.setblocking(1)
+                            #u = User(localServer, conn, addr, is_ssl)
                             gc.collect()
                             if u.fileno() == -1:
                                 logging.error('{}Invalid fd for {} -- quit() on user{}'.format(R, u, W))
@@ -135,7 +136,7 @@ class data_handler: #(threading.Thread):
                                 continue
                             try:
                                 random_ping = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(8))
-                                localServer.pings[conn] = random_ping
+                                localServer.pings[u] = random_ping
                                 u._send('PING :{}'.format(random_ping))
 
                             except Exception as ex:
@@ -146,7 +147,7 @@ class data_handler: #(threading.Thread):
 
                         except Exception as ex:
                             try:
-                                conn.close()
+                                u.quit(ex)
                             except Exception as ex:
                                 logging.exception(ex)
                             logging.exception(ex)
@@ -176,8 +177,6 @@ class data_handler: #(threading.Thread):
 
                                 conn.do_handshake()
                                 logging.info('Wrapped incoming socket {} in SSL'.format(conn))
-                                if not conn:
-                                    continue
                             Server(origin=localServer, serverLink=True, sock=conn, is_ssl=is_ssl)
 
                         except ssl.SSLError as ex:
