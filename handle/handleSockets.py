@@ -23,15 +23,6 @@ import hashlib
 import time
 #rom OpenSSL import SSL
 
-server_cert = 'ssl/server.cert.pem'
-server_key = 'ssl/server.key.pem'
-ca_certs = 'ssl/curl-ca-bundle.crt'
-sslctx = ssl.SSLContext(ssl.PROTOCOL_TLS)
-sslctx.load_cert_chain(certfile=server_cert, keyfile=server_key)
-sslctx.load_default_certs(purpose=ssl.Purpose.CLIENT_AUTH)
-sslctx.load_verify_locations(cafile=ca_certs)
-sslctx.verify_mode = ssl.CERT_NONE
-
 if sys.version_info[0] < 3:
     print('Python 2 is not supported.')
     sys.exit()
@@ -51,6 +42,14 @@ class data_handler: #(threading.Thread):
         self.listen_socks = self.server.listen_socks
 
     def run(self):
+        self.server_cert = 'ssl/server.cert.pem'
+        self.server_key = 'ssl/server.key.pem'
+        self.ca_certs = 'ssl/curl-ca-bundle.crt'
+        self.sslctx = ssl.SSLContext(ssl.PROTOCOL_TLS)
+        self.sslctx.load_cert_chain(certfile=self.server_cert, keyfile=self.server_key)
+        self.sslctx.load_default_certs(purpose=ssl.Purpose.CLIENT_AUTH)
+        self.sslctx.load_verify_locations(cafile=self.ca_certs)
+        self.sslctx.verify_mode = ssl.CERT_NONE
         while 1:
             try:
                 localServer = self.server
@@ -108,12 +107,12 @@ class data_handler: #(threading.Thread):
                                 is_ssl = 0
                                 version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
                                 if int(version) >= 36:
-                                    u.socket = sslctx.wrap_socket(u.socket, server_side=True)
+                                    u.socket = self.sslctx.wrap_socket(u.socket, server_side=True)
                                     is_ssl = 1
                                 else:
                                     u.socket = ssl.wrap_socket(u.socket,
                                                             server_side=True,
-                                                            certfile=server_cert, keyfile=server_key, ca_certs=ca_certs,
+                                                            certfile=self.server_cert, keyfile=self.server_key, ca_certs=self.ca_certs,
                                                             suppress_ragged_eofs=True,
                                                             cert_reqs=ssl.CERT_NONE,
                                                             ciphers='HIGH'
