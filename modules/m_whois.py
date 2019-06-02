@@ -30,7 +30,6 @@ def whois(self, localServer, recv):
         if 'W' in user.modes and user != self:
             msg = '*** Notice -- {} ({}@{}) did a /WHOIS on you.'.format(self.nickname, self.ident, self.hostname)
             us = list(filter(lambda u: u.nickname == user.nickname and user.server == localServer, localServer.users))
-            self.server.broadcast(us, 'NOTICE {} {}'.format(user.nickname, msg))
             if us:
                 self.server.broadcast(us, 'NOTICE {} {}'.format(user.nickname, msg))
             else:
