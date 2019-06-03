@@ -76,8 +76,8 @@ def oper(self, localServer, recv):
         for flag in [flag for flag in all_flags if flag.lower() not in self.operflags]:
             self.operflags.append(flag.lower())
 
-        ### Do not automatically set following modes: qrzHW
-        modes = 'o'+re.sub('[oqrzHW]', '', localServer.conf['opers'][recv[1]]['modes'])
+        ### Do not automatically set following modes: qrzH
+        modes = 'o'+re.sub('[oqrzH]', '', localServer.conf['opers'][recv[1]]['modes'])
         self.opermodes = ''
         for m in [m for m in modes if m in localServer.user_modes]:
             self.opermodes += m
