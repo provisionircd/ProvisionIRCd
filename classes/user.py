@@ -279,7 +279,7 @@ class User:
                     #_print('> {} :: {}'.format(self.nickname, recv), server=self.server)
                 #print('ik ga zo slaaaaaapen maar jij bent ernie?')
                 if type(self).__name__ == 'User' and command != 'nick' and command != 'user' and command != 'pong' and command != 'cap' and command != 'starttls' and not self.registered:
-                    return self.sendraw(462, 'You have not registered')
+                    return self.sendraw(451, 'You have not registered')
                 if command == 'pong':
                     if self in self.server.pings:
                         ping = recv.split()[1]
