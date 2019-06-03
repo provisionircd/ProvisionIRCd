@@ -19,6 +19,8 @@ P = '\033[35m' # purple
 
 def initlogging(localServer):
     datefile = time.strftime('%Y%m%d')
+    if not os.path.exists('logs'):
+        os.mkdir('logs')
     loghandlers = [logging.handlers.TimedRotatingFileHandler('logs/logs.txt', when='midnight')]
     if not localServer.forked:
         loghandlers.append(logging.StreamHandler())
