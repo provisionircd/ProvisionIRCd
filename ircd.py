@@ -186,7 +186,23 @@ class Server:
                     chmodes_string += ','
                 logging.info('Core modes set: {}'.format(self.core_chmodes))
                 self.chmodes_string = chmodes_string[:-1]
-                self.snomasks = 'cdfjkostzCFGNQS'
+                #self.snomasks = 'cdfjkostzCFGNQS'
+                self.snomasks = {
+                                "c": "Can read local connect/disconnect notices",
+                                "d": "Can see DNSNL hits",
+                                "f": "See flood alerts",
+                                "k": "View kill notices",
+                                "o": "See oper-up notices",
+                                "s": "General server notices",
+                                "t": "Trash notices (unimportant stuff)",
+                                "C": "Can read global connect/disconnect notices",
+                                "F": "View spamfilter matches",
+                                "G": "View TKL usages",
+                                "N": "Can see nick changes",
+                                "Q": "View Q:line rejections",
+                                "S": "Can see /sanick, /sajoin, and /sapart usage",
+                                }
+
                 self.chstatus = 'yqaohv'
                 self.chprefix = OrderedDict(
                                     [
