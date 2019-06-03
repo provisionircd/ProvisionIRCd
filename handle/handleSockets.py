@@ -89,9 +89,9 @@ class data_handler: #(threading.Thread):
                         continue
                     if self.listen_socks[s] == 'clients':
                         try:
-                            path = os.path.abspath(__file__)
-                            dir_path = os.path.dirname(path)
-                            os.chdir(dir_path)
+                            #path = os.path.abspath(__file__)
+                            #dir_path = os.path.dirname(path)
+                            #os.chdir(dir_path)
                             conn, addr = s.accept()
                             port = conn.getsockname()[1]
                             is_ssl = is_sslport(localServer, port)
@@ -154,20 +154,14 @@ class data_handler: #(threading.Thread):
 
                     if self.listen_socks[s] == 'servers':
                         try:
-                            path = os.path.abspath(__file__)
-                            dir_path = os.path.dirname(path)
-                            os.chdir(dir_path)
                             conn, addr = s.accept()
                             conn.settimeout(1)
                             port = conn.getsockname()[1]
                             is_ssl = is_sslport(localServer, port)
                             if is_ssl:
-                                server_cert = '../ssl/server.cert.pem'
-                                server_key = '../ssl/server.key.pem'
-                                ca_certs = '../ssl/curl-ca-bundle.crt'
                                 conn = ssl.wrap_socket(conn,
                                                         server_side=True,
-                                                        certfile=server_cert, keyfile=server_key, ca_certs=ca_certs,
+                                                        certfile=self.server_cert, keyfile=self.server_key, ca_certs=self.ca_certs,
                                                         suppress_ragged_eofs=True,
                                                         do_handshake_on_connect=False,
                                                         #cert_reqs=ssl.CERT_OPTIONAL,
@@ -326,6 +320,9 @@ class data_handler: #(threading.Thread):
                         callable[2](localServer)
                     except Exception as ex:
                         logging.exception(ex)
+
+                if not os.path.exists('logs'):
+                    os.mkdir('logs')
 
             except Exception as ex:
                 logging.exception(ex)
