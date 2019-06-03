@@ -54,10 +54,10 @@ def help(self, localServer, recv):
 
             chmodes = sorted(localServer.channel_modes[3])
             chmodes.sort(key=lambda x:(not x.islower(), x))
-            for type in [type for type in localServer.channel_modes if type < 3]:
-                for mode in localServer.channel_modes[type]:
-                    level = ''.join([{2: '+h', 3: '+o', 4: '+a', 5: '+q', 6: 'IRCops only', 7: 'Settable by servers'}[localServer.channel_modes[type][mode][0]]])
-                    info = localServer.channel_modes[type][mode]
+            for t in [t for t in localServer.channel_modes if t < 3]:
+                for mode in localServer.channel_modes[t]:
+                    level = ''.join([{2: '+h', 3: '+o', 4: '+a', 5: '+q', 6: 'IRCops only', 7: 'Settable by servers'}[localServer.channel_modes[t][mode][0]]])
+                    info = localServer.channel_modes[t][mode]
                     desc = info[1]
                     if not desc: ### Generic mode?
                         continue
@@ -70,6 +70,14 @@ def help(self, localServer, recv):
                 desc = info[1]
                 param_desc = None if len(info) != 3 else info[2]
                 self.sendraw(292, ': {}{} = {} [{}]'.format(mode, ' '+param_desc if param_desc else '', desc, level))
+            self.sendraw(292, ': -')
+            return
+
+        if recv[1].lower() == 'snomasks':
+            snomasks = sorted(localServer.snomasks)
+            snomasks.sort(key=lambda x:(not x.islower(), x))
+            for sno in [sno for sno in snomasks if sno.isalpha()]:
+                self.sendraw(292, ': {} = {}'.format(sno, localServer.snomasks[sno]))
             self.sendraw(292, ': -')
             return
 
