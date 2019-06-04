@@ -24,7 +24,7 @@ def list(self, localServer, recv):
             continue
         if minusers is not None and len(channel.users) < int(minusers):
             continue
-        if 's' in channel.modes or 'p' in channel.modes and (self not in channel.users and 'o' not in self.modes):
+        if ('s' in channel.modes or 'p' in channel.modes) and (self not in channel.users and 'o' not in self.modes):
             if 'p' in channel.modes:
                 self.sendraw(322, '* {} :'.format(len(channel.users)))
             continue
