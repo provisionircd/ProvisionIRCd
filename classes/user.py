@@ -260,7 +260,7 @@ class User:
 
                 self.ping = int(time.time())
 
-                self.flood_penalty += 1500 + len(recv)
+                self.flood_penalty += 2000 + len(recv)
                 check_flood(localServer, self)
 
                 if not self.flood_penalty_time:
@@ -292,6 +292,7 @@ class User:
                                 self.welcome()
                         else:
                             self.quit('Unauthorized connection')
+                            return
                 try:
                     cmd = importlib.import_module('cmds.cmd_'+command.lower())
                     getattr(cmd, 'cmd_'+command.upper())(self, localServer, parsed)
