@@ -17,8 +17,8 @@ import re
 maxtargets = 20
 
 @ircd.Modules.support('MAXTARGETS='+str(maxtargets))
-@ircd.Modules.commands('privmsg', 'zegding')
-def privmsg(self, localServer, recv, override=False, safe=False): ### Check if safe can be removed.
+@ircd.Modules.commands('privmsg', 'msg')
+def privmsg(self, localServer, recv, override=False):
     try:
         if type(self).__name__ == 'Server':
             sourceServer = self
@@ -50,7 +50,7 @@ def privmsg(self, localServer, recv, override=False, safe=False): ### Check if s
         msg = ' '.join(recv[2:]).rstrip()
 
         if type(self).__name__ == 'User':
-            self.flood_penalty += len(msg) * 100
+            self.flood_penalty += len(msg) * 150
 
         for target in targets[:maxtargets]:
             if target[0] not in localServer.chantypes:
@@ -180,7 +180,7 @@ def notice(self, localServer, recv, override=False, s_sync=True):
         msg = ' '.join(recv[2:])
 
         if type(self).__name__ == 'User':
-            self.flood_penalty += len(msg) * 100
+            self.flood_penalty += len(msg) * 150
 
         for target in recv[1].split(',')[:maxtargets]:
             if target[0] == '$' and sourceServer != localServer:
