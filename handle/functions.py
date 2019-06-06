@@ -346,13 +346,12 @@ def check_flood(localServer, target):
                     return
             else:
                 logging.debug('Flood_safe for {}: {}'.format(user, '<< '+user.sendbuffer if user.sendbuffer else '>> '+user.recvbuffer))
-
                 buffer_len = len(user.recvbuffer.split('\n'))
                 max_len = (sendq/2)/10/2
                 max_cmds = max_len/2
                 if 'o' in user.modes:
-                    max_len *= 2
-                    max_cmds *= 2
+                    max_len *= 10
+                    max_cmds *= 10
 
                 if (buffer_len >= max_cmds) and (user.registered and int(time.time()) - user.signon > 1):
                     if user.registered:
@@ -361,7 +360,7 @@ def check_flood(localServer, target):
                     user.quit('Excess Flood2')
                     return
 
-                flood_penalty_treshhold = 1000000 if 'o' not in user.modes else 2000000
+                flood_penalty_treshhold = 1000000 if 'o' not in user.modes else 10000000
                 if int(time.time()) - user.flood_penalty_time > 60:
                     user.flood_penalty = 0
                     user.flood_penalty_time = 0
