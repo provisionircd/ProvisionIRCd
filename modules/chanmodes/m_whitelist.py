@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 provides chmode +w (white list)
 """
@@ -97,6 +94,10 @@ def whitelist_mode(self, localServer, channel, modebuf, parambuf, action, m, par
 
     except Exception as ex:
         logging.exception(ex)
+
+@ircd.Modules.hooks.channel_destroy():
+def destroy(self, localServer, channel):
+    channel.whitelist = {}
 
 def init(localServer, reload=False):
     for chan in [chan for chan in localServer.channels if not hasattr(chan, 'whitelist')]:
