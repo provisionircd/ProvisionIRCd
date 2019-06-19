@@ -19,7 +19,8 @@ def init(localServer, reload=False):
 def watch(self, localServer, recv):
     if int(time.time()) - self.signon < 10:
         self.flood_safe = True
-    self.flood_penalty += 100000
+    else:
+        self.flood_penalty += 100000
     try:
         watch_lower = [x.lower() for x in self.watchlist]
         if len(recv) == 1:

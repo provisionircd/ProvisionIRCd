@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 import sys
 import os
 import time
@@ -48,10 +45,23 @@ def syncChannels(localServer, newServer):
             prefix = ''
             memberlist.append(member)
         memberlist = ' '.join(memberlist)
-        b = ' '.join(['&' + x for x in [x for x in c.bans]])
-        e = ' '.join(['"' + x for x in [x for x in c.excepts]])
-        I = ' '.join(["'" + x for x in [x for x in c.invex]])
-        data = '{} {} +{}{} :{} {} {} {}'.format(c.creation, c.name, c.modes, modeparams, memberlist, b, e, I)
+        b = ' '.join(['&' + x for x in [x for x in c.bans]])+' ' if list(c.bans) else ''
+        e = ' '.join(['"' + x for x in [x for x in c.excepts]])+' ' if list(c.excepts) else ''
+        I = ' '.join(["'" + x for x in [x for x in c.invex]])+' ' if list(c.invex) else ''
+
+        ### Loop over modules to fetch additional lists (m_whitelist) and append them to the end.
+        mod_list = ''
+        for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'channel_lists_sync']:
+            try:
+                #logging.debug('Calling {}'.format(callable))
+                result = callable[2](localServer, c)
+                if result and result not in mod_list.split():
+                    t = ' ' if mod_list else ''
+                    mod_list += t+result
+            except Exception as ex:
+                logging.exception(ex)
+
+        data = '{} {} +{}{} :{} {}{}{}{}'.format(c.creation, c.name, c.modes, modeparams, memberlist, b, e, I, mod_list)
         newServer._send(':{} SJOIN {}'.format(localServer.sid, data))
         if c.topic:
             data = ':{} TOPIC {} {} {} :{}'.format(localServer.sid, c.name, c.topic_author, c.topic_time, c.topic)

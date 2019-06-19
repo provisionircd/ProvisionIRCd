@@ -44,4 +44,4 @@ def quit(self, localServer, recv, showPrefix=True):
 
     reason = '{}{}'.format(quitprefix+': ' if self.server == localServer and showPrefix else '', reason)
 
-    self.quit(reason, source=source, error=False)
+    self.quit(reason, error=False)

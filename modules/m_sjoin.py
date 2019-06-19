@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 /sjoin command (server)
 """
@@ -29,8 +26,8 @@ def sjoin(self, localServer, recv):
         raw = ' '.join(recv)
         source = list(filter(lambda s: s.sid == recv[0][1:] or s.hostname == recv[0][1:], localServer.servers))
         if not source:
+            logging.error('/SJOIN source not found!')
             return
-
         source = source[0]
 
         channel = recv[3]
@@ -49,7 +46,12 @@ def sjoin(self, localServer, recv):
         banlist = []
         excepts = []
         invex = []
+        mod_list_data = [] ### Store temp data from mods list types.
         c = 0
+        if recv[4].startswith('+'):
+            modes = recv[4].replace('+','')
+        else:
+            modes = ''
         for pos in recv[1:]:
             c += 1
             if pos.startswith(':'):
@@ -57,15 +59,21 @@ def sjoin(self, localServer, recv):
                 continue
             if pos.startswith('&'):
                 banlist.append(pos[1:])
-            if pos.startswith('"'):
+            elif pos.startswith('"'):
                 excepts.append(pos[1:])
-            if pos.startswith("'"):
+            elif pos.startswith("'"):
                 invex.append(pos[1:])
+            elif c > 4 and pos and not pos[0].isalpha() and not pos[0].isdigit() and pos[0] not in ":&\"'*~@%+":
+                if pos in memberlist:
+                    memberlist.remove(pos)
+                ### Unrecognized mode, checking modules.
+                ### Loop over modules to check if they have a 'mode_prefix' attr.
+                try:
+                    for m in [m for m in localServer.modules if hasattr(m, 'mode_prefix') and pos[0] == m.mode_prefix]:
+                        mod_list_data.append((m.chmode, pos[1:]))
+                except Exception as ex:
+                    logging.exception(ex)
 
-        if recv[4].startswith('+'):
-            modes = recv[4].replace('+','')
-        else:
-            modes = ''
         data = []
 
         giveModes = []
@@ -180,6 +188,20 @@ def sjoin(self, localServer, recv):
                 giveModes.append('I')
                 giveParams.append(I)
 
+            ### Remove mod list data.
+            for m in [m for m in localServer.modules if hasattr(m, 'list_name') and hasattr(localChan, m.list_name)]:
+                remote_temp = []
+                for e in mod_list_data:
+                    remote_temp.append(e[1])
+                for entry in [entry for entry in getattr(localChan, m.list_name) if entry not in remote_temp]:
+                    logging.debug('Local list entry +{} {} not found in remote data, so removing.'.format(m.chmode, entry, remote_temp))
+                    removeModes.append(m.chmode)
+                    removeParams.append(entry)
+
+            for entry in [entry for entry in mod_list_data if entry[1] not in getattr(localChan, m.list_name)]:
+                giveModes.append(entry[0])
+                giveParams.append(entry[1])
+
             data = []
             data.append(localChan.name)
             modes = '{}{}'.format('-'+''.join(removeModes) if removeModes else '', '+'+''.join(giveModes) if giveModes else '')
@@ -229,6 +251,14 @@ def sjoin(self, localServer, recv):
                 for I in [I for I in invex if I not in localChan.invex]:
                     giveModes.append('I')
                     giveParams.append(I)
+
+                ### Merge mod list data.
+                for entry in mod_list_data:
+                    for m in [m for m in localServer.modules if hasattr(m, 'chmode') and hasattr(m, 'list_name') and m.chmode == entry[0]]:
+                        if hasattr(localChan, m.list_name) and entry[1] not in getattr(localChan, m.list_name):
+                            logging.debug('List mode +{} {} is missing from localChan'.format(entry[0], entry[1]))
+                            giveModes.append(entry[0])
+                            giveParams.append(entry[1])
 
                 data = []
                 data.append(localChan.name)

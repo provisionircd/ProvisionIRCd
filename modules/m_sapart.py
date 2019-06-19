@@ -34,6 +34,7 @@ def sapart(self, localServer, recv):
     if not channel:
         return self.sendraw(441, '{} {} :is not on that channel'.format(target[0].nickname, chan))
 
+    self.flood_penalty += 100000
     channel = channel[0]
     target[0].handle('part', chan)
 

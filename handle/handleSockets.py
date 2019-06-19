@@ -34,6 +34,101 @@ Y = '\033[33m' # yellow
 B = '\033[34m' # blue
 P = '\033[35m' # purple
 
+
+def sock_accept(localServer, s):
+    if localServer.listen_socks[s] == 'clients':
+        try:
+            conn, addr = s.accept()
+            port = conn.getsockname()[1]
+            is_ssl = is_sslport(localServer, port)
+            conn_backlog = [user for user in localServer.users if user.socket and not user.registered]
+            logging.info('Accepting client on {} -- fd: {}, with IP {}'.format(s, conn.fileno(), addr[0]))
+            if len(conn_backlog) > 500:
+                logging.warning('Current connection backlog is >{}, so not allowing any more connections for now. Bye.'.format(len(conn_backlog)))
+                conn.close()
+                return
+            #conn.settimeout(3) ### Look into this.
+            u = User(localServer, conn, addr, is_ssl)
+            if is_ssl:
+                '''
+                is_ssl = 0
+                version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
+                if int(version) >= 36:
+                    u.socket = localServer.sslctx.wrap_socket(u.socket, server_side=True)
+                    is_ssl = 1
+                else:
+                    u.socket = ssl.wrap_socket(u.socket,
+                                            #server_side=True,
+                                            certfile=localServer.server_cert, keyfile=localServer.server_key, ca_certs=localServer.ca_certs,
+                                            suppress_ragged_eofs=True,
+                                            cert_reqs=ssl.CERT_OPTIONAL,
+                                            ciphers='HIGH'
+                                            )
+                    is_ssl = 1
+                '''
+                try:
+                    fp = u.socket.getpeercert(True)
+                    if fp:
+                        ssl_fingerprint = hashlib.sha256(repr(fp).encode('utf-8')).hexdigest()
+                        logging.info('Fingerprint: {}'.format(ssl_fingerprint))
+                except Exception as ex:
+                    logging.exception(ex)
+            u.socket.setblocking(1)
+            #u = User(localServer, conn, addr, is_ssl)
+            gc.collect()
+            if u.fileno() == -1:
+                logging.error('{}Invalid fd for {} -- quit() on user{}'.format(R, u, W))
+                u.quit('Invalid fd')
+                return
+            try:
+                random_ping = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(8))
+                localServer.pings[u] = random_ping
+                u._send('PING :{}'.format(random_ping))
+
+            except Exception as ex:
+                #localServer.snotice('t', '[{}](1) {}'.format(addr[0], ex))
+                ogging.exception(ex)
+                u.quit(ex)
+                return
+
+        except Exception as ex:
+            try:
+                u.quit(ex)
+            except:
+                pass
+            logging.exception(ex)
+            return
+    elif localServer.listen_socks[s] == 'servers':
+        try:
+            conn, addr = s.accept()
+            #conn.settimeout(1)
+            port = conn.getsockname()[1]
+            is_ssl = is_sslport(localServer, port)
+            '''
+            if is_ssl:
+                conn = ssl.wrap_socket(conn,
+                                        server_side=True,
+                                        certfile=localServer.server_cert, keyfile=localServer.server_key, ca_certs=localServer.ca_certs,
+                                        suppress_ragged_eofs=True,
+                                        do_handshake_on_connect=False,
+                                        #cert_reqs=ssl.CERT_OPTIONAL,
+                                        ciphers='HIGH'
+                                        )
+
+                conn.do_handshake()
+                logging.info('Wrapped incoming socket {} in SSL'.format(conn))
+            '''
+            Server(origin=localServer, serverLink=True, sock=conn, is_ssl=is_ssl)
+
+        except ssl.SSLError as ex:
+            localServer.snotice('t', '[{}](3) {}'.format(addr[0], ex))
+            logging.exception(ex)
+            return
+        except Exception as ex:
+            localServer.snotice('t', '[{}](4) {}'.format(addr[0], ex))
+            logging.exception(ex)
+            return
+
 class data_handler: #(threading.Thread):
     def __init__(self, server):
         #threading.Thread.__init__(self)
@@ -42,17 +137,31 @@ class data_handler: #(threading.Thread):
         self.listen_socks = self.server.listen_socks
 
     def run(self):
-        self.server_cert = 'ssl/server.cert.pem'
-        self.server_key = 'ssl/server.key.pem'
-        self.ca_certs = 'ssl/curl-ca-bundle.crt'
-        self.sslctx = ssl.SSLContext(ssl.PROTOCOL_TLS)
-        self.sslctx.load_cert_chain(certfile=self.server_cert, keyfile=self.server_key)
-        self.sslctx.load_default_certs(purpose=ssl.Purpose.CLIENT_AUTH)
-        self.sslctx.load_verify_locations(cafile=self.ca_certs)
-        self.sslctx.verify_mode = ssl.CERT_NONE
+        localServer = self.server
+        #localServer.ca_certs = 'ssl/wat.crt'
+
+        #print(localServer.sslctx.get_ca_certs(binary_form=False))
+        # self.sock = self.sslctx.wrap_socket(self.sock, server_side=True)
+        '''
+        print(self.listen_socks)
+        version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
+        for sock in [sock for sock in self.listen_socks if is_sslport(localServer, sock.getsockname()[1])]:
+            port = sock.getsockname()[1]
+            print('Port {} is SSL'.format(port))
+            if int(version) >= 36:
+                localServer.sslctx.wrap_socket(sock, server_side=True)
+            else:
+                sock = ssl.wrap_socket(sock,
+                                        server_side=True,
+                                        certfile=localServer.server_cert, keyfile=localServer.server_key, ca_certs=localServer.ca_certs,
+                                        suppress_ragged_eofs=True,
+                                        cert_reqs=ssl.CERT_OPTIONAL,
+                                        ciphers='HIGH'
+                                        )
+        '''
         while 1:
             try:
-                localServer = self.server
+                #localServer = self.server
                 read_users = [user for user in list(localServer.users) if user.socket and user.fileno() != -1]
                 write_users = [user for user in list(localServer.users) if user.sendbuffer and user.socket and user.fileno() != -1]
 
@@ -84,102 +193,12 @@ class data_handler: #(threading.Thread):
                             continue
 
                 for s in read:
-                    if type(s).__name__ == 'User' or type(s).__name__ == 'Server':
+                    if type(s).__name__ in ['User', 'Server']:
                         read_socket(localServer, s)
                         continue
-                    if self.listen_socks[s] == 'clients':
-                        try:
-                            #path = os.path.abspath(__file__)
-                            #dir_path = os.path.dirname(path)
-                            #os.chdir(dir_path)
-                            conn, addr = s.accept()
-                            port = conn.getsockname()[1]
-                            is_ssl = is_sslport(localServer, port)
-                            conn_backlog = [user for user in localServer.users if user.socket and not user.registered]
-                            logging.info('Accepting client on {} -- fd: {}, with IP {}'.format(s, conn.fileno(), addr[0]))
-                            if len(conn_backlog) > 500:
-                                logging.warning('Current connection backlog is >{}, so not allowing any more connections for now. Bye.'.format(len(conn_backlog)))
-                                conn.close()
-                                continue
-                            conn.settimeout(3) ### Look into this.
-                            u = User(localServer, conn, addr, is_ssl)
-                            if is_ssl:
-                                is_ssl = 0
-                                version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
-                                if int(version) >= 36:
-                                    u.socket = self.sslctx.wrap_socket(u.socket, server_side=True)
-                                    is_ssl = 1
-                                else:
-                                    u.socket = ssl.wrap_socket(u.socket,
-                                                            server_side=True,
-                                                            certfile=self.server_cert, keyfile=self.server_key, ca_certs=self.ca_certs,
-                                                            suppress_ragged_eofs=True,
-                                                            cert_reqs=ssl.CERT_NONE,
-                                                            ciphers='HIGH'
-                                                            )
-                                    is_ssl = 1
-                                try:
-                                    fp = u.socket.getpeercert(True)
-                                    if fp:
-                                        ssl_fingerprint = hashlib.sha256(repr(fp).encode('utf-8')).hexdigest()
-                                        logging.info('Fingerprint: {}'.format(ssl_fingerprint))
-                                except Exception as ex:
-                                    logging.exception(ex)
-
-                            u.socket.setblocking(1)
-                            #u = User(localServer, conn, addr, is_ssl)
-                            gc.collect()
-                            if u.fileno() == -1:
-                                logging.error('{}Invalid fd for {} -- quit() on user{}'.format(R, u, W))
-                                u.quit('Invalid fd')
-                                continue
-                            try:
-                                random_ping = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(8))
-                                localServer.pings[u] = random_ping
-                                u._send('PING :{}'.format(random_ping))
-
-                            except Exception as ex:
-                                #localServer.snotice('t', '[{}](1) {}'.format(addr[0], ex))
-                                ogging.exception(ex)
-                                u.quit(ex)
-                                continue
-
-                        except Exception as ex:
-                            try:
-                                u.quit(ex)
-                            except Exception as ex:
-                                logging.exception(ex)
-                            logging.exception(ex)
-                            continue
-
-                    if self.listen_socks[s] == 'servers':
-                        try:
-                            conn, addr = s.accept()
-                            conn.settimeout(1)
-                            port = conn.getsockname()[1]
-                            is_ssl = is_sslport(localServer, port)
-                            if is_ssl:
-                                conn = ssl.wrap_socket(conn,
-                                                        server_side=True,
-                                                        certfile=self.server_cert, keyfile=self.server_key, ca_certs=self.ca_certs,
-                                                        suppress_ragged_eofs=True,
-                                                        do_handshake_on_connect=False,
-                                                        #cert_reqs=ssl.CERT_OPTIONAL,
-                                                        ciphers='HIGH'
-                                                        )
-
-                                conn.do_handshake()
-                                logging.info('Wrapped incoming socket {} in SSL'.format(conn))
-                            Server(origin=localServer, serverLink=True, sock=conn, is_ssl=is_ssl)
-
-                        except ssl.SSLError as ex:
-                            localServer.snotice('t', '[{}](3) {}'.format(addr[0], ex))
-                            logging.exception(ex)
-                            continue
-                        except Exception as ex:
-                            localServer.snotice('t', '[{}](4) {}'.format(addr[0], ex))
-                            logging.exception(ex)
-                            continue
+                    if self.listen_socks[s] in ['clients', 'servers']:
+                        threading.Thread(target=sock_accept, args=([localServer, s])).start()
+                        continue
 
                 '''
                 Checks related to users
@@ -227,7 +246,7 @@ class data_handler: #(threading.Thread):
                     for link in (link for link in servers if time.time() - localServer.linkRequests[link]['ctime'] > 900.0):
                         localServer.linkRequests[link] = {}
                         localServer.linkRequests[link]['ctime'] = int(time.time())
-                        logging.info('Connecting to {}'.format(link))
+                        logging.info('Auto connecting to {}'.format(link))
                         connectTo(None, localServer, link, autoLink=True)
 
                 if len(localServer.dnsblCache) >= 1024:
@@ -334,7 +353,7 @@ def read_socket(localServer, sock):
         if sock.cls:
             buffer_len = int(localServer.conf['class'][sock.cls]['sendq']) * 2
         else:
-            buffer_len = 4096 if type(sock).__name__ == 'User' else 16384
+            buffer_len = 8192 if type(sock).__name__ == 'User' else 65536
         try:
             recv = sock.socket.recv(buffer_len).decode('utf-8')
         except Exception as ex:

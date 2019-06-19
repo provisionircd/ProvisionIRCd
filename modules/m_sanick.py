@@ -32,5 +32,6 @@ def sanick(self, localServer, recv):
     if recv[2][0].isdigit():
         return localServer.handle('NOTICE', '{} :*** Nicknames may not start with a number'.format(self.uid))
 
+    self.flood_penalty += 100000
     p = {'sanick': self}
     target[0].handle('nick', recv[2], params=p)

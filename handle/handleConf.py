@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 import json
 import sys
 import os
@@ -8,6 +5,7 @@ import threading
 import importlib
 import collections
 import time
+import ssl
 import gc
 gc.enable()
 
@@ -343,7 +341,6 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
 
         localServer.validconf = True
         localServer.conf = tempconf
-
         for p in [p for p in localServer.conf['listen'] if str(p) not in currently_listening]:
             if 'clients' in set(localServer.conf['listen'][p]['options']):
                 try:

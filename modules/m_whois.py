@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 /whois and /whowas command
 """
@@ -11,7 +8,7 @@ import datetime
 from handle.functions import logging
 
 @ircd.Modules.user_modes('c', 0, 'Hide channels in /WHOIS') ### ('mode', 0, 1 or 2 for normal user, oper or server, 'Mode description')
-@ircd.Modules.user_modes('W', 1, 'See when people doing a /WHOIS on you') ### ('mode', 0, 1 or 2 for normal user, oper or server, 'Mode description')
+@ircd.Modules.user_modes('W', 1, 'See when people are doing a /WHOIS on you') ### ('mode', 0, 1 or 2 for normal user, oper or server, 'Mode description')
 @ircd.Modules.commands('whois')
 def whois(self, localServer, recv):
     try:
@@ -106,6 +103,8 @@ def whois(self, localServer, recv):
 
         #if 'q' in user.modes and 'S' not in user.modes and user.server.hostname not in localServer.conf['settings']['ulines'] and 'H' not in user.modes:
         #    self.sendraw(310, '{} :is protected on all channels'.format(user.nickname))
+        if 'B' in user.modes:
+            self.sendraw(335, '{} :is a bot on {}'.format(user.nickname, user.server.name))
 
         if 'z' in user.modes and 'S' not in user.modes and user.server.hostname not in localServer.conf['settings']['ulines']:
             self.sendraw(671, '{} :is using a secure connection'.format(user.nickname))

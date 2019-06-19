@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 import imp
 import os
 import sys
@@ -40,7 +37,7 @@ def LoadModules(self):
         LoadModule(self, m, mods[m])
     update_support(self)
 
-def HookToCore(self, callables):
+def HookToCore(self, callables, reload=False):
     try:
         ### Tuple: callables, channel_modes, user_modes, events, req_modes, req_flags, req_class, commands, params, support, hooks, module
         hooks = []
@@ -108,6 +105,33 @@ def HookToCore(self, callables):
                         self.chprefix[m[0]] = prefix
                     ### Add mode to self.channel_modes
                     ### Index 0 beI, index 1 kLf, index 2 l, index 3 imnjprstzCNOQRTV
+                    if str(type) == '0':
+                        if not hasattr(module, 'list_name') or not module.list_name or not module.list_name.isalpha():
+                            logging.error('Invalid list mode in {}: missing or invalid "list_name"'.format(module))
+                            if not reload:
+                                sys.exit()
+                                return
+                        if not hasattr(module, 'mode_prefix') or not module.mode_prefix:
+                            logging.error('Invalid list mode in {}: missing "mode_prefix"'.format(module))
+                            if not reload:
+                                sys.exit()
+                                return
+                        if module.mode_prefix.isalpha() or module.mode_prefix.isdigit() or len(module.mode_prefix) > 1:
+                            logging.error('Invalid list mode in {}: invalid "mode_prefix", must be a special char'.format(module))
+                            if not reload:
+                                sys.exit()
+                                return
+                        if module.mode_prefix in ":&\"'*~@%+#":
+                            logging.error('Invalid list mode in {}: invalid "mode_prefix", reserved for core'.format(module))
+                            if not reload:
+                                sys.exit()
+                                return
+                        if [m for m in self.modules if hasattr(m, 'mode_prefix') and module.mode_prefix == m.mode_prefix]:
+                            logging.error('Invalid list mode in {}: invalid "mode_prefix", already in use'.format(module))
+                            if not reload:
+                                sys.exit()
+                                return
+
                     if str(type) in '0123':
                         self.channel_modes[type][m] = (level, desc) if not param_desc else (level, desc, param_desc)
                     if prefix:
@@ -125,9 +149,9 @@ def HookToCore(self, callables):
                         chmodes_string += ','
                     self.chmodes_string = chmodes_string[:-1]
 
-                    #_print('Hooked channel mode {} (type: {}, prefix: {}) to core'.format(m, type, prefix), server=self)
-                    #_print('Mode level: {}'.format(level), server=self)
-                    #_print('Mode desc: {}'.format(desc), server=self)
+                    logging.info('Hooked channel mode {} (type: {}, prefix: {}) to core'.format(m, type, prefix))
+                    logging.info('Mode level: {}'.format(level))
+                    logging.info('Mode desc: {}'.format(desc))
 
         ### callables, channel_modes, user_modes, events, req_modes, req_flags, req_class, commands, params, module
         hooks = []
@@ -185,15 +209,22 @@ def LoadModule(self, name, path, reload=False, module=None):
                     getattr(module, 'init')(self, reload=reload)
                 except Exception as ex:
                     logging.exception(ex)
+            if not module.__doc__:
+                logging.info('Invalid module.')
+                return
             callables = FindCallables(module)
-            HookToCore(self, callables)
+            HookToCore(self, callables, reload=reload)
             self.modules[module] = callables
             name = module.__name__
             update_support(self)
             logging.info('Loaded: {}'.format(name))
+    except FileNotFoundError as ex:
+        return ex
     except Exception as ex:
         logging.exception(ex)
         UnloadModule(self, name)
+        if not reload:
+            sys.exit()
         raise
 
 def UnloadModule(self, name):
@@ -295,7 +326,7 @@ def UnloadModule(self, name):
                 for function in [function for function in self.modules[module][4] if hasattr(function, 'req_flags')]:
                     for a in list(function.req_flags):
                         function.req_flags.remove(a)
-
+                del self.modules[module]
                 logging.info('Unloaded: {}'.format(m))
                 return 1
 
@@ -452,6 +483,7 @@ all_hooks = [
             'local_connect',
             'remote_connect',
             'visible_in_channel',
+            'channel_lists_sync',
             'welcome',
             'loop',
             ]

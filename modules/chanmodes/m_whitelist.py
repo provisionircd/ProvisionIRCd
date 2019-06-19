@@ -11,13 +11,18 @@ from handle.functions import logging, match
 from modules.m_mode import makeMask
 from collections import OrderedDict
 
+
+# Do not edit anything below this unless you know absolutely certain what you are doing.
+
 chmode = 'w'
+mode_prefix = '^' ### This is used in SJOIN to indicate that it is a whitelist-entry.
+list_name = 'whitelist' ### Name of the list, i.e. channel.whitelist. Used in SJOIN to check if there's a duplicate entry, or to remove all entries.
 info = """Help is coming soon."""
 helpop = {"whitelist": info}
 
 @ircd.Modules.hooks.local_join()
 def join(self, localServer, channel):
-    if not hasattr(channel, 'whitelist'):
+    if not hasattr(channel, list_name):
         channel.whitelist = {}
     last_level = 0
     total_modes, total_params = '+', ''
@@ -48,15 +53,15 @@ def join(self, localServer, channel):
 
 ### Types: 0 = mask, 1 = require param, 2 = optional param, 3 = no param, 4 = special user channel-mode.
 @ircd.Modules.channel_modes(chmode, 0, 5, 'Maintain a "whitelist" for your channel (/helpop whitelist for more info)', None, None, '<level>:<nick!ident@host>') ### ('mode', type, level, 'Mode description', class 'user' or None, prefix, 'param desc')
-@ircd.Modules.hooks.pre_local_chanmode()
 @ircd.Modules.hooks.pre_remote_chanmode()
+@ircd.Modules.hooks.pre_local_chanmode()
 def whitelist_mode(self, localServer, channel, modebuf, parambuf, action, m, param):
     if m != chmode:
         return
     try:
         if (action == '+' or not action) and not param:
             ### Requesting list.
-            if self.chlevel(channel) < 3 and not self.ocheck('o', 'override'):
+            if self.chlevel(channel) < 3 and 'o' not in self.modes:
                 return self.sendraw(482, '{} :You are not allowed to view the whitelist'.format(channel.name))
             for entry in OrderedDict(reversed(list(channel.whitelist.items()))):
                 self.sendraw(348, '{} {} {} {}'.format(channel.name, entry, channel.whitelist[entry]['setter'], channel.whitelist[entry]['ctime']))
@@ -95,10 +100,19 @@ def whitelist_mode(self, localServer, channel, modebuf, parambuf, action, m, par
     except Exception as ex:
         logging.exception(ex)
 
-@ircd.Modules.hooks.channel_destroy():
+@ircd.Modules.hooks.channel_lists_sync()
+def sync(localServer, channel):
+    if not channel.whitelist:
+        return
+    temp = []
+    for e in channel.whitelist:
+        temp.append(mode_prefix+e)
+    return ' '.join(temp)
+
+@ircd.Modules.hooks.channel_destroy()
 def destroy(self, localServer, channel):
     channel.whitelist = {}
 
 def init(localServer, reload=False):
-    for chan in [chan for chan in localServer.channels if not hasattr(chan, 'whitelist')]:
+    for chan in [chan for chan in localServer.channels if not hasattr(chan, list_name)]:
         chan.whitelist = {}

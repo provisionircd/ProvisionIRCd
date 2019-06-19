@@ -1,13 +1,8 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 provides chmode +D (delay join)
 """
 
 import ircd
-import os
-import sys
 
 chmode = 'D'
 

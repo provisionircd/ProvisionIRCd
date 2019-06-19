@@ -11,12 +11,12 @@ from handle.functions import match, TKL, cloak, IPtoBase64, Base64toIP, show_sup
 import random
 import time
 import string
-import os
 import sys
 import socket
 import importlib
 import datetime
 import threading
+import hashlib
 
 if sys.version_info[0] < 3:
     print('Python 2 is not supported.')
@@ -166,8 +166,8 @@ class User:
                         fp = self.socket.getpeercert(binary_form=True)
                         if fp:
                             self.fingerprint = hashlib.sha256(repr(fp).encode('utf-8')).hexdigest()
-                    except:
-                        pass
+                    except Exception as ex:
+                        logging.exception(ex)
 
                 self.idle = int(time.time())
 
@@ -259,8 +259,8 @@ class User:
                 command = recv.split()[0].lower()
 
                 self.ping = int(time.time())
-
-                self.flood_penalty += 2000 + len(recv)
+                if not hasattr(self, 'flood_safe') or not self.flood_safe:
+                    self.flood_penalty += 1000 + len(recv)
                 check_flood(localServer, self)
 
                 if not self.flood_penalty_time:
@@ -394,9 +394,11 @@ class User:
             if type(source).__name__ == 'Server':
                 source = source.hostname
             else:
+                source.flood_penalty += 10000
                 source = source.fullmask()
         else:
             source = self.fullmask()
+            self.flood_penalty += 10000
 
         for user in users:
             user._send(':{} {}'.format(source, data))
@@ -504,7 +506,7 @@ class User:
 
             self.sendraw('004', '{} {} {} {}'.format(self.server.hostname, self.server.version, umodes, chmodes))
             show_support(self, self.server)
-            if self.ssl:
+            if self.ssl and hasattr(self.socket, 'cipher'):
                 self.send('NOTICE', ':*** You are connected to {} with {}-{}'.format(self.server.hostname, self.socket.version(), self.socket.cipher()[0]))
             msg = '*** Client connecting: {} ({}@{}) {{{}}} [{}{}]'.format(self.nickname, self.ident, self.hostname, self.cls, 'secure' if self.ssl else 'plain', ' '+self.socket.cipher()[0] if self.ssl else '')
             self.server.snotice('c', msg)
@@ -518,20 +520,18 @@ class User:
             self.handle('motd')
             if self.fingerprint:
                 self.send('NOTICE', ':*** Your SSL fingerprint is {}'.format(self.fingerprint))
+                data = 'MD client {} certfp :{}'.format(self.uid, self.fingerprint)
+                self.server.new_sync(self.server, self.server, ':{} {}'.format(self.server.sid, data))
 
             modes = []
             for mode in self.server.conf['settings']['modesonconnect']:
                 if mode in self.server.user_modes and mode not in 'oqrzS':
                     modes.append(mode)
-            if self.ssl:
+            if self.ssl and hasattr(self.socket, 'cipher'):
                 modes.append('z')
             if len(modes) > 0:
                 p = {'override': True}
                 self.handle('mode', '{} +{}'.format(self.nickname, ''.join(modes)), params=p)
-
-            if self.fingerprint:
-                data = 'MD client {} certfp :{}'.format(self.uid, self.fingerprint)
-                self.server.new_sync(self.server, self.server, ':{} {}'.format(self.server.sid, data))
 
             watch_notify = [user for user in self.server.users if self.nickname.lower() in [x.lower() for x in user.watchlist]]
             for user in watch_notify:
@@ -585,13 +585,12 @@ class User:
             return True
         return False
 
-    def quit(self, reason, error=True, banmsg=None, kill=False, silent=False, source=None):
+    def quit(self, reason, error=True, banmsg=None, kill=False, silent=False): ### Why source?
         try:
             self.recvbuffer = ''
             localServer = self.localServer if not self.socket else self.server
-            sourceServer = source if source else self.server
-            if not sourceServer.socket and sourceServer.uplink:
-                sourceServer = sourceServer.uplink
+            sourceServer = self.server if (self.server.socket or self.server == localServer) else self.server.uplink
+            logging.debug('User {} quit. Uplink source: {}'.format(self.nickname, sourceServer))
             for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_local_quit']:
                 try:
                     callable[2](self, localServer)

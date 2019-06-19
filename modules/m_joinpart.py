@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 commands /join and /part
 """
@@ -31,33 +28,20 @@ Y = '\033[33m' # yellow
 B = '\033[34m' # blue
 P = '\033[35m' # purple
 
+matches = {}
+matches['b'] = 'bans'
+matches['e'] = 'excepts'
+matches['I'] = 'invex'
 def checkMatch(self, localServer, type, channel):
-    if type == 'b':
-        for b in channel.bans:
-            if (match(b, '{}!{}@{}'.format(self.nickname, self.ident, self.hostname))):
-                return True
-            if (match(b, '{}!{}@{}'.format(self.nickname, self.ident, self.ip))):
-                return True
-            if (match(b, '{}!{}@{}'.format(self.nickname, self.ident, self.cloakhost))):
-                return True
-    if type == 'e':
-        for e in channel.excepts:
-            if (match(e, '{}!{}@{}'.format(self.nickname, self.ident, self.hostname))):
-                return True
-            if (match(e, '{}!{}@{}'.format(self.nickname, self.ident, self.ip))):
-                return True
-            if (match(e, '{}!{}@{}'.format(self.nickname, self.ident, self.cloakhost))):
-                return True
-
-    if type == 'I':
-        for I in channel.invex:
-            if (match(I, '{}!{}@{}'.format(self.nickname, self.ident, self.hostname))):
-                return True
-            if (match(I, '{}!{}@{}'.format(self.nickname, self.ident, self.ip))):
-                return True
-            if (match(I, '{}!{}@{}'.format(self.nickname, self.ident, self.cloakhost))):
-                return True
-
+    if type not in matches or not hasattr(channel, matches[type]):
+        return
+    for b in getattr(channel, matches[type]):
+        if (match(b, '{}!{}@{}'.format(self.nickname, self.ident, self.hostname))):
+            return 1
+        if (match(b, '{}!{}@{}'.format(self.nickname, self.ident, self.ip))):
+            return 1
+        if (match(b, '{}!{}@{}'.format(self.nickname, self.ident, self.cloakhost))):
+            return 1
 
 @ircd.Modules.params(1)
 @ircd.Modules.support('CHANTYPES='+str(chantypes))
@@ -89,6 +73,8 @@ def join(self, localServer, recv, override=False, skipmod=None, sourceServer=Non
         pc = 0
         key = None
         for chan in recv[1].split(','):
+            if int(time.time()) - self.signon > 5:
+                self.flood_penalty += 10000
             regex = re.compile('\x1d|\x1f|\x02|\x12|\x0f|\x16|\x03(?:\d{1,2}(?:,\d{1,2})?)?', re.UNICODE)
             chan = regex.sub('', chan).strip()
             channel = list(filter(lambda c: c.name.lower() == chan.lower(), localServer.channels))
@@ -125,6 +111,9 @@ def join(self, localServer, recv, override=False, skipmod=None, sourceServer=Non
                 continue
 
             if not channel:
+                if 'onlyopersjoin' in localServer.conf['settings'] and localServer.conf['settings']['onlyopersjoin'] and 'o' not in self.modes and self.server == localServer:
+                    localServer.notice(self, '*** Channel creation is limited to IRC operators.')
+                    continue
                 new = Channel(chan)
                 localServer.channels.append(new)
                 channel = [new]
@@ -264,6 +253,8 @@ def part(self, localServer, recv, reason=None):
             reason = localServer.conf['settings']['static-part']
 
         for chan in recv[1].split(','):
+            if int(time.time()) - self.signon > 5:
+                self.flood_penalty += 10000
             channel = list(filter(lambda c: c.name.lower() == chan.lower(), localServer.channels))
             if not channel or self not in channel[0].users:
                 self.sendraw(442, '{} :You\'re not on that channel'.format(chan))

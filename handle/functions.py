@@ -327,45 +327,47 @@ def check_flood(localServer, target):
     try:
         if type(target).__name__ == 'User':
             user = target
+            flood_safe = True if hasattr(user, 'flood_safe') and user.flood_safe else False
             if user.cls:
                 sendq = localServer.conf['class'][user.cls]['sendq']
                 recvq = localServer.conf['class'][user.cls]['recvq']
             else:
                 sendq, recvq = 512, 512
 
-            if not hasattr(user, 'flood_safe') or not user.flood_safe:
-                if (len(user.recvbuffer) >= recvq or len(user.sendbuffer) >= sendq) and int(time.time()) - user.signon > 2: #and (user.registered and int(time.time()) - user.signon > 3):
-                    ### user.recvbuffer is what the user is sending to the server. (what the server receives)
-                    flood_type = 'recvq' if len(user.recvbuffer) >= recvq else 'sendq'
-                    flood_amount = len(user.recvbuffer) if flood_type == 'recvq' else len(user.sendbuffer)
-                    flood_limit = recvq if flood_type == 'recvq' else sendq
-                    if user.registered:
-                        localServer.snotice('f', '*** Flood1 -- {} ({}@{}) has reached their max {} ({}) while the limit is {}'\
-                        .format(user.nickname, user.ident, user.hostname, 'RecvQ' if flood_type == 'recvq' else 'SendQ', flood_amount, flood_limit))
-                    user.quit('Excess Flood1')
-                    return
+            if (len(user.recvbuffer) >= recvq or len(user.sendbuffer) >= sendq) and int(time.time()) - user.signon > 2 and not flood_safe: #and (user.registered and int(time.time()) - user.signon > 3):
+                ### user.recvbuffer is what the user is sending to the server. (what the server receives)
+                flood_type = 'recvq' if len(user.recvbuffer) >= recvq else 'sendq'
+                flood_amount = len(user.recvbuffer) if flood_type == 'recvq' else len(user.sendbuffer)
+                flood_limit = recvq if flood_type == 'recvq' else sendq
+                if user.registered:
+                    localServer.snotice('f', '*** Flood1 -- {} ({}@{}) has reached their max {} ({}) while the limit is {}'\
+                    .format(user.nickname, user.ident, user.hostname, 'RecvQ' if flood_type == 'recvq' else 'SendQ', flood_amount, flood_limit))
+                user.quit('Excess Flood1')
+                return
             else:
-                logging.debug('Flood_safe for {}: {}'.format(user, '<< '+user.sendbuffer if user.sendbuffer else '>> '+user.recvbuffer))
+                #if flood_safe:
+                #    logging.debug('Flood_safe for {}: {}'.format(user, '<< '+user.sendbuffer if user.sendbuffer else '>> '+user.recvbuffer))
                 buffer_len = len(user.recvbuffer.split('\n'))
-                max_len = (sendq/2)/10/2
-                max_cmds = max_len/2
+                max_len = (recvq/2)/10/2
+                max_cmds = max_len/10
                 if 'o' in user.modes:
                     max_len *= 10
                     max_cmds *= 10
 
                 if (buffer_len >= max_cmds) and (user.registered and int(time.time()) - user.signon > 1):
                     if user.registered:
-                        localServer.snotice('f', '*** Flood2 -- {} ({}@{}) has reached their max buffer length ({}) while the limit is {}'\
+                        localServer.snotice('f', '*** Buffer Flood -- {} ({}@{}) has reached their max buffer length ({}) while the limit is {}'\
                         .format(user.nickname, user.ident, user.hostname, buffer_len, max_cmds))
+                        logging.debug('Flood buffer: {}'.format(user.recvbuffer))
                     user.quit('Excess Flood2')
                     return
 
-                flood_penalty_treshhold = 1000000 if 'o' not in user.modes else 10000000
+                flood_penalty_treshhold = 1000000 if 'o' not in user.modes else 100000000
                 if int(time.time()) - user.flood_penalty_time > 60:
                     user.flood_penalty = 0
                     user.flood_penalty_time = 0
                 if user.flood_penalty >= flood_penalty_treshhold:
-                    if user.registered:
+                    if user.registered and not flood_safe:
                         localServer.snotice('f', '*** Flood -- {} ({}@{}) has reached their max flood penalty ({}) while the limit is {}'\
                         .format(user.nickname, user.ident, user.hostname, user.flood_penalty, flood_penalty_treshhold))
                     user.quit('Excess Flood')
@@ -383,7 +385,7 @@ def check_flood(localServer, target):
                 flood_amount = len(server.recvbuffer) if flood_type == 'recvq' else len(server.sendbuffer)
                 flood_limit = recvq if flood_type == 'recvq' else sendq
 
-                localServer.snotice('f', '*** Flood1-- Server {} has reached their max {} ({}) while the limit is {}'\
+                localServer.snotice('f', '*** Flood1 -- Server {} has reached their max {} ({}) while the limit is {}'\
                 .format(server.hostname, 'RecvQ' if flood_type == 'recvq' else 'SendQ', flood_amount, flood_limit))
                 server.quit('Excess Flood')
                 return

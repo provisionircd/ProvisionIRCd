@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 /svskill command (server)
 """
@@ -31,9 +28,9 @@ def svskill(self, localServer, recv):
         return
     reason = ' '.join(recv[2:])[1:]
 
-    data = ':{} SVSKILL {} :{}'.format(sourceID,target[0].uid,reason)
+    data = ':{} SVSKILL {} :{}'.format(sourceID,target[0].uid, reason)
 
     if target[0].server != localServer:
         target[0].server._send(data)
 
-    target[0].quit(reason)
+    target[0].quit(reason, kill=True)

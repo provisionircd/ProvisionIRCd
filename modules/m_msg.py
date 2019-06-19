@@ -17,7 +17,7 @@ import re
 maxtargets = 20
 
 @ircd.Modules.support('MAXTARGETS='+str(maxtargets))
-@ircd.Modules.commands('privmsg', 'msg')
+@ircd.Modules.commands('privmsg', 'msg', 'rivmsg')
 def privmsg(self, localServer, recv, override=False):
     try:
         if type(self).__name__ == 'Server':

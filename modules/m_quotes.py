@@ -36,7 +36,7 @@ Programming is an art form that fights back.
 MacOS, Windows, BeOS: they're all just Xerox copies.
 Whenever you think you have a clever programming trick... forget it!
 Managing senior programmers is like herding cats. - Dave Platt
-Your program is sick ! Shoot it and put it out of its memory.
+Your program is sick! Shoot it and put it out of its memory.
 /* You are not expected to understand this */
 To define recursion, we must first define recursion.
 ERROR: Computer possessed; Load EXOR.SYS? [Y/N]

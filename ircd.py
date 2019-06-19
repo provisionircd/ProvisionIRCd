@@ -4,6 +4,7 @@
 import os
 import sys
 import time
+import ssl
 
 if sys.version_info[0] < 3:
     print('Python 2 is not supported.')
@@ -116,6 +117,16 @@ class Server:
                 self.version = 'ProvisionIRCd-{}'.format(self.versionnumber)
                 self.hostinfo = 'Python {}'.format(sys.version.split('\n')[0].strip())
 
+                self.server_cert = 'ssl/server.cert.pem'
+                self.server_key = 'ssl/server.key.pem'
+                self.ca_certs = 'ssl/curl-ca-bundle.crt'
+                self.sslctx = ssl.SSLContext(ssl.PROTOCOL_TLS)
+                self.sslctx.load_cert_chain(certfile=self.server_cert, keyfile=self.server_key)
+                self.sslctx.load_default_certs(purpose=ssl.Purpose.CLIENT_AUTH)
+                self.sslctx.load_verify_locations(cafile=self.ca_certs)
+                self.sslctx.verify_mode = ssl.CERT_NONE
+                #self.sslctx.verify_flags = ssl.VERIFY_CRL_CHECK_LEAF
+
                 self.caps = ['account-notify', 'away-notify', 'server-time', 'chghost', 'echo-message', 'tls', 'userhost-in-names', 'extended-join']
                 self.socket = None
                 self.introducedBy = None
@@ -134,6 +145,7 @@ class Server:
                     "r": (2, "Identifies the nick as being logged in"),
                     "s": (1, "Can receive server notices"),
                     "z": (2, "User is using a secure connection"),
+                    "B": (0, "Marks the client as a bot"),
                     "H": (1, "Hide IRCop status"),
                     "S": (2, "Marks the client as a network service"),
                 }
@@ -521,7 +533,7 @@ class Server:
             for user in users:
                 server1 = self.hostname
                 server2 = source.hostname if source else localServer.hostname
-                user.quit('{} {}'.format(server1, server2), source=self)
+                user.quit('{} {}'.format(server1, server2))
 
             for server in additional_servers:
                 logging.info('Quitting server {}'.format(server))
@@ -626,6 +638,9 @@ class Server:
             self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self.sock.bind(("", port))
             self.sock.listen(5)
+            if is_sslport(self, port):
+                ### SSL port. certfile="ssl/server.crt", keyfile="ssl/server.key", ca_certs="ssl/client.crt"
+                self.sock = self.sslctx.wrap_socket(self.sock, server_side=True)
             print('Server listening on port {} :: {} ({})'.format(port, 'SSL' if is_sslport(self, port) else 'insecure', type))
             return self.sock
         except Exception as ex:

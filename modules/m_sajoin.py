@@ -47,7 +47,7 @@ def sajoin(self, localServer, recv):
         data = ':{} SJOIN {} {}{} :{}{}'.format(self.server.sid, chan_class.creation, chan_class.name, ' +{}'.format(chan_class.modes) if chan_class.modes and chan_class.users == [target[0]] else '', prefix, target[0].uid)
         target[0].server._send(data)
 
-
+    self.flood_penalty += 100000
     snomsg = '*** {} ({}@{}) used SAJOIN to make {} join {}'.format(self.nickname, self.ident, self.hostname, target[0].nickname, chan)
     localServer.snotice('S', snomsg)
 

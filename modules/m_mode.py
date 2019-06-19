@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 /mode command
 """
@@ -158,6 +155,12 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
             if m not in '+-' and action != prevaction and ( (m in chmodes or m in localServer.chstatus) or (action in '+-' and m in channel.modes) ):
                 modebuf.append(action)
                 prevaction = action
+            if m not in localServer.chstatus and m not in '+-':
+                if m in modeLevel and self.chlevel(channel) < modeLevel[m] and not self.ocheck('o', 'override'):
+                    continue
+                elif m in modeLevel and self.chlevel(channel) < modeLevel[m] and modeLevel[m] != 6:
+                    oper_override = True
+
             if m not in localServer.core_chmodes:
                 ### Core modes (except for +beI) should not be checked against modules.
                 for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_'+hook]:
@@ -167,11 +170,6 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         callable[2](self, localServer, channel, modebuf, parambuf, action, m, param_mode)
                     except Exception as ex:
                         logging.exception(ex)
-            if m not in localServer.chstatus and m not in '+-':
-                if m in modeLevel and self.chlevel(channel) < modeLevel[m] and not self.ocheck('o', 'override'):
-                    continue
-                elif m in modeLevel and self.chlevel(channel) < modeLevel[m] and modeLevel[m] != 6:
-                    oper_override = True
 
             if action == '+' and (m in chmodes or type(self).__name__ == 'Server'):
                 ###
@@ -596,18 +594,21 @@ def mode(self, localServer, recv, override=False, handleParams=None):
         if len(recv) == 3:
             if recv[2] == '+b' or recv[2] == 'b':
                 for entry in OrderedDict(reversed(list(channel.bans.items()))):
+                    self.flood_safe = True
                     self.sendraw(367, '{} {} {} {}'.format(channel.name, entry, channel.bans[entry]['setter'], channel.bans[entry]['ctime']))
                 return self.sendraw(368, '{} :End of Channel Ban List'.format(channel.name))
             elif recv[2] == '+e' or recv[2] == 'e':
                 if self.chlevel(channel) < 3 and not self.ocheck('o', 'override'):
                     return self.sendraw(482, '{} :You are not allowed to view the excepts list'.format(channel.name))
                 for entry in OrderedDict(reversed(list(channel.excepts.items()))):
+                    self.flood_safe = True
                     self.sendraw(348, '{} {} {} {}'.format(channel.name, entry, channel.excepts[entry]['setter'], channel.excepts[entry]['ctime']))
                 return self.sendraw(349, '{} :End of Channel Exceptions List'.format(channel.name))
             elif recv[2] == '+I' or recv[2] == 'I':
                 if self.chlevel(channel) < 3 and not self.ocheck('o', 'override'):
                     return self.sendraw(482, '{} :You are not allowed to view the invex list'.format(channel.name))
                 for entry in OrderedDict(reversed(list(channel.invex.items()))):
+                    self.flood_safe = True
                     self.sendraw(346, '{} {} {} {}'.format(channel.name, entry, channel.invex[entry]['setter'], channel.invex[entry]['ctime']))
                 return self.sendraw(347, '{} :End of Channel Invite List'.format(channel.name))
 
