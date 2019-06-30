@@ -7,7 +7,7 @@ import importlib
 import ast
 import hashlib
 import ssl
-from handle.functions import _print, IPtoBase64, logging
+from handle.functions import IPtoBase64, logging
 
 if sys.version_info[0] < 3:
     print('Python 2 is not supported.')
@@ -181,6 +181,7 @@ class Link(threading.Thread):
         self.port = port
         self.is_ssl = is_ssl
         self.autoLink = autoLink
+        self.sendbuffer = ''
 
     def run(self):
         try:
@@ -194,7 +195,11 @@ class Link(threading.Thread):
                 self.host = socket.gethostbyname(self.host)
             self.socket = socket.socket()
             if self.is_ssl:
-                self.socket = ssl.wrap_socket(self.socket)
+                version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
+                if int(version) >= 36:
+                    self.socket = self.localServer.sslctx.wrap_socket(self.socket)
+                else:
+                    self.socket = ssl.wrap_socket(self.socket)
                 logging.info('Wrapped outgoing socket {} in SSL'.format(self.socket))
 
             from ircd import Server
