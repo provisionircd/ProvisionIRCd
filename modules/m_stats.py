@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 /stats command
 """
@@ -96,7 +93,7 @@ def show_stats(self, localServer, recv):
             for sock in localServer.listen_socks:
                 ip, port = sock.getsockname()
                 options = ', '.join(localServer.conf['listen'][str(port)]['options'])
-                total_clients = [user for user in localServer.users+localServer.servers if user.socket]
+                total_clients = [s for s in localServer.users+localServer.servers if s.socket]
                 port_clients = [client for client in total_clients if (client.socket.getsockname()[1] == port or client.socket.getpeername()[1] == port)]
                 self.sendraw(210, '{} {}:{} [options: {}], used by {} client{}'.format(recv[1], ip, port, options, len(port_clients), 's' if len(port_clients) != 1 else ''))
 
