@@ -158,7 +158,6 @@ class data_handler: #(threading.Thread):
         #print(localServer.sslctx.get_ca_certs(binary_form=False))
         # self.sock = self.sslctx.wrap_socket(self.sock, server_side=True)
         '''
-        print(self.listen_socks)
         version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
         for sock in [sock for sock in self.listen_socks if is_sslport(localServer, sock.getsockname()[1])]:
             port = sock.getsockname()[1]
@@ -181,7 +180,6 @@ class data_handler: #(threading.Thread):
                     #print('y u no read? {}'.format(fdVsEvent))
                     for fd, Event in fdVsEvent:
                         try:
-                            print('FD: {}'.format(fd))
                             s = localServer.fd_to_socket[fd][0]
                             c = localServer.fd_to_socket[fd][1]
                             t = type(c).__name__
