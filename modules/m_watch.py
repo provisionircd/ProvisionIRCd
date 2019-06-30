@@ -7,7 +7,7 @@ import time
 import os
 import sys
 
-from handle.functions import _print
+from handle.functions import logging
 
 maxwatch = 256
 def init(localServer, reload=False):
@@ -36,6 +36,9 @@ def watch(self, localServer, recv):
                 if entry[0] not in '+-':
                     if entry == 'C':
                         self.watchC = True
+                        if len(recv) == 2: ### Clear.
+                            self.watchlist = []
+                            logging.debug('Watchlist of {} cleared.'.format(self))
                     elif entry == 'S':
                         self.watchC = False
                         self.watchS = True
@@ -44,7 +47,6 @@ def watch(self, localServer, recv):
                 if entry[0] == '+':
                     if len(self.watchlist) >= localServer.maxwatch:
                         return self.sendraw(512, 'Maximum size of WATCH-list is {} entries'.format(localServer.maxwatch))
-                        continue
 
                     if nick.lower() not in watch_lower:
                         self.watchlist.append(nick)
@@ -82,7 +84,4 @@ def watch(self, localServer, recv):
                 self.watchS = False
 
     except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        _print(e, server=localServer)
+        logging.exception(ex)
