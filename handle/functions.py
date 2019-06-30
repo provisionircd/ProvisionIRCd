@@ -348,17 +348,16 @@ def check_flood(localServer, target):
                 #if flood_safe:
                 #    logging.debug('Flood_safe for {}: {}'.format(user, '<< '+user.sendbuffer if user.sendbuffer else '>> '+user.recvbuffer))
                 buffer_len = len(user.recvbuffer.split('\n'))
-                max_len = (recvq/2)/10/2
+                max_len = recvq/10
                 max_cmds = max_len/10
                 if 'o' in user.modes:
-                    max_len *= 10
                     max_cmds *= 10
 
                 if (buffer_len >= max_cmds) and (user.registered and int(time.time()) - user.signon > 1):
                     if user.registered:
                         localServer.snotice('f', '*** Buffer Flood -- {} ({}@{}) has reached their max buffer length ({}) while the limit is {}'\
                         .format(user.nickname, user.ident, user.hostname, buffer_len, max_cmds))
-                        logging.debug('Flood buffer: {}'.format(user.recvbuffer))
+                    logging.debug('Flood buffer: {}'.format(user.recvbuffer))
                     user.quit('Excess Flood2')
                     return
 
