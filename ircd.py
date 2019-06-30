@@ -663,10 +663,8 @@ class Server:
             if self.use_poll: ### Polling does not work.
                 self.pollerObject.register(self.sock, select.POLLIN)
                 self.fd_to_socket[self.sock.fileno()] = (self.sock, self)
-                print(self.sock.fileno())
-                print(self.fd_to_socket)
             print('Server listening on port {} :: {} ({})'.format(port, 'SSL' if is_sslport(self, port) else 'insecure', type))
-            print('Sockets{} pre-wrapped. Polling: {}'.format(' not' if not self.pre_wrap else '', 'yes' if self.use_poll else 'no'))
+            #print('Sockets{} pre-wrapped. Polling: {}'.format(' not' if not self.pre_wrap else '', 'yes' if self.use_poll else 'no'))
             return self.sock
         except Exception as ex:
             exc_type, exc_obj, exc_tb = sys.exc_info()
