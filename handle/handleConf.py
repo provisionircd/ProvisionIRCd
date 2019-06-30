@@ -295,6 +295,26 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
                         continue
                 except Exception as ex:
                     logging.exception(ex)
+        try:
+            localServer.server_cert = 'ssl/server.cert.pem'
+            localServer.server_key = 'ssl/server.key.pem'
+            localServer.ca_certs = 'ssl/curl-ca-bundle.crt'
+            temp_sslctx = ssl.SSLContext(ssl.PROTOCOL_TLS)
+            temp_sslctx.load_cert_chain(certfile=localServer.server_cert, keyfile=localServer.server_key)
+            temp_sslctx.load_default_certs(purpose=ssl.Purpose.CLIENT_AUTH)
+            temp_sslctx.load_verify_locations(cafile=localServer.ca_certs)
+            temp_sslctx.verify_mode = ssl.CERT_NONE
+            localServer.sslctx = temp_sslctx
+        except PermissionError as ex:
+            err = 'Reloading TLS certificates failed with PermissionError. Make sure the files can be read by the current user.'
+            if rehash:
+                localServer.notice(user, '*** {}'.format(err))
+            else:
+                conferr(err)
+        except Exception as ex:
+            logging.exception(ex)
+            if rehash:
+                localServer.notice(user, '*** [ssl] -- Error: {}'.format(ex))
 
     except KeyError as ex:
         exc_type, exc_obj, exc_tb = sys.exc_info()
@@ -325,6 +345,7 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
                 localServer.broadcast([user], 'NOTICE {} :*** [error] -- {}'.format(user.nickname, e))
         if rehash:
             localServer.broadcast([user], 'NOTICE {} :*** Configuration failed to reload.'.format(user.nickname))
+        return 0
 
     else:
         ### Open new ports?
@@ -339,7 +360,6 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
         for port in tempconf['listen']:
             new_ports.append(port)
 
-        localServer.validconf = True
         localServer.conf = tempconf
         for p in [p for p in localServer.conf['listen'] if str(p) not in currently_listening]:
             if 'clients' in set(localServer.conf['listen'][p]['options']):
@@ -366,7 +386,9 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
             localServer.broadcast([user], 'NOTICE {} :*** Configuration reloaded without any problems.'.format(user.nickname))
 
         del j, t, tempconf, tempmods
+        return 1
     gc.collect()
+    return 1
 
 def check_opers(tempconf, err_conf):
     if 'opers' not in tempconf: # or 'operclass' not in tempconf:

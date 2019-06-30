@@ -33,6 +33,7 @@ import handle.handleConf
 from handle.handleLink import Link as link
 import handle.handleModules as Modules
 from collections import OrderedDict
+import select
 
 path = os.path.abspath(__file__)
 dir_path = os.path.dirname(path)
@@ -81,6 +82,14 @@ class Channel:
     def __repr__(self):
         return "<Channel '{}'>".format(self.name)
 
+READ_ONLY = (
+    select.POLLIN |
+    select.POLLPRI |
+    select.POLLHUP |
+    select.POLLERR
+)
+READ_WRITE = READ_ONLY | select.POLLOUT
+
 class Server:
     def __init__(self, conffile=None, forked=False, origin=None, serverLink=False, sock=None, is_ssl=False):
         self.ctime = int(time.time())
@@ -107,7 +116,6 @@ class Server:
                 self.hooks = []
                 self.user_modes = {}
                 self.channel_modes = {}
-                self.validconf = False
                 self.localServer = self
                 self.linkRequests = {}
                 self.sync_queue = {}
@@ -117,15 +125,13 @@ class Server:
                 self.version = 'ProvisionIRCd-{}'.format(self.versionnumber)
                 self.hostinfo = 'Python {}'.format(sys.version.split('\n')[0].strip())
 
-                self.server_cert = 'ssl/server.cert.pem'
-                self.server_key = 'ssl/server.key.pem'
-                self.ca_certs = 'ssl/curl-ca-bundle.crt'
-                self.sslctx = ssl.SSLContext(ssl.PROTOCOL_TLS)
-                self.sslctx.load_cert_chain(certfile=self.server_cert, keyfile=self.server_key)
-                self.sslctx.load_default_certs(purpose=ssl.Purpose.CLIENT_AUTH)
-                self.sslctx.load_verify_locations(cafile=self.ca_certs)
-                self.sslctx.verify_mode = ssl.CERT_NONE
-                #self.sslctx.verify_flags = ssl.VERIFY_CRL_CHECK_LEAF
+                ### Polling does not work.
+                self.use_poll = 0 ### Polling does not work.
+                self.pre_wrap = 0 ### Polling does not work. Also pre-wrapping may cause memleak? Not sure, needs checking. It will prevent you from reloading certs.
+                if self.use_poll:
+                    self.pollerObject = select.poll()
+                    self.fd_to_socket = {}
+                ### Polling does not work.
 
                 self.caps = ['account-notify', 'away-notify', 'server-time', 'chghost', 'echo-message', 'tls', 'userhost-in-names', 'extended-join']
                 self.socket = None
@@ -245,9 +251,9 @@ class Server:
                 self.maxlist['I'] = 500
                 self.maxlist_string = 'b:{},e:{},I:{}'.format(self.maxlist['b'], self.maxlist['e'], self.maxlist['I'])
 
-                handle.handleConf.checkConf(self, None, self.confdir, self.conffile)
+                validconf = handle.handleConf.checkConf(self, None, self.confdir, self.conffile)
 
-                if not self.validconf:
+                if not validconf:
                     exit()
                     return
 
@@ -258,6 +264,8 @@ class Server:
 
             except Exception as ex:
                 logging.exception(ex)
+                exit()
+                return
 
             self.totalcons = 0
             self.gusers = []
@@ -275,6 +283,13 @@ class Server:
             return
 
         if serverLink:
+            self.localServer = origin
+            self.socket = sock
+            if self.localServer.use_poll:
+                fd = self.fileno()
+                self.localServer.pollerObject.register(self.socket, READ_WRITE)
+                self.localServer.fd_to_socket[fd] = (self.socket, self)
+                logging.debug('Added {} to fd dict with fd {}'.format(self, fd))
             self.creationtime = int(time.time())
             self.introducedBy = None
             self.uplink = None
@@ -284,7 +299,6 @@ class Server:
             self.linkAccept = False
             self.linkpass = None
             self.cls = None
-            self.socket = sock
             self.is_ssl = is_ssl
             self.recvbuffer = ''
             self.name = ''
@@ -293,7 +307,6 @@ class Server:
             self.lastPingSent = time.time() * 1000
             self.lag = int((time.time() * 1000) - self.lastPingSent)
             self.origin = origin
-            self.localServer = origin
             self.localServer.servers.append(self)
 
     def fileno(self):
@@ -345,6 +358,9 @@ class Server:
         try:
             if self.socket:
                 self.sendbuffer += data + '\r\n'
+                if self.localServer.use_poll:
+                    logging.debug('Flag for {} set to READ_WRITE (_send())'.format(self))
+                    self.localServer.pollerObject.modify(self.socket, READ_WRITE)
                 ignore = ['PRIVMSG', 'NOTICE', 'PING', 'PONG']
                 try:
                     if data.split()[0] not in ['PING', 'PONG']:
@@ -540,6 +556,8 @@ class Server:
                 server.quit('{} {}'.format(self.hostname, source.hostname if source else localServer.hostname))
 
             if self.socket:
+                if localServer.use_poll:
+                    localServer.pollerObject.unregister(self.socket)
                 try:
                     self.socket.shutdown(socket.SHUT_WR)
                 except:
@@ -634,14 +652,21 @@ class Server:
 
     def listenToPort(self, port, type):
         try:
+
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self.sock.bind(("", port))
             self.sock.listen(5)
-            if is_sslport(self, port):
+            if is_sslport(self, port) and self.pre_wrap:
                 ### SSL port. certfile="ssl/server.crt", keyfile="ssl/server.key", ca_certs="ssl/client.crt"
                 self.sock = self.sslctx.wrap_socket(self.sock, server_side=True)
+            if self.use_poll: ### Polling does not work.
+                self.pollerObject.register(self.sock, select.POLLIN)
+                self.fd_to_socket[self.sock.fileno()] = (self.sock, self)
+                print(self.sock.fileno())
+                print(self.fd_to_socket)
             print('Server listening on port {} :: {} ({})'.format(port, 'SSL' if is_sslport(self, port) else 'insecure', type))
+            print('Sockets{} pre-wrapped. Polling: {}'.format(' not' if not self.pre_wrap else '', 'yes' if self.use_poll else 'no'))
             return self.sock
         except Exception as ex:
             exc_type, exc_obj, exc_tb = sys.exc_info()

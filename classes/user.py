@@ -17,6 +17,7 @@ import importlib
 import datetime
 import threading
 import hashlib
+import select
 
 if sys.version_info[0] < 3:
     print('Python 2 is not supported.')
@@ -76,6 +77,14 @@ def DNSBLCheck(self):
         if user in user.server.users:
             b = blacklist_check(user, x)
             b.start()
+
+READ_ONLY = (
+    select.POLLIN |
+    select.POLLPRI |
+    select.POLLHUP |
+    select.POLLERR
+)
+READ_WRITE = READ_ONLY | select.POLLOUT
 
 class User:
     def __init__(self, server, sock=None, address=None, is_ssl=None, serverClass=None, params=None):
@@ -160,7 +169,6 @@ class User:
                 self.recvbuffer = ''
                 self.validping = False
                 self.server.totalcons += 1
-
                 if self.ssl and self.socket:
                     try:
                         fp = self.socket.getpeercert(binary_form=True)
@@ -382,6 +390,9 @@ class User:
     def _send(self, data):
         if self.socket:
             self.sendbuffer += data + '\r\n'
+            if self.server.use_poll:
+                logging.debug('Flag for {} set to READ_WRITE (_send())'.format(self))
+                self.server.pollerObject.modify(self.socket, READ_WRITE)
 
     def send(self, command, data):
         self._send(':{} {} {} {}'.format(self.server.hostname, command, self.nickname, data))
@@ -590,7 +601,8 @@ class User:
             self.recvbuffer = ''
             localServer = self.localServer if not self.socket else self.server
             sourceServer = self.server if (self.server.socket or self.server == localServer) else self.server.uplink
-            logging.debug('User {} quit. Uplink source: {}'.format(self.nickname, sourceServer))
+            if self.registered:
+                logging.debug('User {} quit. Uplink source: {}'.format(self.nickname, sourceServer))
             for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_local_quit']:
                 try:
                     callable[2](self, localServer)
@@ -678,8 +690,11 @@ class User:
                 localServer.users.remove(self)
 
             if self.socket:
+                if localServer.use_poll:
+                    localServer.pollerObject.unregister(self.socket)
                 try:
                     self.socket.shutdown(socket.SHUT_WR)
+                    self.socket.close()
                 except:
                     self.socket.close()
 
