@@ -28,7 +28,7 @@ Memory is like an orgasm. It's a lot better if you don't have to fake it.
 If it jams, force it. If it breaks, it needed replacing anyway.
 A bus station is where a bus stops. A train station is where a train stops. On my desk I have a workstation...
 Want to come see my HARD DRIVE? I promise it isn't 3.5 inches and it ain't floppy. - Geek pick-up line.
-If you torture the data enough, it will confess.  . Ronald Coase
+If you torture the data enough, it will confess. - Ronald Coase
 If you give someone a program, you will frustrate them for a day; if you teach them how to program, you will frustrate them for a lifetime.
 ASCII stupid question, get a stupid ANSI!
 Use the source, Luke...
@@ -78,14 +78,14 @@ Enter any 11-digit prime number to continue...
 ASCII and ye shall receive.
 The web is a dominatrix. Every where I turn, I see little buttons ordering me to Submit.
 <FrostyCoolSlug> NO, You cannot dial 999, I'm downloading my mail ;/
-640K ought to be enough for anybody.  . Bill Gates, 1981
+640K ought to be enough for anybody. - Bill Gates, 1981
 Windows not found, [P]arty, [C]elebrate, [D]rink?
 English, the Microsoft of languages...
 It's been said that Bill Gates named his company after his dick...
 Ever notice how fast Windows runs ?  -- Neither did I
 If at first you don't succeed, work for Microsoft
 We are Microsoft. Resistance Is Futile. You Will Be Assimilated
-"Microsoft Works."  . Oxymoron
+"Microsoft Works." - Oxymoron
 Windows isn't a virus, viruses do something
 PANIC! buffer = :NickServ WRITE_DB(3). <-- JUST KIDDING!
 It just keeps going and going and going and going and goi <BANG>
