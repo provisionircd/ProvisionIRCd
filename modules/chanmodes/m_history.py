@@ -121,5 +121,10 @@ def show_history(self, localServer, channel):
             localServer.m_history[channel][self]['replay_time'] = int(time.time())
             localServer.m_history[channel][self]['last'] = channel.msg_backlog['lines'][-1]
 
+@ircd.Modules.hooks.local_quit()
+def clear_info(localServer, self):
+    for chan in [chan for chan in localServer.channels if chan in localServer.m_history and self in localServer.m_history[chan]]:
+        del localServer.m_history[chan][self]
+
 def init(self, reload):
     self.m_history = {}
