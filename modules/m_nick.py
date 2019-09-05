@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 /nick command
 """
@@ -8,8 +5,6 @@
 import ircd
 
 import time
-import sys
-import os
 from handle.functions import match, logging
 
 nicklen = 33
@@ -21,6 +16,8 @@ def init(localServer, reload=False):
 @ircd.Modules.support('NICKLEN='+str(nicklen))
 @ircd.Modules.commands('nick')
 def cmdnick(self, localServer, recv, override=False, sanick=False):
+    """Changes your nickname. Users you share a channel with will be notified of this change.
+Syntax: /NICK <newnick>"""
     try:
         if type(self).__name__ == 'Server':
             sourceServer = self

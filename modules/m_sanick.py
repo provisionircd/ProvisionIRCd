@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 /sanick command
 """
@@ -12,6 +9,8 @@ import ircd
 @ircd.Modules.req_flags('localsacmds|globalsacmds')
 @ircd.Modules.commands('sanick')
 def sanick(self, localServer, recv):
+    """Forcefully change a users nickname.
+Syntax: /SANICK <user> <newnick>"""
     target = list(filter(lambda c: c.nickname.lower() == recv[1].lower(), localServer.users))
     if not target:
         return self.sendraw(401, '{} :No such nick'.format(recv[1]))
@@ -21,8 +20,9 @@ def sanick(self, localServer, recv):
 
     if target[0].nickname == recv[2]:
         return
-
-    if 'S' in target[0].modes or target[0].server in localServer.conf['settings']['ulines']:
+    services = [x.lower() for x in localServer.conf['settings']['ulines']]
+    services.append(localServer.conf['settings']['services'].lower())
+    if 'S' in target[0].modes or target[0].server.lower() in services:
         return localServer.handle('NOTICE', '{} :*** You cannot use /SANICK on services.'.format(self.nickname))
 
     nick = list(filter(lambda u: u.nickname == recv[2], localServer.users))

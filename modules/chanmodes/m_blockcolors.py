@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 provides chmode +c (block colors)
 """
@@ -18,4 +15,3 @@ def blockcolors_c(self, localServer, channel, msg):
     if match and chmode in channel.modes:
         self.sendraw(404, '{} :Colors are blocked on this channel.'.format(channel.name))
         return 0
-    return msg

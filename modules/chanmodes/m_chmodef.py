@@ -1,14 +1,9 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 provides chmode +f (flood control)
 """
 
 import ircd
 import time
-import os
-import sys
 from handle.functions import logging
 
 defAction = {
@@ -80,14 +75,17 @@ def msg(self, localServer, channel, msg):
                 channel.chmodef['m']['actionSet'] = int(time.time())
             del channel.messageQueue[self]
 
-@ircd.Modules.hooks.local_join()
-def join(self, localServer, channel):
+@ircd.Modules.hooks.channel_create()
+def create_chmodef_chan(self, localServer, channel):
     if not hasattr(channel, 'chmodef'):
         channel.chmodef = {}
     if not hasattr(channel, 'messageQueue'):
         channel.messageQueue = {}
     if not hasattr(channel, 'joinQueue'):
         channel.joinQueue = {}
+
+@ircd.Modules.hooks.local_join()
+def join(self, localServer, channel):
     if chmode in channel.modes and 'j' in channel.chmodef and not self.ocheck('o', 'override') and self.server.eos:
             r = int(round(time.time() * 1000))
             channel.joinQueue[r] = {}

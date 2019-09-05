@@ -86,6 +86,24 @@ READ_ONLY = (
 )
 READ_WRITE = READ_ONLY | select.POLLOUT
 
+def resolve_ip(self):
+    try:
+        ip_resolved = socket.gethostbyaddr(self.ip)[0]
+    except socket.herror: ### Not a typo.
+        ip_resolved = self.ip
+    except Exception as ex:
+        logging.exception(ex)
+    deny_except = False
+    if 'except' in self.server.conf and 'deny' in self.server.conf['except']:
+        for e in self.server.conf['except']['deny']:
+            if match(e, self.ident+'@'+ip_resolved) or match(e, self.ident+'@'+self.ip):
+                deny_except = True
+                break
+    if not deny_except:
+        for entry in self.server.deny:
+            if match(entry, self.ident+'@'+ip_resolved) or match(entry, self.ident+'@'+self.ip):
+                return self.quit('Your host matches a deny block, and is therefore not allowed.')
+
 class User:
     def __init__(self, server, sock=None, address=None, is_ssl=None, serverClass=None, params=None):
         try:
@@ -125,6 +143,12 @@ class User:
                 self.localServer = server
                 self.addr = address
                 self.ip, self.hostname = self.addr[0], self.addr[0]
+                threading.Thread(target=resolve_ip, args=([self])).start()
+                for callable in [callable for callable in server.hooks if callable[0].lower() == 'new_connection']:
+                    try:
+                        callable[2](self, server)
+                    except Exception as ex:
+                        logging.exception(ex)
                 self.cls = None
                 self.signon = int(time.time())
                 self.registered = False
@@ -178,7 +202,6 @@ class User:
                         logging.exception(ex)
 
                 self.idle = int(time.time())
-
                 if self.ip in self.server.hostcache:
                     self.hostname = self.server.hostcache[self.ip]['host']
                     self._send(':{} NOTICE AUTH :*** Found your hostname ({}) [cached]'.format(self.server.hostname, self.hostname))
@@ -274,7 +297,7 @@ class User:
                 if not self.flood_penalty_time:
                     self.flood_penalty_time = int(time.time())
 
-                dont_parse = ['topic', 'swhois']
+                dont_parse = ['topic', 'swhois', 'prop']
                 if command in dont_parse:
                     parsed = recv.split(' ')
                 else:
@@ -286,7 +309,7 @@ class User:
                     pass
                     #_print('> {} :: {}'.format(self.nickname, recv), server=self.server)
                 #print('ik ga zo slaaaaaapen maar jij bent ernie?')
-                if type(self).__name__ == 'User' and command != 'nick' and command != 'user' and command != 'pong' and command != 'cap' and command != 'starttls' and not self.registered:
+                if type(self).__name__ == 'User' and command != 'nick' and command != 'user' and command != 'pong' and command != 'cap' and command != 'starttls' and command != 'webirc' and not self.registered:
                     return self.sendraw(451, 'You have not registered')
                 if command == 'pong':
                     if self in self.server.pings:
@@ -694,9 +717,9 @@ class User:
                     localServer.pollerObject.unregister(self.socket)
                 try:
                     self.socket.shutdown(socket.SHUT_WR)
-                    self.socket.close()
                 except:
-                    self.socket.close()
+                    pass
+                self.socket.close()
 
             hook = 'local_quit' if self.server == localServer else 'remote_quit'
             for callable in [callable for callable in localServer.hooks if callable[0].lower() == hook]:

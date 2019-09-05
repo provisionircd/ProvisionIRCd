@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 /user command
 """
@@ -10,6 +7,7 @@ import ircd
 @ircd.Modules.params(4)
 @ircd.Modules.commands('user')
 def user(self, localServer, recv):
+    """Used to register your connection to the server."""
     if type(self).__name__ == 'Server':
         _self = self
         self = list(filter(lambda u: u.uid == recv[0][1:], localServer.users))

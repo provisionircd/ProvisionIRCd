@@ -10,7 +10,7 @@ from ircd import Server
 ### Import classes.
 from classes.user import User
 #User = user.User
-from handle.functions import is_sslport, check_flood, logging
+from handle.functions import is_sslport, check_flood, logging, save_db
 from modules.m_connect import connectTo
 import select
 import ssl
@@ -52,12 +52,12 @@ def sock_accept(localServer, s):
             port = conn.getsockname()[1]
             is_ssl = is_sslport(localServer, port)
             conn_backlog = [user for user in localServer.users if user.socket and not user.registered]
-            logging.info('Accepting client on {} -- fd: {}, with IP {}'.format(s, conn.fileno(), addr[0]))
             if len(conn_backlog) > 500:
                 logging.warning('Current connection backlog is >{}, so not allowing any more connections for now. Bye.'.format(len(conn_backlog)))
                 conn.close()
                 return
             conn.settimeout(10)
+            logging.info('Accepting client on {} -- fd: {}, with IP {}'.format(s, conn.fileno(), addr[0]))
             if is_ssl and not localServer.pre_wrap:
                 is_ssl = 0
                 version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
@@ -84,7 +84,7 @@ def sock_accept(localServer, s):
             u = User(localServer, conn, addr, is_ssl)
             if localServer.use_poll:
                 localServer.fd_to_socket[u.fileno()] = (u.socket, u)
-            u.socket.setblocking(1) ### Uncomment this.
+            u.socket.setblocking(1) ### Uncomment this. Why? I don't remember.
             gc.collect()
             if u.fileno() == -1:
                 logging.error('{}Invalid fd for {} -- quit() on user{}'.format(R, u, W))
@@ -267,6 +267,7 @@ class data_handler: #(threading.Thread):
                             threading.Thread(target=sock_accept, args=([localServer, s])).start()
                             continue
                     check_loops(localServer)
+                    save_db(localServer)
             except Exception as ex:
                 logging.exception(ex)
         logging.warning('data_handler loop broke! This should only happen after /restart.')
@@ -412,6 +413,19 @@ def check_loops(localServer):
     if not os.path.exists('logs'):
         os.mkdir('logs')
 
+    if not os.path.exists('db'):
+        os.mkdir('db')
+
+    '''
+    for file in [file for file in os.listdir('logs') if file.split('.')[-1].isdigit() and 1 <= int(file[-1]) <= 5]:
+        date = file[3:].split('.')[0]
+        timestamp = int(time.mktime(time.strptime(date, '%Y-%m-%d')))
+        difference = int(time.time()) - timestamp
+        if difference >= 86400*7: ### Remove after 7 days.
+            os.remove('logs/'+file)
+            logging.debug('Expired logfile "{}" removed.'.format(file))
+    '''
+
 def read_socket(localServer, sock):
     try:
         if sock.cls:
@@ -420,9 +434,11 @@ def read_socket(localServer, sock):
             buffer_len = 8192 if type(sock).__name__ == 'User' else 65536
         try:
             recv = sock.socket.recv(buffer_len).decode('utf-8')
+        except UnicodeDecodeError:
+            sock.quit('Read error')
+            return
         except Exception as ex:
             logging.exception(ex)
-            sock.quit('Read error: {}'.format(ex))
             return
 
         if not recv:

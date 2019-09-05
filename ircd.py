@@ -70,9 +70,9 @@ class Channel:
             self.topic_author = ""
             self.topic_time = 0
             self.creation = int(time.time())
-            self.limit = 0
-            self.key = None
-            self.redirect = None
+            #self.limit = 0
+            #self.key = None
+            #self.redirect = None
             self.invites = {}
             self.bans = OrderedDict({})
             self.excepts = OrderedDict({})
@@ -121,7 +121,7 @@ class Server:
                 self.sync_queue = {}
                 self.creationtime = int(time.time())
 
-                self.versionnumber = '1.3'
+                self.versionnumber = '1.4'
                 self.version = 'ProvisionIRCd-{}'.format(self.versionnumber)
                 self.hostinfo = 'Python {}'.format(sys.version.split('\n')[0].strip())
 
@@ -250,6 +250,7 @@ class Server:
                 self.maxlist['e'] = 500
                 self.maxlist['I'] = 500
                 self.maxlist_string = 'b:{},e:{},I:{}'.format(self.maxlist['b'], self.maxlist['e'], self.maxlist['I'])
+                self.servers = []
 
                 validconf = handle.handleConf.checkConf(self, None, self.confdir, self.conffile)
 
@@ -258,9 +259,6 @@ class Server:
                     return
 
                 self.running = 1
-                self.hostname = self.conf['me']['server']
-                self.name = self.conf['me']['name']
-                self.sid = self.conf['me']['sid']
 
             except Exception as ex:
                 logging.exception(ex)
@@ -269,7 +267,6 @@ class Server:
 
             self.totalcons = 0
             self.gusers = []
-            self.servers = []
 
             self.linkrequester = {}
             self.pendingLinks = []
@@ -621,7 +618,7 @@ class Server:
         localServer = self.localServer
         try:
             if sno:
-                users = list(filter(lambda u: 'o' in u.modes and sno in u.snomasks, localServer.users))
+                users = list(filter(lambda u: 'o' in u.modes and 's' in u.modes and sno in u.snomasks, localServer.users))
             for user in users:
                 try:
                     if sno in localServer.conf['opers'][user.operaccount]['ignore']['snomask']:

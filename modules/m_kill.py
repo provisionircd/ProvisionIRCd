@@ -11,6 +11,8 @@ from handle.functions import match, logging
 @ircd.Modules.req_flags('localkill|globalkill')
 @ircd.Modules.commands('kill', 'avadakedavra')
 def kill(self, localServer, recv):
+    """Forcefully disconnect a user from the server.
+Syntax: /KILL <user> <reason>"""
     try:
         if type(self).__name__ == 'Server':
             target = list(filter(lambda u: u.nickname.lower() == recv[2].lower() or u.uid.lower() == recv[2].lower(), localServer.users))

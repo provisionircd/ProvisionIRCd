@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 /chgcname command
 """
@@ -11,15 +8,15 @@ import ircd
 @ircd.Modules.req_modes('o')
 @ircd.Modules.commands('chgcname')
 def cmd_CHGCNAME(self, localServer, recv):
+    """Change channel name capitalisation.
+Example: /CHGCNAME #home #Home"""
     if type(self).__name__ == 'Server':
         sourceServer = self
         self = list(filter(lambda u: u.uid == recv[0][1:] or u.nickname == recv[0][1:], localServer.users))[0]
-        ### Cut the recv to match original syntax. (there's now an extra :UID at the beginning.
         recv = recv[1:]
     else:
         sourceServer = self.server
     name = recv[2]
-    requested_prefix = name[0]
 
     channel = list(filter(lambda c: c.name.lower() == recv[1].lower(), localServer.channels))
     if not channel:
@@ -27,9 +24,7 @@ def cmd_CHGCNAME(self, localServer, recv):
 
     channel = channel[0]
 
-    original_prefix = channel.name[0]
-
-    if requested_prefix != original_prefix:
+    if name[0] != channel.name[0]:
         return localServer.notice(self, 'Converting of channel type is not allowed.')
 
     if name == channel.name:

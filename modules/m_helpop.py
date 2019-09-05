@@ -81,6 +81,62 @@ def help(self, localServer, recv):
             self.sendraw(292, ': -')
             return
 
+        if recv[1].lower() == 'usercmds':
+            cmd_list = [cmd for cmd in localServer.commands if (hasattr(cmd[1], 'req_modes') and 'o' not in cmd[1].req_modes) or not hasattr(cmd[1], 'req_modes')]
+            cmd_list = [cmd for cmd in cmd_list if (hasattr(cmd[1], 'req_class') and cmd[1].req_class.lower() == 'user') or not hasattr(cmd[1], 'req_class')]
+            already_showed = []
+            line_queue = []
+            for cmd in cmd_list:
+                #if cmd[1] in already_showed:
+                #    continue
+                cmd_name = cmd[0].upper()
+                cmd_help = cmd[1].__doc__
+                if not cmd_help:
+                    cmd_help = "no help available"
+                #string = '{} = {}'.format(cmd_name, cmd_help)
+                line_queue.append(cmd_name)
+                already_showed.append(cmd[1])
+                if len(line_queue) == 4:
+                    self.sendraw(292, ':'+'          '.join(line_queue))
+                    line_queue = []
+            if line_queue:
+                self.sendraw(292, ':'+'          '.join(line_queue))
+            self.sendraw(292, ': -')
+            return
+
+
+        if recv[1].lower() == 'opercmds':
+            cmd_list = [cmd for cmd in localServer.commands if (hasattr(cmd[1], 'req_modes') and 'o' in cmd[1].req_modes)]
+            cmd_list = [cmd for cmd in cmd_list if (hasattr(cmd[1], 'req_class') and cmd[1].req_class.lower() == 'user') or not hasattr(cmd[1], 'req_class')]
+            already_showed = []
+            line_queue = []
+            for cmd in cmd_list:
+                #if cmd[1] in already_showed:
+                #    continue
+                cmd_name = cmd[0].upper()
+                cmd_help = cmd[1].__doc__
+                if not cmd_help:
+                    cmd_help = "no help available"
+                #string = '{} = {}'.format(cmd_name, cmd_help)
+                line_queue.append(cmd_name)
+                already_showed.append(cmd[1])
+                if len(line_queue) == 4:
+                    self.sendraw(292, ':'+'          '.join(line_queue))
+                    line_queue = []
+            if line_queue:
+                self.sendraw(292, ':'+'          '.join(line_queue))
+            self.sendraw(292, ': -')
+            return
+
+        ### Check if user did a /helpop <cmd>
+        cmd_match = [cmd for cmd in localServer.commands if cmd[0].lower() == recv[1].lower() and cmd[1].__doc__]
+        if cmd_match:
+            help = cmd_match[0][1].__doc__.split('\n')
+            for line in help:
+                self.sendraw(292, ':'+line)
+            self.sendraw(292, ':-')
+            return
+
         ### Loop over modules to check if they have a 'helpop' attr.
         for m in [m for m in localServer.modules if hasattr(m, 'helpop')]:
             if recv[1].lower() in m.helpop:

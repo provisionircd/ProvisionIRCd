@@ -107,31 +107,40 @@ def HookToCore(self, callables, reload=False):
                     ### Index 0 beI, index 1 kLf, index 2 l, index 3 imnjprstzCNOQRTV
                     if str(type) == '0':
                         if not hasattr(module, 'list_name') or not module.list_name or not module.list_name.isalpha():
-                            logging.error('Invalid list mode in {}: missing or invalid "list_name"'.format(module))
-                            if not reload:
+                            error = 'Invalid list mode in {}: missing or invalid "list_name"'.format(module)
+                            logging.error(error)
+                            if not reload and not self.running:
                                 sys.exit()
                                 return
+                            return error
                         if not hasattr(module, 'mode_prefix') or not module.mode_prefix:
-                            logging.error('Invalid list mode in {}: missing "mode_prefix"'.format(module))
-                            if not reload:
+                            error = 'Invalid list mode in {}: missing "mode_prefix"'.format(module)
+                            logging.error(error)
+                            if not reload and not self.running:
                                 sys.exit()
                                 return
+                            return error
                         if module.mode_prefix.isalpha() or module.mode_prefix.isdigit() or len(module.mode_prefix) > 1:
-                            logging.error('Invalid list mode in {}: invalid "mode_prefix", must be a special char'.format(module))
-                            if not reload:
+                            error = 'Invalid list mode in {}: invalid "mode_prefix", must be a special char'.format(module)
+                            logging.error(error)
+                            if not reload and not self.running:
                                 sys.exit()
                                 return
+                            return error
                         if module.mode_prefix in ":&\"'*~@%+#":
-                            logging.error('Invalid list mode in {}: invalid "mode_prefix", reserved for core'.format(module))
-                            if not reload:
+                            error = 'Invalid list mode in {}: invalid "mode_prefix", reserved for core'.format(module)
+                            logging.error(error)
+                            if not reload and not self.running:
                                 sys.exit()
                                 return
+                            return error
                         if [m for m in self.modules if hasattr(m, 'mode_prefix') and module.mode_prefix == m.mode_prefix]:
-                            logging.error('Invalid list mode in {}: invalid "mode_prefix", already in use'.format(module))
-                            if not reload:
+                            error = 'Invalid list mode in {}: invalid "mode_prefix", already in use'.format(module)
+                            logging.error(error)
+                            if not reload and not self.running:
                                 sys.exit()
                                 return
-
+                            return error
                     if str(type) in '0123':
                         self.channel_modes[type][m] = (level, desc) if not param_desc else (level, desc, param_desc)
                     if prefix:
@@ -204,6 +213,7 @@ def LoadModule(self, name, path, reload=False, module=None):
                 logging.debug('Requesting reload from importlib')
             else:
                 module = importlib.import_module(package)
+                print(module)
             if hasattr(module, 'init'):
                 try:
                     getattr(module, 'init')(self, reload=reload)
@@ -211,9 +221,12 @@ def LoadModule(self, name, path, reload=False, module=None):
                     logging.exception(ex)
             if not module.__doc__:
                 logging.info('Invalid module.')
-                return
+                return 'Invalid module'
             callables = FindCallables(module)
-            HookToCore(self, callables, reload=reload)
+            hook_fail = HookToCore(self, callables, reload=reload) ### If None is returned, assume success.
+            if hook_fail:
+                UnloadModule(self, name)
+                return hook_fail
             self.modules[module] = callables
             name = module.__name__
             update_support(self)
@@ -223,10 +236,10 @@ def LoadModule(self, name, path, reload=False, module=None):
     except Exception as ex:
         logging.exception(ex)
         UnloadModule(self, name)
-        if not reload:
-            if not self.running:
-                print('Server could not be started due to an error in {}: {}'.format(name, ex))
-            sys.exit()
+        #if not reload:
+        if not self.running:
+            print('Server could not be started due to an error in {}: {}'.format(name, ex))
+        #    sys.exit()
         raise
 
 def UnloadModule(self, name):
@@ -458,6 +471,7 @@ all_hooks = [
             'local_join',
             'pre_remote_join', ### Why? Not like you can block a remote join. Oh, for m_delayjoin to hide joins.
             'remote_join',
+            'channel_create',
             'pre_local_part',
             'local_part',
             'remote_part',
@@ -475,6 +489,10 @@ all_hooks = [
             'chanmsg',
             'pre_usermsg',
             'usermsg',
+            'pre_channotice',
+            'channotice',
+            'pre_usernotice',
+            'usernotice',
             'pre_local_chanmode',
             'local_chanmode',
             'pre_remote_chanmode',
@@ -487,6 +505,7 @@ all_hooks = [
             'visible_in_channel',
             'channel_lists_sync',
             'welcome',
+            'new_connection',
             'loop',
             ]
 

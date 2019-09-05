@@ -7,6 +7,7 @@ import collections
 import time
 import ssl
 import gc
+import ircd
 gc.enable()
 
 try:
@@ -111,6 +112,10 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
                 conferr('\'me::sid\' must be a 3 length number')
             if isinstance(tempconf['me']['sid'], int):
                 tempconf['me']['sid'] = str(tempconf['me']['sid'])
+
+        localServer.hostname = tempconf['me']['server']
+        localServer.name = tempconf['me']['name']
+        localServer.sid = tempconf['me']['sid']
 
         if 'admin' not in tempconf:
             conferr('\'admin\' block not found!')
@@ -266,6 +271,12 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
                 for entry in tempconf['except'][type]:
                     localServer.excepts[type].append(entry)
 
+        localServer.deny = {}
+        if 'deny' in tempconf:
+            for entry in tempconf['deny']:
+                localServer.deny[entry] = tempconf['deny'][entry]
+                print('Added deny for {}: {}'.format(entry, localServer.deny))
+
         ### Checking optional modules.
         if 'modules' not in tempconf:
             conferr('You don\'t seem to have any modules loaded. ProvisionIRCd will not function without them.')
@@ -386,6 +397,66 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
             localServer.broadcast([user], 'NOTICE {} :*** Configuration reloaded without any problems.'.format(user.nickname))
 
         del j, t, tempconf, tempmods
+
+        ### Load +P channels from db/chans.db with their modes/settings.
+        if os.path.exists(localServer.rootdir+'/db/chans.db'):
+            perm_data = {}
+            try:
+                with open(localServer.rootdir+'/db/chans.db') as f:
+                    perm_data = f.read().split('\n')[0]
+                    perm_data = json.loads(perm_data)
+                    ### Restoring permanent channels.
+                    for chan in [chan for chan in perm_data if chan.lower() not in [c.name.lower() for c in localServer.channels]]:
+                        c = ircd.Channel(chan)
+                        localServer.channels.append(c)
+                        localServer.chan_params[c] = {}
+                        for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'channel_create']:
+                            try:
+                                callable[2](localServer, localServer, c)
+                            except Exception as ex:
+                                logging.exception(ex)
+                        '''
+                        for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_local_join']:
+                            try:
+                                success, overrides = callable[2](localServer, localServer, c)
+                            except Exception as ex:
+                                logging.exception(ex)
+                        for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'local_join']:
+                            try:
+                                callable[2](localServer, localServer, c)
+                            except Exception as ex:
+                                logging.exception(ex)
+                        '''
+                        if 'creation' in perm_data[chan]:
+                            c.creation = perm_data[chan]['creation']
+                        params = ' '.join([perm_data[chan]['modeparams'][key] for key in perm_data[chan]['modeparams']])
+                        modestring = '+{} {}'.format(perm_data[chan]['modes'], params)
+                        localServer.handle('MODE', c.name+' '+modestring)
+                        logging.debug('Sent: {}'.format(modestring))
+                        c.bans = perm_data[chan]['bans']
+                        c.excepts = perm_data[chan]['excepts']
+                        c.invex = perm_data[chan]['invex']
+                        if perm_data[chan]['topic']:
+                            c.topic = perm_data[chan]['topic'][0]
+                            c.topic_author = perm_data[chan]['topic'][1]
+                            c.topic_time = perm_data[chan]['topic'][2]
+                        logging.debug('Restored: {}'.format(c))
+                        logging.debug('Modes: {}'.format(c.modes))
+                        logging.debug('Params: {}'.format(localServer.chan_params[c]))
+            except Exception as ex:
+                logging.debug(ex)
+
+        ### Restore TKL.
+        if os.path.exists(localServer.rootdir+'/db/tkl.db') and not localServer.tkl:
+            try:
+                with open(localServer.rootdir+'/db/tkl.db') as f:
+                    tkl_data = f.read().split('\n')[0]
+                    tkl_data = json.loads(tkl_data)
+                    localServer.tkl = tkl_data
+                    logging.debug('Restored TKL: {}'.format(localServer.tkl))
+            except Exception as ex:
+                logging.exception(ex)
+
         return 1
     gc.collect()
     return 1

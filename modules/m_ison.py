@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 /ison and /userhost command
 """
@@ -10,6 +7,8 @@ import ircd
 @ircd.Modules.params(1)
 @ircd.Modules.commands('ison')
 def ison(self, localServer, recv):
+    """Checks to see if a nickname is online.
+Example: /ISON Nick1 SomeOthernick"""
     nicks = []
     for nick in recv[1:]:
         users = filter(lambda u: u.nickname.lower() == nick.lower() and u.registered, localServer.users)
@@ -20,6 +19,8 @@ def ison(self, localServer, recv):
 @ircd.Modules.params(1)
 @ircd.Modules.commands('userhost')
 def userhost(self, localServer, recv):
+    """Returns the cloaked userhost of the given user.
+Example: /USERHOST John"""
     hosts = []
     for nick in recv[1:]:
         users = filter(lambda u: u.nickname.lower() == nick.lower() and u.registered, localServer.users)

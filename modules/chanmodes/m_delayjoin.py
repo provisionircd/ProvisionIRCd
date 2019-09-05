@@ -53,12 +53,13 @@ def visible_in_chan(self, localServer, user, channel):
 
 @ircd.Modules.hooks.pre_local_join()
 @ircd.Modules.hooks.pre_remote_join()
-def hidejoin(self, localServer, channel):
+def hidejoin(self, localServer, channel, **kwargs):
     try:
         if chmode in channel.modes:
             global can_see
             if channel not in can_see:
                 can_see[channel] = {}
+                logging.debug('/JOIN: Channel {} added to can_see dict'.format(channel.name))
             if self not in can_see[channel]:
                 can_see[channel][self] = []
             ### <self> just joined <channel>. They can see everyone currently on the channel.
@@ -77,7 +78,7 @@ def hidepart(self, localServer, channel):
     if chmode in channel.modes:
         global can_see
         if channel not in can_see:
-            logging.error('CRITICAL ERROR: channel {} is not found in the can_see dict!'.format(channel.name))
+            logging.error('/PART: CRITICAL ERROR: channel {} is not found in the can_see dict!'.format(channel.name))
             return
         can_see[channel][self] = []
         for user in [user for user in channel.users if user in can_see[channel] and self in can_see[channel][user] and user.chlevel(channel) < 2]:
@@ -176,14 +177,15 @@ def chmode_D(self, localServer, channel, modebuf, parambuf, action, m, param):
 @ircd.Modules.hooks.local_kick()
 @ircd.Modules.hooks.remote_kick()
 def hide_kick(self, localServer, user, channel, reason):
-    global can_see
-    if channel not in can_see:
-        logging.error('CRITICAL ERROR: channel {} is not found in the can_see dict!'.format(channel.name))
-        return
-    can_see[channel][user] = []
-    for u in [u for u in channel.users if u in can_see[channel] and user in can_see[channel][u]]:
-        logging.debug('/kick: User {} can not see {} anymore.'.format(u.nickname, user.nickname))
-        can_see[channel][u].remove(user)
+    if chmode in channel.modes:
+        global can_see
+        if channel not in can_see:
+            logging.error('/KICK: CRITICAL ERROR: channel {} is not found in the can_see dict!'.format(channel.name))
+            return
+        can_see[channel][user] = []
+        for u in [u for u in channel.users if u in can_see[channel] and user in can_see[channel][u]]:
+            logging.debug('/kick: User {} can not see {} anymore.'.format(u.nickname, user.nickname))
+            can_see[channel][u].remove(user)
 
 def init(self, reload=False):
     global can_see
@@ -193,6 +195,7 @@ def init(self, reload=False):
     for chan in self.channels:
         if chan not in can_see:
             can_see[chan] = {}
+            logging.debug('INIT: Channel {} added to can_see dict'.format(chan.name))
         for user in [user for user in chan.users if user not in can_see[chan]]:
             can_see[chan][user] = []
 

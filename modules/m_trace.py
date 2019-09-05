@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 extbans ~C (country) and ~i (ISP), requires m_extbans to be loaded
 """
@@ -74,10 +71,13 @@ def tracebans(self, localServer, channel, modebuf, parambuf, action, m, param):
         logging.exception(ex)
 
 @ircd.Modules.hooks.pre_local_join()
-def join(self, localServer, channel):
+def trace_join(self, localServer, channel, **kwargs):
     try:
+        if 'override' in kwargs:
+            logging.debug('Skipping extban checks: override')
+            return (1, [])
         overrides = []
-        invite_override = False
+        invite_override = 0
         if self in channel.invites:
             invite_override = channel.invites[self]['override']
         if invite_override:
@@ -100,18 +100,18 @@ def join(self, localServer, channel):
                 isp = b.split(':')[1]
                 if match(isp.lower(), localServer.geodata[self.ip]['isp'].lower()) and not checkMatch(self, localServer, 'e', channel) and 'b' not in overrides:
                     self.sendraw(474, '{} :Cannot join channel (+b)'.format(channel.name))
-                    return (False, overrides)
+                    return (0, overrides)
 
             for b in [b for b in channel.bans if b.startswith('~C')]: ### Country ban.
                 country = b.split(':')[1]
                 if (match(country.lower(), localServer.geodata[self.ip]['country'].lower()) or match(country.lower(), localServer.geodata[self.ip]['countryCode'].lower())) and not checkMatch(self, localServer, 'e', channel) and 'b' not in overrides:
                     self.sendraw(474, '{} :Cannot join channel (+b)'.format(channel.name))
-                    return (False, overrides)
+                    return (0, overrides)
             for b in [b for b in channel.bans if b.startswith('~i')]: ### ISP ban.
                 isp = b.split(':')[1]
                 if match(isp.lower(), localServer.geodata[self.ip]['isp'].lower()) and not checkMatch(self, localServer, 'e', channel) and 'b' not in overrides:
                     self.sendraw(474, '{} :Cannot join channel (+b)'.format(channel.name))
-                    return (False, overrides)
+                    return (0, overrides)
 
             for i in channel.invex:
                 if i.startswith('~C'):
@@ -123,7 +123,7 @@ def join(self, localServer, channel):
                     if 'i' in channel.modes and match(isp, localServer.geodata[self.ip]['isp'].lower()) and 'i' not in overrides:
                         overrides.append('i')
 
-        return (True, overrides)
+        return (1, overrides)
 
     except Exception as ex:
         logging.exception(ex)

@@ -180,31 +180,30 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         continue
                     if int(param_mode) <= 0:
                         continue
-                    if channel.limit == int(param_mode):
+                    if m in localServer.chan_params[channel] and int(localServer.chan_params[channel][m]) == int(param_mode):
                         continue
                     else:
                         if m not in channel.modes:
                             channel.modes += m
                         modebuf.append(m)
                         parambuf.append(param_mode)
-                        channel.limit = int(param_mode)
+                        #channel.limit = int(param_mode)
                         #continue
 
-                elif m == 'k' and not channel.key:
-                    if channel.key == param_mode:
-                        continue
+                elif m == 'k' and m not in localServer.chan_params[channel]:
                     if m not in channel.modes:
                         channel.modes += m
                     modebuf.append(m)
                     parambuf.append(param_mode)
-                    channel.key = param_mode
+                    #channel.key = param_mode
                     #continue
 
-                elif m == 'L' and channel.limit:
+                elif m == 'L': # and channel.limit:
                     param_mode = param_mode.split(',')[0]
                     if param_mode[0] not in localServer.chantypes:
                         continue
-                    if channel.redirect == param_mode or param_mode.lower() == channel.name.lower():
+                    redirect = None if 'L' not in channel.modes else localServer.chan_params[channel]['L']
+                    if redirect == param_mode or param_mode.lower() == channel.name.lower():
                         continue
                     chan_exists = [chan for chan in localServer.channels if chan.name.lower() == param_mode.lower()]
                     if not chan_exists:
@@ -213,13 +212,16 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                     if self.chlevel(chan_exists[0]) < 3 and not self.ocheck('o', 'override'):
                         self.sendraw(690, ':You must be opped on target channel {} to set it as redirect.'.format(chan_exists[0].name))
                         continue
+                    if 'L' in chan_exists[0].modes and localServer.chan_params[chan_exists[0]]['L'].lower() == channel.name.lower():
+                        self.sendraw(690, ':Recursive redirect is not allowed.')
+                        continue
                     elif self.chlevel(channel) < modeLevel[m]:
                         oper_override = True
                     if m not in channel.modes:
                         channel.modes += m
                     modebuf.append(m)
                     parambuf.append(param_mode)
-                    channel.redirect = param_mode
+                    #channel.redirect = param_mode
                     #continue
 
                 elif m in 'beI':
@@ -305,22 +307,22 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                 ###
                 if m in channel.modes:
                     if m == 'l':
-                        channel.limit = 0
+                        #channel.limit = 0
                         if 'L' in channel.modes:
                             channel.modes = channel.modes.replace('L', '')
                             modebuf.append('L')
-                            parambuf.append(channel.redirect)
-                            channel.redirect = None
+                            parambuf.append(localServer.chan_params[channel]['L'])
+                            #channel.redirect = None
 
                     elif m == 'k':
-                        if param_mode != channel.key:
+                        if param_mode != localServer.chan_params[channel]['k']:
                             continue
-                        parambuf.append(channel.key)
-                        channel.key = None
+                        parambuf.append(localServer.chan_params[channel][m])
+                        #channel.key = None
 
-                    elif m  == 'L' and channel.redirect:
-                        parambuf.append(channel.redirect)
-                        channel.redirect = None
+                    elif m  == 'L':
+                        parambuf.append(localServer.chan_params[channel]['L'])
+                        #channel.redirect = None
 
                     elif m == 'P' and len(channel.users) == 0:
                         localServer.channels.remove(channel)
@@ -512,53 +514,25 @@ def mode(self, localServer, recv, override=False, handleParams=None):
             sourceUser = self
 
         if len(recv) == 2 and recv[1][:1] in localServer.chantypes:
-            if recv[1][0] == '+':
-                return
-            channel = list(filter(lambda c: c.name.lower() == recv[1].lower(), localServer.channels))
-            if not channel:
-                return self.sendraw(401, '{} :No such channel'.format(recv[1]))
-            channel = channel[0]
-            if 's' in channel.modes and self not in channel.users and not self.ocheck('o', 'override'):
-                return
-            params = []
-            show_params = []
-            for m in channel.modes:
-                if m in localServer.chan_params[channel]:
-                    show_params.append(localServer.chan_params[channel][m])
-                '''
-                if m == 'l':
-                    params.append(str(channel.limit))
-                elif m == 'L':
-                    params.append(str(channel.redirect))
-                elif m == 'f':
-                    error = False
-                    fparams = '['
-                    if len(channel.chmodef) == 0:
-                        error = True
-                    for t in channel.chmodef:
-                        fstring = '{}:{}:{}'.format(channel.chmodef[t]['amount'], t, channel.chmodef[t]['time'])
-                        #print('fstring set: {}'.format(fstring))
-                        if channel.chmodef[t]['action']:
-                            try:
-                                fstring += ':{}:{}'.format(channel.chmodef[t]['action'], channel.chmodef[t]['duration'])
-                            except KeyError:
-                                ### Entry has no 'duration'.
-                                fparams += fstring+','
-                                continue
-                            except Exception as ex:
-                                error = True
-                                #print('t: {} -- {}'.format(t, ex))
-                        fparams += fstring+','
-                    if not error:
-                        fparams = fparams[:-1]
-                        fparams += ']'
-                        params.append(fparams)
-                elif m == 'k':
-                    params.append(channel.key)
-                '''
-            #self.sendraw(324, '{} +{} {}'.format(channel.name, channel.modes, ' '.join(params) if params and (self in channel.users or 'o' in self.modes) else ''))
-            self.sendraw(324, '{} +{} {}'.format(channel.name, channel.modes, ' '.join(show_params) if show_params and (self in channel.users or 'o' in self.modes) else ''))
-            self.sendraw(329, '{} {}'.format(channel.name, channel.creation))
+            try:
+                if recv[1][0] == '+':
+                    return
+                channel = list(filter(lambda c: c.name.lower() == recv[1].lower(), localServer.channels))
+                if not channel:
+                    return self.sendraw(401, '{} :No such channel'.format(recv[1]))
+                channel = channel[0]
+                if 's' in channel.modes and self not in channel.users and not self.ocheck('o', 'override'):
+                    return
+                params = []
+                show_params = []
+                for m in channel.modes:
+                    if channel in localServer.chan_params and m in localServer.chan_params[channel]:
+                        show_params.append(localServer.chan_params[channel][m])
+                #self.sendraw(324, '{} +{} {}'.format(channel.name, channel.modes, ' '.join(params) if params and (self in channel.users or 'o' in self.modes) else ''))
+                self.sendraw(324, '{} +{} {}'.format(channel.name, channel.modes, ' '.join(show_params) if show_params and (self in channel.users or 'o' in self.modes) else ''))
+                self.sendraw(329, '{} {}'.format(channel.name, channel.creation))
+            except Exception as ex:
+                logging.exception(ex)
             return
 
         elif recv[1][0] not in localServer.chantypes:

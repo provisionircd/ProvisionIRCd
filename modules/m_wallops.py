@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 /wallops command
 """
@@ -8,7 +5,7 @@
 import ircd
 
 @ircd.Modules.user_modes('w', 1, 'Can read wallop messages') ### ('mode', 0, 1 or 2 for normal user, oper or server, 'Mode description')
-@ircd.Modules.params(3)
+@ircd.Modules.params(1)
 @ircd.Modules.req_modes('o')
 @ircd.Modules.req_flags('wallops')
 @ircd.Modules.commands('wallops')
@@ -31,4 +28,4 @@ def wallops(self, localServer, recv):
         user._send(':{}!{}@{} WALLOPS :{}'.format(source.nickname, source.ident, source.cloakhost, msg))
 
     data = ':{} WALLOPS :{}'.format(sourceID, msg)
-    localServer.syncToServers(localServer, originServer, data)
+    localServer.new_sync(localServer, originServer, data)
