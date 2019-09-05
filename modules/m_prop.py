@@ -103,7 +103,7 @@ Current supported properties:
             for p in chan.properties:
                 localServer.notice(self, "{} = {}".format(p, chan.properties[p]))
             return
-        ### /PROP <channel> <property> :<data>
+        ### /PROP <channel> <property> :[data]
         elif len(recv) == 3:
             return localServer.notice(self, "Invalid syntax: /prop <channel> <property> :[data]")
         global properties
@@ -141,14 +141,11 @@ Current supported properties:
     except Exception as ex:
         logging.exception(ex)
 
-@ircd.Modules.hooks.local_join()
-def join(self, localServer, channel):
-    if not hasattr(channel, 'properties'):
-        channel.properties = {}
-
+@ircd.Modules.hooks.channel_create()
 @ircd.Modules.hooks.channel_destroy()
-def destroy(self, localServer, channel):
+def prop_dictset(self, localServer, channel):
     channel.properties = {}
+
 
 def init(localServer, reload=False):
     for chan in [chan for chan in localServer.channels if not hasattr(chan, 'properties')]:
