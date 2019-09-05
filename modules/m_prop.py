@@ -122,7 +122,6 @@ Current supported properties:
                     return localServer.notice(self, "Property {} is not active on {}".format(prop, chan.name))
 
             data = data[1:]
-
             if prop.lower() == 'rejoindelay':
                 ### Takes an integer.
                 if not data.isdigit() or 0 <= int(data) > 60:
