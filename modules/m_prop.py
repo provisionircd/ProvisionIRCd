@@ -6,8 +6,8 @@ import ircd
 import time
 import re
 from handle.functions import logging, match
-from modules.m_mode import makeMask
-from collections import OrderedDict
+#from modules.m_mode import makeMask
+#from collections import OrderedDict
 
 ### Dictionary of properties. name: chlevel
 properties = {
