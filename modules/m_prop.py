@@ -24,7 +24,7 @@ named_modes = {
 
 chmode = 'Z'
 mode_prefix = '!'
-list_name = 'properties' ### Name of the list, i.e. channel.whitelist. Used in SJOIN to check if there's a duplicate entry, or to remove all entries.
+list_name = 'properties' ### Name of the list, i.e. channel.properties. Used in SJOIN to check if there's a duplicate entry, or to remove all entries.
 
 ### Types: 0 = mask, 1 = require param, 2 = optional param, 3 = no param, 4 = special user channel-mode.
 @ircd.Modules.channel_modes(chmode, 0, 4, 'Add or remove properties for your channel with mode +Z', None, None, '[property]') ### ('mode', type, level, 'Mode description', class 'user' or None, prefix, 'param desc')
