@@ -1,17 +1,12 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 /kick command
 """
 
 import ircd
-import os
-import sys
 
 from handle.functions import logging
 
-kicklen = 307
+kicklen = 312
 
 @ircd.Modules.params(2)
 @ircd.Modules.support('KICKLEN='+str(kicklen))
@@ -125,9 +120,9 @@ def kick(self, localServer, recv, override=False, sync=True):
                 except Exception as ex:
                     logging.exception(ex)
 
-        for callable in [callable for callable in localServer.events if callable[0].lower() == hook]:
+        for callable in [callable for callable in localServer.hooks if callable[0].lower() == hook]:
             try:
-                callable[1](self, localServer, user, channel, reason)
+                callable[2](self, localServer, user, channel, reason)
             except Exception as ex:
                 logging.exception(ex)
 
