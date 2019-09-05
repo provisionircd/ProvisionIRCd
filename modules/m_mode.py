@@ -488,6 +488,12 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
 @ircd.Modules.support('MODES='+str(maxmodes))
 @ircd.Modules.commands('mode')
 def mode(self, localServer, recv, override=False, handleParams=None):
+    """Change channel or user modes.
+For an overview of available modes, type /HELPOP CHMODES or /HELPOP UMODES
+-
+Syntax:  MODE <channel/user> <modes> [params]
+Example: MODE #Home +m
+         MODE Alice +c"""
     global oper_override
     oper_override = False
     try:

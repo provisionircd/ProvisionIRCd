@@ -11,8 +11,8 @@ from handle.functions import logging, match
 
 ### Dictionary of properties. name: chlevel
 properties = {
-                "rejoindelay": 5,
-                "nomasshighlight": 5
+                "rejoindelay": 3,
+                "nomasshighlight": 3
              }
 
 '''
@@ -81,9 +81,9 @@ def prop_mode(self, localServer, channel, modebuf, parambuf, action, m, param):
 @ircd.Modules.commands('prop')
 def prop(self, localServer, recv):
     """Maintain channel properties to expand functionality.
- /prop <channel>                        - View active properties.
- /prop <channel> <property> :[param]    - Add or remove channel properties.
-                                          To remove a property, dismiss the param value.
+ PROP <channel>                        - View active properties.
+ PROP <channel> <property> :[param]    - Add or remove channel properties.
+                                         To remove a property, dismiss the param value.
 -
 Current supported properties:
  rejoindelay <int(1-60)>    - Blocks immediate rejoins after kick for <int> seconds.
@@ -114,6 +114,8 @@ Current supported properties:
                 return localServer.notice(self, "No such property: {}".format(prop))
             if not data.startswith(':'):
                 return localServer.notice(self, "Invalid syntax: /prop <channel> <property> :[data]")
+            if self.chlevel(chan) < properties[prop] and not self.ocheck('o', 'override'):
+                return
             if not data[1:]:
                 if prop in chan.properties:
                     del chan.properties[prop]
@@ -162,7 +164,7 @@ def got_kicked(self, localServer, user, channel, reason):
 
 @ircd.Modules.hooks.pre_local_join()
 def user_wants_join(self, localServer, channel, **kwargs):
-    if 'rejoindelay' not in channel.properties or 'override' in kwargs:
+    if 'rejoindelay' not in channel.properties or 'override' in kwargs or 'o' in self.modes:
         return (1, [])
     if hasattr(self, 'kicktime') and int(time.time()) - self.kicktime <= channel.properties['rejoindelay']:
         localServer.notice(self, "* Please wait a while before rejoining after a kick.")
@@ -174,18 +176,19 @@ def user_wants_join(self, localServer, channel, **kwargs):
 ### No mass highlights.
 @ircd.Modules.hooks.pre_chanmsg()
 def check_hl(self, localServer, channel, msg):
-    hl_limit = channel.properties['nomasshighlight']
-    matches = 0
-    regex = re.compile("\x1d|\x1f|\x02|\x12|\x0f|\x16|\x03(?:\d{1,2}(?:,\d{1,2})?)?", re.UNICODE)
-    delimiters = [',', '!', '?', '.', ' ']
-    for word in msg.split():
-        word = regex.sub('', word)
-        for d in delimiters:
-            check_match = word.rstrip(d).lower()
-            is_user = [u for u in channel.users if check_match == u.nickname.lower()]
-            if is_user:
-                matches += 1
-                break
-    if matches >= hl_limit:
-        localServer.notice(self, "* Message blocked: Mass highlighting users is not allowed on {}.".format(channel.name))
-        return 0
+    if 'nomasshighlight' in channel.properties and 'o' not in self.modes and self.chlevel(channel) < 3:
+        hl_limit = channel.properties['nomasshighlight']
+        matches = 0
+        regex = re.compile("\x1d|\x1f|\x02|\x12|\x0f|\x16|\x03(?:\d{1,2}(?:,\d{1,2})?)?", re.UNICODE)
+        delimiters = [',', '!', '?', '.', ' ']
+        for word in msg.split():
+            word = regex.sub('', word)
+            for d in delimiters:
+                check_match = word.rstrip(d).lower()
+                is_user = [u for u in channel.users if check_match == u.nickname.lower()]
+                if is_user:
+                    matches += 1
+                    break
+        if matches >= hl_limit:
+            localServer.notice(self, "* Message blocked: Mass highlighting users is not allowed on {}.".format(channel.name))
+            return 0
