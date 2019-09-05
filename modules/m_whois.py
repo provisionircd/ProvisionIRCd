@@ -137,6 +137,7 @@ Example: /WHOIS Bob"""
 @ircd.Modules.commands('whowas')
 def whowas(self, localServer, recv):
     """Request saved user information for offline users.
+-
 Example: /WHOWAS ZoeyDeutch"""
     try:
         if len(recv) < 2:
