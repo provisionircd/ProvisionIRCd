@@ -9,6 +9,13 @@ from handle.functions import logging, match
 from modules.m_mode import makeMask
 from collections import OrderedDict
 
+### Dictionary of properties. name: chlevel
+properties = {
+                "rejoindelay": 5,
+                "nomasshighlight": 5
+             }
+
+'''
 named_modes = {
             "n": "noextmsg",
             "m": "moderated",
@@ -19,12 +26,6 @@ chmode = 'Z'
 mode_prefix = '!'
 list_name = 'properties' ### Name of the list, i.e. channel.whitelist. Used in SJOIN to check if there's a duplicate entry, or to remove all entries.
 
-### Dictionary of properties. name: chlevel
-properties = {
-                "rejoindelay": 5,
-                "nomasshighlight": 5
-             }
-'''
 ### Types: 0 = mask, 1 = require param, 2 = optional param, 3 = no param, 4 = special user channel-mode.
 @ircd.Modules.channel_modes(chmode, 0, 4, 'Add or remove properties for your channel with mode +Z', None, None, '[property]') ### ('mode', type, level, 'Mode description', class 'user' or None, prefix, 'param desc')
 @ircd.Modules.hooks.pre_local_chanmode()
