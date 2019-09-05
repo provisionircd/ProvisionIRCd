@@ -87,7 +87,7 @@ def prop(self, localServer, recv):
 -
 Current supported properties:
  rejoindelay <int(1-60)>    - Blocks immediate rejoins after kick for <int> seconds.
- nomasshighlight <int(>2)>  - Blocks mass highlights in the channel with more than <int> nicknames, or all.
+ nomasshighlight <int(>2)>  - Blocks mass highlights in the channel with more than <int> nicknames.
 """
     try:
         chan = [chan for chan in localServer.channels if chan.name.lower() == recv[1].lower()]
