@@ -12,15 +12,15 @@ defAction = {
 }
 
 chmode = "f"
-info = """Format: +f [amount:type:secs][action:duration] --- duration is in minutes.
+info = """Format:     +f [amount:type:secs][action:duration] --- duration is in minutes.
 -
-Example: +f 3:j:10 (3 join in 10 sec, default is +i for 1 minute)
-Example: +f 3:j:10:i:2 (3 joins in 10 sec, sets channel to +i for 2 minutes)
-Example: +f 3:j:10:R:5 (3 joins in 10 sec, sets channel to +R for 5 minutes)
+Example:    +f 3:j:10 (3 join in 10 sec, default is +i for 1 minute)
+Example:    +f 3:j:10:i:2 (3 joins in 10 sec, sets channel to +i for 2 minutes)
+Example:    +f 3:j:10:R:5 (3 joins in 10 sec, sets channel to +R for 5 minutes)
 -
-Example: +f 3:m:10 (3 messages in 10 sec, default action is kick)
-Example: +f 5:m:3:b:1 (5 messages in 3 sec, will ban/kick for 1 minute)
-Example: +f 10:m:5:m:2 (10 messages in 5 sec, will set +m for 2 minutes)
+Example:    +f 3:m:10 (3 messages in 10 sec, default action is kick)
+Example:    +f 5:m:3:b:1 (5 messages in 3 sec, will ban/kick for 1 minute)
+Example:    +f 10:m:5:m:2 (10 messages in 5 sec, will set +m for 2 minutes)
 """
 
 helpop = {"chmodef": info}
@@ -76,13 +76,11 @@ def msg(self, localServer, channel, msg):
             del channel.messageQueue[self]
 
 @ircd.Modules.hooks.channel_create()
-def create_chmodef_chan(self, localServer, channel):
-    if not hasattr(channel, 'chmodef'):
-        channel.chmodef = {}
-    if not hasattr(channel, 'messageQueue'):
-        channel.messageQueue = {}
-    if not hasattr(channel, 'joinQueue'):
-        channel.joinQueue = {}
+@ircd.Modules.hooks.channel_destroy()
+def chmodef_dictset(self, localServer, channel):
+    channel.chmodef = {}
+    channel.messageQueue = {}
+    channel.joinQueue = {}
 
 @ircd.Modules.hooks.local_join()
 def join(self, localServer, channel):
