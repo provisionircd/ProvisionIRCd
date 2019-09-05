@@ -1,5 +1,5 @@
 """
-provides chmode +Z and /prop command
+provides channel properties with /prop command
 """
 
 import ircd
