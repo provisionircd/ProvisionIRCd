@@ -255,8 +255,6 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                 elif m in localServer.chstatus:
                     timed = False
                     # + status
-                    if m == 'h':
-                        continue
                     temp_user = param_mode
                     try:
                         t = param_mode.split(':')
