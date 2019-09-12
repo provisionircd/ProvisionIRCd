@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 /oper command
 """
@@ -8,12 +5,19 @@
 import ircd
 
 import re
-import bcrypt
-from handle.functions import match
+try:
+    import bcrypt
+except ImportError:
+    pass
+from handle.functions import match, logging
 
 @ircd.Modules.params(2)
 @ircd.Modules.commands('oper')
 def oper(self, localServer, recv):
+    """Enable IRC operator access.
+
+Syntax: OPER <username> <password>
+"""
     if 'o' in self.modes:
         return
 
@@ -27,9 +31,17 @@ def oper(self, localServer, recv):
         msg = '*** Failed oper attempt by {} [{}] ({}@{}): username not found'.format(self.nickname, recv[1], self.ident, self.hostname)
         return localServer.snotice('o', msg)
 
-    hashed = localServer.conf['opers'][recv[1]]['password'].encode('utf-8') ### Bytes password, hashed.
-    password = recv[2].encode('utf-8') ### Bytes password, plain.
-    if not bcrypt.checkpw(password, hashed):
+    if localServer.conf['opers'][recv[1]]['password'].startswith('$2b$') and len(localServer.conf['opers'][recv[1]]['password']) > 58:
+        logging.debug('Detected bcrypt for /oper')
+        password = recv[2].encode('utf-8') ### Bytes password, plain.
+        hashed = localServer.conf['opers'][recv[1]]['password'].encode('utf-8') ### Bytes password, hashed.
+        if not bcrypt.checkpw(password, hashed):
+            self.flood_penalty += 350000
+            self.sendraw(491, ':No O:lines for your host')
+            msg = '*** Failed oper attempt by {} [{}] ({}@{}): incorrect password'.format(self.nickname, recv[1], self.ident, self.hostname)
+            return localServer.snotice('o', msg)
+
+    elif recv[2] != localServer.conf['opers'][recv[1]]['password']:
         self.flood_penalty += 350000
         self.sendraw(491, ':No O:lines for your host')
         msg = '*** Failed oper attempt by {} [{}] ({}@{}): incorrect password'.format(self.nickname, recv[1], self.ident, self.hostname)
