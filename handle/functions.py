@@ -418,7 +418,7 @@ def save_db(localServer):
         perm_chans[chan.name]['topic'] = [] if not chan.topic else [chan.topic, chan.topic_author, chan.topic_time]
 
     if perm_chans and current_perm != perm_chans:
-        logging.debug('Perm channels data changed, updating file...')
+        logging.debug('Perm channels data changed, updating file... If this message gets spammed, you probably have another instance running.')
         with open(localServer.rootdir+'/db/chans.db', 'w+') as f:
             json.dump(perm_chans, f)
 
@@ -430,6 +430,6 @@ def save_db(localServer):
     except:
         pass
     if localServer.tkl and current_tkl != localServer.tkl:
-        logging.debug('TKL data changed, updating file...')
+        logging.debug('TKL data changed, updating file... If this message gets spammed, you probably have another instance running.')
         with open(localServer.rootdir+'/db/tkl.db', 'w+') as f:
             json.dump(localServer.tkl, f)
