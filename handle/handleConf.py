@@ -10,11 +10,16 @@ import gc
 import ircd
 gc.enable()
 
+
+bc = 0
 try:
     import bcrypt
+    bc = 1
 except ImportError:
-    print("Could not import 'bcrypt' module. You can install it with pip")
-    sys.exit()
+    #print("Could not import 'bcrypt' module. You can install it with pip")
+    #sys.exit()
+    pass
+print('Bcrypt support: {}'.format(bc))
 
 import handle.handleModules as Modules
 from handle.functions import _print, logging
@@ -429,8 +434,12 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
                         '''
                         if 'creation' in perm_data[chan]:
                             c.creation = perm_data[chan]['creation']
-                        params = ' '.join([perm_data[chan]['modeparams'][key] for key in perm_data[chan]['modeparams']])
-                        modestring = '+{} {}'.format(perm_data[chan]['modes'], params)
+                        params = []
+                        for m in [m for m in perm_data[chan]['modes'] if m in perm_data[chan]['modeparams']]:
+                            params.append(perm_data[chan]['modeparams'][m])
+                        #params = ' '.join([perm_data[chan]['modeparams'][key] for key in perm_data[chan]['modeparams']])
+                        modestring = '+{} {}'.format(perm_data[chan]['modes'], ' '.join(params))
+                        logging.debug('Sending: {}'.format(modestring))
                         localServer.handle('MODE', c.name+' '+modestring)
                         logging.debug('Sent: {}'.format(modestring))
                         c.bans = perm_data[chan]['bans']
@@ -481,11 +490,16 @@ def check_opers(tempconf, err_conf):
         if operclass not in tempconf['operclass']:
             conferr('operclass \'{}\' not found'.format(operclass), err_conf=err_conf)
 
-        operpass = tempconf['opers'][oper]['password'].encode('utf-8')
-        try:
-            bcrypt.checkpw(b'test', operpass)
-        except ValueError:
-            conferr('Invalid salt for oper {} password. Make sure you use bcrypt. You can get one with /mkpasswd on IRC or use the --mkpasswd argument.'.format(oper))
+        #operpass = tempconf['opers'][oper]['password'].encode('utf-8')
+        if tempconf['opers'][oper]['password'].startswith('$2b$') and len(tempconf['opers'][oper]['password']) > 58:
+            if not bc:
+                ### detected bcrypt pass.
+                conferr('Oper block {} has a bcrypt password but the bcrypt package is not installed. Either install it with pip or use a plaintext password.'.format(oper))
+
+        #try:
+        #    bcrypt.checkpw(b'test', operpass)
+        #except ValueError:
+        #    conferr('Invalid salt for oper {} password. Make sure you use bcrypt. You can get one with /mkpasswd on IRC or use the --mkpasswd argument.'.format(oper))
 
 def check_links(tempconf, mainconf, err_conf):
     if 'link' not in tempconf:
