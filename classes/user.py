@@ -144,14 +144,14 @@ class User:
                 self.addr = address
                 self.ip, self.hostname = self.addr[0], self.addr[0]
                 threading.Thread(target=resolve_ip, args=([self])).start()
+                self.cls = None
+                self.signon = int(time.time())
+                self.registered = False
                 for callable in [callable for callable in server.hooks if callable[0].lower() == 'new_connection']:
                     try:
                         callable[2](self, server)
                     except Exception as ex:
                         logging.exception(ex)
-                self.cls = None
-                self.signon = int(time.time())
-                self.registered = False
                 if 'dnsbl' in self.server.conf:
                     #self.sendraw('020', ':Please wait while we process your connection.')
                     dnsbl_except = False
@@ -175,8 +175,7 @@ class User:
                         if match(e, self.ip):
                             throttle_except = True
                 if len(totalConns) >= throttleTreshhold and not throttle_except:
-                    self.quit('Throttling - You are (re)connecting too fast')
-                    return
+                    return self.quit('Throttling - You are (re)connecting too fast')
 
                 self.server.throttle[self] = {}
                 self.server.throttle[self]['ip'] = self.ip
@@ -323,8 +322,8 @@ class User:
                             if self.ident != '' and self.nickname != '*' and (self.cap_end or not self.sends_cap):
                                 self.welcome()
                         else:
-                            self.quit('Unauthorized connection')
-                            return
+                            return self.quit('Unauthorized connection')
+
                 try:
                     cmd = importlib.import_module('cmds.cmd_'+command.lower())
                     getattr(cmd, 'cmd_'+command.upper())(self, localServer, parsed)
