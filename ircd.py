@@ -70,9 +70,6 @@ class Channel:
             self.topic_author = ""
             self.topic_time = 0
             self.creation = int(time.time())
-            #self.limit = 0
-            #self.key = None
-            #self.redirect = None
             self.invites = {}
             self.bans = OrderedDict({})
             self.excepts = OrderedDict({})
@@ -379,8 +376,6 @@ class Server:
                 if not recv:
                     self.recvbuffer = ''
                     continue
-                #if self.eos:
-                #    self.ping = time.time()
                 raw = ' '.join(recv)
                 command = recv[0].lower()
                 prefix = command[:1]
@@ -467,8 +462,8 @@ class Server:
                         try:
                             callable[1](self, localServer, recvNoStrip)
                         except Exception as ex:
-                            _print('Exception in module {}: {}'.format(callable[6], ex), server=localServer)
-                            _print('Should we disconnect the server because of this issue?', server=localServer)
+                            logging.exception(ex)
+                            logging.error('Should we disconnect the server because of this issue?')
                     continue
 
                 else:
@@ -674,32 +669,31 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='IRCd.')
     parser.add_argument('-c', '--conf', help='Conf file.')
     parser.add_argument('--nofork', help='No fork.',action='store_true')
-    parser.add_argument('--mkpasswd', help='Generate bcrypt password')
+    try:
+        import bcrypt
+        parser.add_argument('--mkpasswd', help='Generate bcrypt password')
+    except ImportError:
+        pass
     args = parser.parse_args()
+    if args.mkpasswd:
+        hashed = bcrypt.hashpw(args.mkpasswd.encode('utf-8'),bcrypt.gensalt(10)).decode('utf-8')
+        print('Your salted password: {}'.format(hashed))
+        sys.exit()
     global conffile
     if not args.conf:
         conffile = 'ircd.conf'
     else:
         conffile = args.conf
     fork = not args.nofork
+    version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
+    if int(version) < 36:
+        print('Python version 3.6 or higher is recommended due to better memory management.')
+        time.sleep(1)
     try:
-        import bcrypt
-    except ImportError:
-        print("Could not import required 'bcrypt' module. You can install it with pip")
-        sys.exit()
-    if args.mkpasswd:
-        hashed = bcrypt.hashpw(args.mkpasswd.encode('utf-8'),bcrypt.gensalt(15)).decode('utf-8')
-        print('Your salted password: {}'.format(hashed))
-    else:
-        version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
-        if int(version) < 36:
-            print('Python version 3.6 or higher is recommended due to better memory management.')
-            time.sleep(1)
-        try:
-            S = Server(conffile=conffile, forked=fork)
-            S.run()
-        except Exception as ex:
-            exc_type, exc_obj, exc_tb = sys.exc_info()
-            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-            print(e)
+        S = Server(conffile=conffile, forked=fork)
+        S.run()
+    except Exception as ex:
+        exc_type, exc_obj, exc_tb = sys.exc_info()
+        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
+        print(e)
