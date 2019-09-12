@@ -208,7 +208,8 @@ class User:
                 elif 'dontresolve' not in self.server.conf['settings'] or ('dontresolve' in self.server.conf['settings'] and not self.server.conf['settings']['dontresolve']):
                     try:
                         self.hostname = socket.gethostbyaddr(self.ip)[0]
-                        self.hostname.split('.')[1]
+                        if not self.hostname.split('.')[1]:
+                            raise
                         self.server.hostcache[self.ip] = {}
                         self.server.hostcache[self.ip]['host'] = self.hostname
                         self.server.hostcache[self.ip]['ctime'] = int(time.time())
