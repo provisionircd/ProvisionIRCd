@@ -130,7 +130,6 @@ class Server:
                     self.fd_to_socket = {}
                 ### Polling does not work.
 
-                self.caps = ['account-notify', 'away-notify', 'server-time', 'chghost', 'echo-message', 'tls', 'userhost-in-names', 'extended-join']
                 self.socket = None
                 self.introducedBy = None
                 self.uplink = None
