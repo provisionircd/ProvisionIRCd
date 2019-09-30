@@ -12,6 +12,9 @@ kicklen = 312
 @ircd.Modules.support('KICKLEN='+str(kicklen))
 @ircd.Modules.commands('kick')
 def kick(self, localServer, recv, override=False, sync=True):
+    """Syntax: KICK <channel> <user> [reason]
+-
+As a channel operator, you kick users from your channel."""
     try:
         oper_override = False
         if type(self).__name__ == 'Server':
