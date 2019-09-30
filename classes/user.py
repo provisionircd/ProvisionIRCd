@@ -442,14 +442,11 @@ class User:
             if not info or not type:
                 return
             if not source:
-                logging.error('No source provided in setinfo()!')
-                return
+                return logging.error('No source provided in setinfo()!')
             if type(source) == str or type(source).__name__ != 'Server':
-                logging.error('Wrong source type provided in setinfo(): {}'.format(source))
-                return
+                return logging.error('Wrong source type provided in setinfo(): {}'.format(source))
             if t not in ['host', 'ident']:
-                logging.error('Incorrect type received in setinfo(): {}'.format(t))
-                return
+                return logging.error('Incorrect type received in setinfo(): {}'.format(t))
             valid = 'abcdefghijklmnopqrstuvwxyz0123456789.-'
             for c in str(info):
                 if c.lower() not in valid:
@@ -496,18 +493,15 @@ class User:
                     break
 
             if not self.cls:
-                self.quit('You are not authorized to connect to this server')
-                return
+                return self.quit('You are not authorized to connect to this server')
 
             totalClasses = list(filter(lambda u: u.registered and u.server == self.server and u.cls == self.cls, self.server.users))
             if len(totalClasses) > int(self.server.conf['class'][self.cls]['max']):
-                self.quit('Maximum connections for this class reached')
-                return
+                return self.quit('Maximum connections for this class reached')
 
             clones = list(filter(lambda u: u.registered and u.socket and u.ip == self.ip, self.server.users))
             if len(clones) > int(self.server.conf['allow'][self.cls]['maxperip']):
-                self.quit('Maximum connections from your IP')
-                return
+                return self.quit('Maximum connections from your IP')
 
             current_lusers = len([user for user in self.server.users if user.server == self.server])
             if current_lusers > self.server.maxusers:
@@ -517,11 +511,6 @@ class User:
                 self.server.maxgusers = len(self.server.users)
                 if self.server.maxgusers % 10 == 0:
                     self.server.snotice('s', '*** New global user record: {}'.format(self.server.maxgusers))
-            for callable in [callable for callable in self.server.hooks if callable[0].lower() == 'welcome']:
-                try:
-                    callable[2](self, self.server)
-                except Exception as ex:
-                    logging.exception(ex)
 
             self.sendraw('001', ':Welcome to the {} IRC Network {}!{}@{}'.format(self.server.name, self.nickname, self.ident, self.hostname))
             self.sendraw('002', ':Your host is {}, running version {}'.format(self.server.hostname, self.server.version))
@@ -540,6 +529,7 @@ class User:
 
             self.sendraw('004', '{} {} {} {}'.format(self.server.hostname, self.server.version, umodes, chmodes))
             show_support(self, self.server)
+
             if self.ssl and hasattr(self.socket, 'cipher'):
                 self.send('NOTICE', ':*** You are connected to {} with {}-{}'.format(self.server.hostname, self.socket.version(), self.socket.cipher()[0]))
             msg = '*** Client connecting: {} ({}@{}) {{{}}} [{}{}]'.format(self.nickname, self.ident, self.hostname, self.cls, 'secure' if self.ssl else 'plain', ' '+self.socket.cipher()[0] if self.ssl else '')
@@ -552,6 +542,11 @@ class User:
             self.registered = True
             self.handle('lusers')
             self.handle('motd')
+            for callable in [callable for callable in self.server.hooks if callable[0].lower() == 'welcome']:
+                try:
+                    callable[2](self, self.server)
+                except Exception as ex:
+                    logging.exception(ex)
             if self.fingerprint:
                 self.send('NOTICE', ':*** Your SSL fingerprint is {}'.format(self.fingerprint))
                 data = 'MD client {} certfp :{}'.format(self.uid, self.fingerprint)
