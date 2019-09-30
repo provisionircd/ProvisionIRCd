@@ -206,6 +206,7 @@ def LoadModule(self, name, path, reload=False, module=None):
     package = name.replace('/', '.')
     #logging.debug('Package: {}'.format(package))
     try:
+        error = 0
         with open(path) as mod:
             #module = imp.load_module(name, mod, path, ('.py', 'U', imp.PY_SOURCE))
             if reload:
@@ -219,6 +220,9 @@ def LoadModule(self, name, path, reload=False, module=None):
                     getattr(module, 'init')(self, reload=reload)
                 except Exception as ex:
                     logging.exception(ex)
+                    if not self.running:
+                        print('Server could not be started due to an error in {}: {}'.format(name, ex))
+                        sys.exit()
             if not module.__doc__:
                 logging.info('Invalid module.')
                 return 'Invalid module'
@@ -239,7 +243,7 @@ def LoadModule(self, name, path, reload=False, module=None):
         #if not reload:
         if not self.running:
             print('Server could not be started due to an error in {}: {}'.format(name, ex))
-        #    sys.exit()
+            sys.exit()
         raise
 
 def UnloadModule(self, name):
