@@ -4,8 +4,6 @@ provides chmode +H (backlog support)
 
 import ircd
 import re
-import os
-import sys
 import time
 from datetime import datetime
 
@@ -70,8 +68,8 @@ def chmode_H(self, localServer, channel, modebuf, parambuf, action, m, param):
                     logging.info('Param {} is invalid for {}{}'.format(param, action, m))
                     return
                 limit = int(param.split(':')[0])
-                if limit > 50:
-                    limit = 50
+                if limit > 25:
+                    limit = 25
                 expire = int(param.split(':')[1])
                 if expire > 10080:
                     expire = 10080
@@ -103,7 +101,7 @@ def show_history(self, localServer, channel):
             localServer.m_history[channel][self]['last'] = None
             localServer.m_history[channel][self]['replay_time'] = int(time.time())
         if 'replay_time' in localServer.m_history[channel][self] and 'last' in localServer.m_history[channel][self]:
-            if localServer.m_history[channel][self]['last'] != channel.msg_backlog['lines'][-1] or int(time.time()) - localServer.m_history[channel][self]['replay_time'] > 600:
+            if localServer.m_history[channel][self]['last'] != channel.msg_backlog['lines'][-1] or int(time.time()) - localServer.m_history[channel][self]['replay_time'] > 900:
                 ### New messages for user.
                 show = 1
         else:
