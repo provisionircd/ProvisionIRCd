@@ -225,7 +225,7 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
                 try:
                     with open(confdir+tempconf['dnsbl']['iplist'], 'r') as f:
                         localServer.bannedList = f.read().splitlines()
-                        _print('Added {} entries to bannedList: {}'.format(len(localServer.bannedList), localServer.bannedList), server=localServer)
+                        logging.debug('Added {} entries to bannedList: {}'.format(len(localServer.bannedList), localServer.bannedList))
                 except Exception as ex:
                     pass
 
@@ -260,9 +260,7 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
                                 conferr('\'list\' containing DNSBL\'s missing')
 
                 except Exception as ex:
-                    exc_type, exc_obj, exc_tb = sys.exc_info()
-                    fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-                    e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
+                    logging.exception(ex)
                     conferr(ex, err_conf=include)
         if 'opers' in tempconf:
             check_opers(tempconf, err_conf=oper_conf)
@@ -280,7 +278,7 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
         if 'deny' in tempconf:
             for entry in tempconf['deny']:
                 localServer.deny[entry] = tempconf['deny'][entry]
-                print('Added deny for {}: {}'.format(entry, localServer.deny))
+                logging.debug('Added deny for {}: {}'.format(entry, localServer.deny))
 
         ### Checking optional modules.
         if 'modules' not in tempconf:
