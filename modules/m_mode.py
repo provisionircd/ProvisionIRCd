@@ -678,6 +678,16 @@ def chgumode(self, localServer, recv, override, sourceServer=None, sourceUser=No
                                     target.snomasks += s
                                     continue
 
+                    elif m == 'o':
+                        updated = []
+                        for user in self.localServer.users:
+                            for user in [user for user in self.localServer.users if 'operwatch' in user.caplist and user not in updated and user.socket]:
+                                common_chan = list(filter(lambda c: user in c.users and self in c.users, self.localServer.channels))
+                                if not common_chan:
+                                    continue
+                                user._send(':{} UMODE {}{}'.format(self.fullmask(), action, m))
+                                updated.append(user)
+
                     if m not in target.modes:
                         if m in 'sqHSW' and (not hasattr(target, 'opermodes') or m not in target.opermodes):
                             if not hasattr(target, 'opermodes'):
@@ -734,6 +744,15 @@ def chgumode(self, localServer, recv, override, sourceServer=None, sourceUser=No
 
                         target.opermodes = ''
                         self.operaccount = None
+
+                        updated = []
+                        for user in self.localServer.users:
+                            for user in [user for user in self.localServer.users if 'operwatch' in user.caplist and user not in updated and user.socket]:
+                                common_chan = list(filter(lambda c: user in c.users and self in c.users, self.localServer.channels))
+                                if not common_chan:
+                                    continue
+                                user._send(':{} UMODE {}{}'.format(self.fullmask(), action, m))
+                                updated.append(user)
 
                     if m not in modes:
                         modes.append(m)
