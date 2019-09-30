@@ -46,9 +46,9 @@ def checkMatch(self, localServer, type, channel):
 @ircd.Modules.support('CHANNELLEN='+str(chanlen))
 @ircd.Modules.commands('join')
 def join(self, localServer, recv, override=False, skipmod=None, sourceServer=None):
+    """Syntax: JOIN <channel> [key]
+Joins a given channel with optional [key]."""
     try:
-        """Syntax: /JOIN <channel> [key]
-        Joins a given channel with optional [key]."""
         hook = 'local_join'
         if type(self).__name__ == 'Server':
             if not sourceServer:
@@ -108,11 +108,12 @@ def join(self, localServer, recv, override=False, skipmod=None, sourceServer=Non
                 self.sendraw(485, '{} :Channel too long'.format(chan))
                 continue
 
-            if not channel or (channel and 'P' not in channel[0].modes):
+            if not channel:
                 if 'onlyopersjoin' in localServer.conf['settings'] and localServer.conf['settings']['onlyopersjoin'] and 'o' not in self.modes and self.server == localServer:
                     localServer.notice(self, '*** Channel creation is limited to IRC operators.')
                     continue
                 new = Channel(chan)
+                logging.debug('New channel instance created: {}'.format(new))
                 localServer.channels.append(new)
                 channel = [new]
                 for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'channel_create']:
@@ -137,6 +138,7 @@ def join(self, localServer, recv, override=False, skipmod=None, sourceServer=Non
                 try:
                     success, overrides = callable[2](self, localServer, channel, **kwargs)
                     if not success:
+                        logging.debug('Join denied for {} {} by module {}'.format(self, channel, callable))
                         break
                 except Exception as ex:
                     logging.error('Exception in {}:'.format(callable))
@@ -193,6 +195,7 @@ def join(self, localServer, recv, override=False, skipmod=None, sourceServer=Non
                     self.sendraw(473, '{} :Cannot join channel (+i)'.format(channel.name))
                     continue
 
+            logging.info('Joining {} in {}'.format(self, channel))
             if not channel.users and channel not in localServer.chan_params:
                 localServer.chan_params[channel] = {}
             if not channel.users and (self.server.eos or self.server == localServer) and channel.name[0] != '+':
@@ -252,6 +255,8 @@ def join(self, localServer, recv, override=False, skipmod=None, sourceServer=Non
 @ircd.Modules.params(1)
 @ircd.Modules.commands('part')
 def part(self, localServer, recv, reason=None):
+    """Syntax: PART <channel> [reason]
+Parts the given channel with optional [reason]."""
     try:
         if type(self).__name__ == 'Server':
             hook = 'remote_part'
