@@ -22,7 +22,7 @@ Syntax: /SANICK <user> <newnick>"""
         return
     services = [x.lower() for x in localServer.conf['settings']['ulines']]
     services.append(localServer.conf['settings']['services'].lower())
-    if 'S' in target[0].modes or target[0].server.lower() in services:
+    if 'S' in target[0].modes or target[0].server.hostname.lower() in services:
         return localServer.handle('NOTICE', '{} :*** You cannot use /SANICK on services.'.format(self.nickname))
 
     nick = list(filter(lambda u: u.nickname == recv[2], localServer.users))

@@ -70,12 +70,13 @@ Joins a given channel with optional [key]."""
 
         pc = 0
         key = None
-        for chan in recv[1].split(','):
+        for chan in recv[1].split(',')[:12]:
             if int(time.time()) - self.signon > 5:
                 self.flood_penalty += 10000
             regex = re.compile('\x1d|\x1f|\x02|\x12|\x0f|\x16|\x03(?:\d{1,2}(?:,\d{1,2})?)?', re.UNICODE)
             chan = regex.sub('', chan).strip()
-            channel = list(filter(lambda c: c.name.lower() == chan.lower(), localServer.channels))
+            channel = [c for c in localServer.channels if c.name.lower() == chan.lower()]
+            logging.debug('Channel {} exists in {}: {}'.format(chan, localServer.channels, channel))
             if channel and self in channel[0].users or not chan:
                 continue
 
