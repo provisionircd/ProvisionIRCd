@@ -71,7 +71,7 @@ Syntax: OPER <username> <password>
 
     operClass = localServer.conf['opers'][recv[1]]['class']
     totalClasses = list(filter(lambda u: u.server == self.server and u.cls == operClass, self.server.users))
-    if len(totalClasses) > int(self.server.conf['class'][operClass]['max']):
+    if len(totalClasses) >= int(self.server.conf['class'][operClass]['max']):
         self.flood_penalty += 350000
         self.sendraw(491, ':No O:lines for your host')
         msg = '*** Failed oper attempt by {} [{}] ({}@{}): limit reached for their oper class'.format(self.nickname, recv[1], self.ident, self.hostname)
