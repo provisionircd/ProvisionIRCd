@@ -743,7 +743,7 @@ class User:
             del gc.garbage[:]
 
             logging.debug('Growth after self.quit() (if any):')
-            objgraph.show_growth(limit=50)
+            objgraph.show_growth(limit=20)
             '''
             reflist = gc.get_referrers(self)
             if reflist:
