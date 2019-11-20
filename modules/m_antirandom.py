@@ -2,11 +2,13 @@
 blocks random nicknames
 """
 
+import ircd
+
+
 ### A lower score means more matches, and also more innocent kills.
 ### A higher score will result in less matches, but also less innocent kills.
 max_score = 3
 
-import ircd
 
 stringdict = {
 	"aj": "fqtvxz",
