@@ -23,7 +23,7 @@ def initlogging(localServer):
         os.mkdir('logs')
     #loghandlers = [logging.handlers.TimedRotatingFileHandler('logs/log.txt', when='midnight')]
     filename = 'logs/ircd.log'.format(datetime.datetime.today().strftime('%Y-%m-%d'))
-    loghandlers = [logging.handlers.RotatingFileHandler(filename, maxBytes=1024*1000, backupCount=10)]
+    loghandlers = [logging.handlers.RotatingFileHandler(filename, maxBytes=1024*1000, backupCount=9)]
     if not localServer.forked:
         stream = logging.StreamHandler()
         stream.terminator = '\n'+W
@@ -154,7 +154,7 @@ def match(first, second):
     if len(first) > 1 and first[0] == '*' and not second:
         return False
     if (len(first) > 1 and first[0] == '?') or (first and second and first[0] == second[0]):
-            return match(first[1:], second[1:])
+        return match(first[1:], second[1:])
     if first and first[0] == '*':
         return match(first[1:], second) or match(first, second[1:])
     return False
@@ -274,13 +274,14 @@ def show_support(self, localServer):
     self.sendraw('005', '{} :are supported by this server'.format(' '.join(line)))
 
 def cloak(localServer, host):
+    static = ['static.kpn.net']
     cloakkey = localServer.conf['settings']['cloak-key']
     key = '{}{}'.format(host, cloakkey)
     hashhost = hashlib.sha512(bytes(key, 'utf-8'))
     hex_dig = hashhost.hexdigest()
     cloak1 = hex(binascii.crc32(bytes(hex_dig[0:32], 'utf-8')) % (1<<32))[2:]
     cloak2 = hex(binascii.crc32(bytes(hex_dig[32:64], 'utf-8')) % (1<<32))[2:]
-    if host.replace('.', '').isdigit() or '.ip-' in host:
+    if host.replace('.', '').isdigit() or '.ip-' in host or host in static:
         cloak3 = hex(binascii.crc32(bytes(hex_dig[64:96], 'utf-8')) % (1<<32))[2:]
         cloakhost = cloak1+'.'+cloak2+'.'+cloak3+'.IP'
         return cloakhost
