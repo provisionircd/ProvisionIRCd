@@ -60,13 +60,19 @@ They work similar to modes, + for positive and - for negative.
             if not [c for c in localServer.channels if self in c.users and user in c.users] and 'i' in self.modes and not 'o' in self.modes and user != self:
                 continue
                 #logging.debug('Checking mask: {}'.format(m))
-            if mask[0] not in localServer.chantypes+'*' and user.nickname != mask:
+            if (mask[0] not in localServer.chantypes+'*' or mask.lower() not in [c.name.lower() for c in localServer.channels]) and user.nickname != mask:
                 continue
+
+            if mask[0] in localServer.chantypes+'*':
+                ### Mask is a channel.
+                if mask.lower() not in [c.name.lower() for c in user.channels]:
+                    continue
 
             paramcount = 0
             pos_match = []
             neg_match = []
             user_match = []
+            action = ''
             for f in [f for f in flags if f in who_flags or f in '+-']:
                 if f in '+-':
                     action = f
@@ -124,9 +130,9 @@ They work similar to modes, + for positive and - for negative.
                     if (action == '+' and match(param, user.ident)) or (action == '-' and not match(param, user.ident)):
                         user_match.append(f)
 
-            logging.debug('User {} must match these flags: {}'.format(user.nickname, pos_match))
-            logging.debug('User {} must NOT match these flags: {}'.format(user.nickname, neg_match))
-            logging.debug('User {} has these matches: {}'.format(user.nickname, user_match))
+            #logging.debug('User {} must match these flags: {}'.format(user.nickname, pos_match))
+            #logging.debug('User {} must NOT match these flags: {}'.format(user.nickname, neg_match))
+            #logging.debug('User {} has these matches: {}'.format(user.nickname, user_match))
             diff = set(pos_match+neg_match).difference(set(user_match))
             if diff or user in who:
                 continue
