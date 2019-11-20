@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 /server and /sid command (server)
 """
@@ -87,7 +84,7 @@ def server(self, localServer, recv):
                     self.quit('no matching link configuration2')
                     return
             if not match(localServer.conf['link'][self.hostname]['incoming']['host'], ip):
-                msg = 'Error connecting to server {}[{}:{}]: no matching link configuration: incoming IP does not match'.format(self.hostname, ip,port)
+                msg = 'Error connecting to server {}[{}:{}]: no matching link configuration: incoming IP does not match'.format(self.hostname, ip, port)
                 error = 'Error connecting to server {}[{}:{}]: no matching link configuration3'.format(localServer.hostname, ip2, port2)
                 if self not in localServer.linkrequester:
                     self._send(':{} ERROR :{}'.format(localServer.sid, error))
