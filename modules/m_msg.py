@@ -203,8 +203,8 @@ def notice(self, localServer, recv, override=False, s_sync=True):
                 if type(self).__name__ == 'User' and checkSpamfilter(self, localServer, user.nickname, 'private', msg):
                     continue
 
-                block_msg = 0
                 if type(self).__name__ == 'User':
+                    block_msg = 0
                     for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_usernotice']:
                         try:
                             mod_msg = callable[2](self, localServer, user, msg)
