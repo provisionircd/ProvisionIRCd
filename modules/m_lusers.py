@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 /lusers command
 """
@@ -14,6 +11,7 @@ def lusers(self, localServer, recv):
     invisible = len(list(filter(lambda c: 'i' in c.modes, localServer.users)))
     opers = len(list(filter(lambda c: 'o' in c.modes and 'H' not in c.modes and 'S' not in c.modes, localServer.users)))
     lusers = len(list(filter(lambda u: u.server == localServer and u.registered, localServer.users)))
+    gusers = len(list(filter(lambda u: u.registered, localServer.users)))
     unknown_users = [u for u in localServer.users if not u.registered]
     unknown_servers = [s for s in localServer.servers if not s.eos]
     unknown = len(unknown_users+unknown_servers)
@@ -26,4 +24,4 @@ def lusers(self, localServer, recv):
     #self.sendraw(265, '{} {} :{} user{} on this server. Max: {}'.format(lusers, localServer.maxusers, lusers, 's' if lusers != 1 else '', localServer.maxusers))
     #self.sendraw(266, '{} {} :{} user{} on entire network. Max: {}'.format(len(localServer.users), localServer.maxgusers, len(localServer.users), 's' if len(localServer.users) != 1 else '', localServer.maxgusers))
     self.sendraw(265, ':{} user{} on this server. Max: {}'.format(lusers, 's' if lusers != 1 else '', localServer.maxusers))
-    self.sendraw(266, ':{} user{} on entire network. Max: {}'.format(len(localServer.users), 's' if len(localServer.users) != 1 else '', localServer.maxgusers))
+    self.sendraw(266, ':{} user{} on entire network. Max: {}'.format(gusers, 's' if gusers != 1 else '', localServer.maxgusers))
