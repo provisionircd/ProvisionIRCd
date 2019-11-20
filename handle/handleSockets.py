@@ -84,8 +84,20 @@ def sock_accept(localServer, s):
             u = User(localServer, conn, addr, is_ssl)
             if localServer.use_poll:
                 localServer.fd_to_socket[u.fileno()] = (u.socket, u)
-            u.socket.setblocking(1) ### Uncomment this. Why? I don't remember.
-            gc.collect()
+
+            if not hasattr(u, 'socket'):
+                u.quit('Missing socket')
+                return
+
+            try:
+                u.socket.setblocking(1) ### Uncomment this. Why? I don't remember.
+            except OSError as ex:
+                logging.debug(R+'Client {} probably refused the connection due to self-signed cert (ZNC?). This can cause memory leaks.'.format(u)+W)
+                logging.debug(R+'Gently disconnecting user. IP: {}'.format(u.ip)+W)
+                #logging.exception(ex)
+                u.quit(ex)
+                return
+
             if u.fileno() == -1:
                 logging.error('{}Invalid fd for {} -- quit() on user{}'.format(R, u, W))
                 u.quit('Invalid fd')
@@ -99,19 +111,13 @@ def sock_accept(localServer, s):
                 #localServer.snotice('t', '[{}](1) {}'.format(addr[0], ex))
                 logging.exception(ex)
                 u.quit(ex)
-                try:
-                    conn.close()
-                except:
-                    pass
                 return
 
         except Exception as ex:
-            try:
-                u.quit(ex)
-            except:
-                pass
             logging.exception(ex)
+            conn.close()
             return
+
     elif localServer.listen_socks[s] == 'servers':
         try:
             conn, addr = s.accept()
@@ -434,10 +440,15 @@ def read_socket(localServer, sock):
             buffer_len = 8192 if type(sock).__name__ == 'User' else 65536
         try:
             recv = sock.socket.recv(buffer_len).decode('utf-8')
-        except UnicodeDecodeError:
+        except (UnicodeDecodeError, ConnectionResetError, OSError, AttributeError) as ex:
+            logging.debug('Failed to read socket: {}'.format(ex))
+            logging.debug('Disconnecting user: {}'.format(sock))
+            logging.debug('IP: {}'.format(sock.ip))
+            #logging.exception(ex)
             sock.quit('Read error')
             return
         except Exception as ex:
+            logging.debug(R+'Alternative exception occurred: {}'.format(ex)+W)
             logging.exception(ex)
             return
 
@@ -451,4 +462,5 @@ def read_socket(localServer, sock):
         sock.handle_recv()
         return recv
     except Exception as ex:
+        logging.debug(R+'Final exception occurred for {}: {}'.format(sock, ex)+W)
         logging.exception(ex)
