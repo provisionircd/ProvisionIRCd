@@ -80,7 +80,6 @@ As a channel operator, you kick users from your channel."""
             reason = reason[1:]
         reason = reason[:kicklen]
 
-
         broadcast = list(channel.users)
         ### Check module hooks for visible_in_channel()
         for u in broadcast:
@@ -94,17 +93,19 @@ As a channel operator, you kick users from your channel."""
                     broadcast.remove(u)
                     logging.debug('/KICK: User {} is not allowed to see {} on channel {}'.format(u.nickname, user.nickname, channel.name))
                     break
-        success = True
-        for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_local_kick']:
-            try:
-                success = callable[2](self, localServer, user, channel, reason)
-                if not success and success is not None:
-                    logging.debug('KICK denied by: {}'.format(callable))
-                    break
-            except Exception as ex:
-                logging.exception(ex)
-        if not success and success is not None:
-            return
+
+        if type(self).__name__ == 'User':
+            success = True
+            for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_local_kick']:
+                try:
+                    success = callable[2](self, localServer, user, channel, reason)
+                    if not success and success is not None:
+                        logging.debug('KICK denied by: {}'.format(callable))
+                        break
+                except Exception as ex:
+                    logging.exception(ex)
+            if not success and success is not None:
+                return
 
         if oper_override:
             self.server.snotice('s', '*** OperOverride by {} ({}@{}) with KICK {} {} ({})'.format(self.nickname, self.ident, self.hostname, channel.name, user.nickname, reason))
