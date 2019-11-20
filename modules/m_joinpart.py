@@ -76,7 +76,6 @@ Joins a given channel with optional [key]."""
             regex = re.compile('\x1d|\x1f|\x02|\x12|\x0f|\x16|\x03(?:\d{1,2}(?:,\d{1,2})?)?', re.UNICODE)
             chan = regex.sub('', chan).strip()
             channel = [c for c in localServer.channels if c.name.lower() == chan.lower()]
-            logging.debug('Channel {} exists in {}: {}'.format(chan, localServer.channels, channel))
             if channel and self in channel[0].users or not chan:
                 continue
 
@@ -130,22 +129,25 @@ Joins a given channel with optional [key]."""
             if self in channel.invites:
                 invite_override = channel.invites[self]['override']
 
-            success = True
-            overrides = []
-            kwargs = {}
-            if override:
-                kwargs['override'] = True
-            for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_'+hook and callable[3] != skipmod]:
-                try:
-                    success, overrides = callable[2](self, localServer, channel, **kwargs)
-                    if not success:
-                        logging.debug('Join denied for {} {} by module {}'.format(self, channel, callable))
-                        break
-                except Exception as ex:
-                    logging.error('Exception in {}:'.format(callable))
-                    logging.exception(ex)
-            if not success:
-                continue
+            ### Check for module hooks.
+            if type(self).__name__ == 'User':
+                success = True
+                overrides = []
+                kwargs = {}
+                if override:
+                    kwargs['override'] = True
+                for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_'+hook and callable[3] != skipmod]:
+                    try:
+                        success, overrides = callable[2](self, localServer, channel, **kwargs)
+                        if not success:
+                            logging.debug('Join denied for {} {} by module {}'.format(self, channel, callable))
+                            break
+                    except Exception as ex:
+                        logging.error('Exception in {}:'.format(callable))
+                        logging.exception(ex)
+                if not success:
+                    continue
+
             if not override:
                 if 'O' in channel.modes and 'o' not in self.modes:
                     self.sendraw(520, '{} :Cannot join channel (IRCops only)'.format(channel.name))
@@ -225,6 +227,7 @@ Joins a given channel with optional [key]."""
                         logging.debug('{} returned {}'.format(callable, visible))
                         break
 
+            #print('Broadcasting join to: {}'.format(broadcast))
             for user in broadcast:
                 data = ':{}!{}@{} JOIN {}{}'.format(self.nickname, self.ident, self.cloakhost, channel.name, ' {} :{}'.format(self.svid, self.realname) if 'extended-join' in user.caplist else '')
                 user._send(data)
