@@ -9,6 +9,7 @@ import importlib
 import sys
 import time
 import re
+import json
 
 from handle.functions import valid_expire, match, cloak, logging
 from collections import OrderedDict
@@ -322,8 +323,19 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         parambuf.append(localServer.chan_params[channel]['L'])
                         #channel.redirect = None
 
-                    elif m == 'P' and len(channel.users) == 0:
-                        localServer.channels.remove(channel)
+                    elif m == 'P':
+                        if len(channel.users) == 0:
+                            localServer.channels.remove(channel)
+
+                        try:
+                            with open(localServer.rootdir+'/db/chans.db') as f:
+                                current_perm = f.read().split('\n')[0]
+                                current_perm = json.loads(current_perm)
+                                del current_perm[channel.name]
+                            with open(localServer.rootdir+'/db/chans.db', 'w+') as f:
+                                json.dump(current_perm, f)
+                        except Exception as ex:
+                            logging.debug(ex)
 
                     if m in channel.modes:
                         #logging.debug('Mode {} is a core mode?'.format(m))
