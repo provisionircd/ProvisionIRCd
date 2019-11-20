@@ -245,6 +245,7 @@ def LoadModule(self, name, path, reload=False, module=None):
             print('Server could not be started due to an error in {}: {}'.format(name, ex))
             sys.exit()
         raise
+        return ex
 
 def UnloadModule(self, name):
     try:
