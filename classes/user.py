@@ -18,6 +18,7 @@ import datetime
 import threading
 import hashlib
 import select
+import objgraph
 
 if sys.version_info[0] < 3:
     print('Python 2 is not supported.')
@@ -273,9 +274,18 @@ class User:
             logging.exception(ex)
 
     def __del__(self):
-        pass
-        #_print('User {} closed'.format(self, server=self.localServer))
+        #pass
+        logging.debug('User {} closed'.format(self, server=self.localServer))
         #objgraph.show_most_common_types()
+        '''
+        reflist = gc.get_referrers(self)
+        if reflist:
+            logging.debug('Found these references after __del__:')
+            for r in reflist:
+                logging.debug(r)
+        else:
+            logging.debug('Excellent, no more references after __del__!')
+        '''
 
     def handle_recv(self):
         try:
@@ -616,6 +626,8 @@ class User:
 
     def quit(self, reason, error=True, banmsg=None, kill=False, silent=False): ### Why source?
         try:
+            if not hasattr(self, 'socket'):
+                self.socket = None
             self.recvbuffer = ''
             localServer = self.localServer if not self.socket else self.server
             sourceServer = self.server if (self.server.socket or self.server == localServer) else self.server.uplink
@@ -646,6 +658,10 @@ class User:
                     self.sendbuffer = self.sendbuffer[sent:]
                 except:
                     break
+
+            if self in localServer.pings:
+                del localServer.pings[self]
+                #logging.debug('Removed {} from server PING check'.format(self))
 
             if self.registered and (self.server == localServer or self.server.eos):
                 if reason and not kill:
@@ -723,14 +739,27 @@ class User:
                 except Exception as ex:
                     logging.exception(ex)
 
-            self.registered = False
-            del self
             gc.collect()
             del gc.garbage[:]
 
-            #if localServer.forked:
-            #    _print('Growth after self.quit() (if any):', server=localServer)
-            #    objgraph.show_growth(limit=10)
+            logging.debug('Growth after self.quit() (if any):')
+            objgraph.show_growth(limit=50)
+            '''
+            reflist = gc.get_referrers(self)
+            if reflist:
+                logging.debug('Found these references after quit:')
+                for r in reflist:
+                    logging.debug(r)
+            else:
+                logging.debug('Excellent, no more references!')
+            '''
+            #objgraph.show_refs([self], filename='refs.png')
+
+            #for k, v in list(globals().items()):
+            #    print("{} -- {}".format(k, v))
+
+            del self.socket
+            del self
 
         except Exception as ex:
             logging.exception(ex)
