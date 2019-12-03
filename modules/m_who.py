@@ -52,7 +52,7 @@ They work similar to modes, + for positive and - for negative.
             flags = recv[2]
         params = '' if len(recv) < 3 else recv[3:]
         global who_flags
-        logging.debug('WHO mask: {}'.format(mask))
+        #logging.debug('WHO mask: {}'.format(mask))
         for user in localServer.users:
             continue_loop = 0
             rawnr = 352
@@ -83,8 +83,9 @@ They work similar to modes, + for positive and - for negative.
                     neg_match.append(f)
 
                 if f in 'Ahrsu':
+                    ## ['WHO', '#Home', '%cuhsnfdar']
                     if not params:
-                        logging.debug('Found arg flag but no params found')
+                        #logging.debug('Found arg flag but no params found')
                         continue
                     param = params[paramcount]
                     logging.debug('Param set: {}'.format(param))

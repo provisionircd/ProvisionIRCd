@@ -742,8 +742,9 @@ class User:
             gc.collect()
             del gc.garbage[:]
 
-            logging.debug('Growth after self.quit() (if any):')
-            objgraph.show_growth(limit=20)
+            if not localServer.forked:
+                logging.debug('Growth after self.quit() (if any):')
+                objgraph.show_growth(limit=20)
             '''
             reflist = gc.get_referrers(self)
             if reflist:
