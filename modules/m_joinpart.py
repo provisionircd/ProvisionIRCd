@@ -79,8 +79,8 @@ Joins a given channel with optional [key]."""
             if channel and self in channel[0].users or not chan:
                 continue
 
-            if len(chan) == 1 and not override:
-                continue
+            #if len(chan) == 1 and not override:
+            #    continue
 
             continueLoop = False
             valid = "abcdefghijklmnopqrstuvwxyz0123456789`~!@#$%^&*()-=_+[]{}\\|;':\"./<>?"
@@ -100,7 +100,7 @@ Joins a given channel with optional [key]."""
                 except:
                     pass
 
-            if chan[0] not in chantypes and recv[0] != '0' and (sourceServer == localServer and not channel):
+            if chan[0] not in chantypes and recv[0] != '0' and (sourceServer == localServer and not channel) or chan in chantypes:
                 self.sendraw(403, '{} :Invalid channel name'.format(chan))
                 continue
 
