@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 /helpop command
 """
@@ -10,7 +7,7 @@ import ircd
 import os
 import sys
 
-from handle.functions import _print
+from handle.functions import logging
 
 @ircd.Modules.commands('helpop', 'help', 'ircdhelp', 'hlep', 'hepl')
 def help(self, localServer, recv):
@@ -148,7 +145,4 @@ def help(self, localServer, recv):
         self.sendraw(292, ':-')
 
     except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        _print(e, server=localServer)
+        logging.exception(ex)
