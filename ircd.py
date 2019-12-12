@@ -103,7 +103,7 @@ class Server:
                 self.hostname = '*'
                 from handle.functions import initlogging
                 initlogging(self)
-                self.running = False
+                self.running = 0
                 self.listen_socks = {}
                 self.bannedList = []
                 self.rootdir = dir_path
@@ -257,7 +257,7 @@ class Server:
                     exit()
                     return
 
-                self.running = True
+                self.running = 1
                 self.hostname = self.conf['me']['server']
                 self.name = self.conf['me']['name']
                 self.sid = self.conf['me']['sid']
@@ -560,6 +560,7 @@ class Server:
                     localServer.pollerObject.unregister(self.socket)
                 try:
                     self.socket.shutdown(socket.SHUT_WR)
+                    self.socket.close()
                 except:
                     self.socket.close()
 
@@ -621,7 +622,6 @@ class Server:
         try:
             if sno:
                 users = list(filter(lambda u: 'o' in u.modes and sno in u.snomasks, localServer.users))
-
             for user in users:
                 try:
                     if sno in localServer.conf['opers'][user.operaccount]['ignore']['snomask']:
@@ -652,7 +652,6 @@ class Server:
 
     def listenToPort(self, port, type):
         try:
-
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self.sock.bind(("", port))

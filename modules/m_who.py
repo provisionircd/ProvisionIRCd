@@ -1,13 +1,9 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 /who command
 """
 
 import ircd
-import os
-import sys
+import time
 
 from handle.functions import match, logging
 
@@ -15,6 +11,8 @@ from handle.functions import match, logging
 @ircd.Modules.commands('who')
 def who(self, localServer, recv):
     try:
+        if int(time.time()) - self.signon < 10:
+            self.flood_safe = True
         who, modes = [], ''
         mask, flags = None, None
         if len(recv) == 1 or recv[1] == '*':
@@ -27,10 +25,14 @@ def who(self, localServer, recv):
             ### Found flags.
             flags = recv[2]
 
+        who_fields = {}
+        who_type = {}
         for user in localServer.users:
+            rawnr = 352
+            who_fields[user] = []
+            who_type[user] = []
             chan = '*'
             show, flagmatch = False, False
-            ### Let's see if we have a match
             for m in mask.split(','):
                 if match(m, user.nickname) or match(m, user.ident) or match(m, user.cloakhost) or match(m, user.server.hostname):
                     show = True
@@ -49,23 +51,39 @@ def who(self, localServer, recv):
                         continue
                     show = True
 
-
                 ### Now we filter out by flag. Flags have higher piority.
+                # or (chan_match and chan_match[0] in user.channels)
+                if flags:
+                    for flag in [flag for flag in ''.join(flags.split('%'))]:
+                        ### Display info. filter%fields,type
+                        ### %fields is what information to show.
+                        who_fields[user].append(flag)
+
+                    for flag in [flag for flag in ''.join(flags.split(','))]:
+                        ### Display info. filter%fields,type
+                        ### %fields is what information to show.
+                        who_type[user].append(flag)
+
                 if flags:
                     if not flagmatch:
                         show = False
-                    if 'o' in flags and 'o' in user.modes:
+                    if 'o' in flags and 'o' in user.modes and (m == '*' or chan_match and chan_match[0] in user.channels):
+                        #logging.debug('flagmatch 1 for {}'.format(user))
                         show = True
                         flagmatch = True
                     if 'a' in flags and user.svid and user.svid != '*':
-                        if m == '*' or m[0] in localServer.chantypes:
+                        if (m == '*' or chan_match and chan_match[0] in user.channels):
+                            #logging.debug('flagmatch 2 for {}'.format(user))
                             show = True
                             flagmatch = True
-                        if (m != '*' or m[0] in localServer.chantypes) and m.lower() == user.svid.lower():
+                        if (m == '*' or chan_match and chan_match[0] in user.channels) and m.lower() == user.svid.lower():
+                            #logging.debug('flagmatch 3 for {}'.format(user))
                             show = True
                             flagmatch = True
 
-                    if 'r' in flags and match(m, user.realname):
+                    if 'r' in flags and match(m, user.realname) and (m == '*' or chan_match and chan_match[0] in user.channels):
+                        #logging.debug('flagmatch 4 for {}'.format(user))
+                        print('{} matches with {}'.format(m, user.realname))
                         show = True
                         flagmatch = True
 
@@ -85,10 +103,11 @@ def who(self, localServer, recv):
                 continue
 
             chanMatch = False
+            if flagmatch:
+                rawnr = 352 ### 354 for extra/modified %fields
             if 'i' in user.modes:
                 for c in user.channels:
                     if c in self.channels or self.ocheck('o', 'override'):
-                        #_print(c)
                         chanMatch = True
                         break
                 if not chanMatch and not self.ocheck('o', 'override'):
@@ -141,7 +160,7 @@ def who(self, localServer, recv):
                 #print('User {} has no server? {}'.format(user.nickname, user.server))
                 continue
             hopcount = 0 if user.server == localServer else user.server.hopcount
-            self.sendraw(352, '{} {} {} {} {} {}{} :{} {}'.format(chan, user.ident, user.cloakhost, localServer.hostname, user.nickname, away, modes, hopcount, user.realname))
-        self.sendraw(315, '* :End of /WHO list.')
+            self.sendraw(rawnr, '{} {} {} {} {} {}{} :{} {}'.format(chan, user.ident, user.cloakhost, localServer.hostname, user.nickname, away, modes, hopcount, user.realname))
+        self.sendraw(315, '{} :End of /WHO list.'.format(chan))
     except Exception as ex:
         logging.exception(ex)

@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 random quote on connect
 """
@@ -172,9 +169,9 @@ Computing Definition - Error: What someone else has made when they disagree with
 Backup not found: (A)bort (R)etry (P)anic
 WinErr 653: Multitasking attempted - system confused.
 Cannot join #real_life (invite only)
-"Unfortunatly, no one can be told what the Matrix is. You have to see it for yourself." - Matrix
-"Reality is a thing of the past" - Matrix
-"The future will not be user friendly" - Matrix
+"Unfortunately, no one can be told what the Matrix is. You have to see it for yourself." - Matrix
+"Reality is a thing of the past." - Matrix
+"The future will not be user friendly." - Matrix
 "The general idea in chat is to make yourself understandable..." - Peer
 "heh i am talkin to someone... she's not dead... yet, anyways" - Stinky
 "He who must die, must die in the dark, even though he sells candles."
