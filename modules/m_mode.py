@@ -265,6 +265,7 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                             timed = valid_expire(t[1])
                     except:
                         pass
+
                     user = list(filter(lambda u: u.uid == temp_user or u.nickname.lower() == temp_user.lower(), channel.users))
                     if not user:
                         continue
