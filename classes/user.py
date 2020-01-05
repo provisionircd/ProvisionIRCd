@@ -318,6 +318,23 @@ class User:
                 if command not in ignore:
                     pass
                     #_print('> {} :: {}'.format(self.nickname, recv), server=self.server)
+
+                # Looking for API calls.
+                if not self.registered:
+                    for callable in [callable for callable in self.server.api if callable[0].lower() == command.lower()]:
+                        api_func = callable[1]
+                        api_host = callable[2]
+                        api_password = callable[3]
+                        if api_host and not match(api_host, self.ip):
+                            self.quit('API', api=1)
+                            break
+                        if api_password and recv[1] != api_password:
+                            self.quit('API', api=1)
+                            break
+                        api_func(self, localServer, parsed)
+                        self.quit('API', api=1)
+                        return
+
                 #print('ik ga zo slaaaaaapen maar jij bent ernie?')
                 if type(self).__name__ == 'User' and command != 'nick' and command != 'user' and command != 'pong' and command != 'cap' and command != 'starttls' and command != 'webirc' and not self.registered:
                     return self.sendraw(451, 'You have not registered')
@@ -624,7 +641,7 @@ class User:
             return True
         return False
 
-    def quit(self, reason, error=True, banmsg=None, kill=False, silent=False): ### Why source?
+    def quit(self, reason, error=True, banmsg=None, kill=False, silent=False, api=False): ### Why source?
         try:
             if not hasattr(self, 'socket'):
                 self.socket = None
@@ -648,7 +665,7 @@ class User:
                     reason = reason[:-1]
                 reason += ': '+self.nickname
 
-            if self.socket and reason:
+            if self.socket and reason and not api:
                 self._send('ERROR :Closing link: [{}] ({})'.format(self.hostname, reason))
 
             while self.sendbuffer:

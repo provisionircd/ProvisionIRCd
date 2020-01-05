@@ -108,6 +108,7 @@ class Server:
                 self.modules_dir = dir_path+'/modules/'
                 self.conffile = conffile
                 self.commands = []
+                self.api = []
                 self.modules = {}
                 self.events = []
                 self.hooks = []

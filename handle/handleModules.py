@@ -46,8 +46,9 @@ def HookToCore(self, callables, reload=False):
         events = callables[3]
         commands = callables[7]
         module_hooks = callables[10]
+        api = callables[11]
         #print('HOOKS: {}'.format(hooks))
-        module = callables[11]
+        module = callables[12]
         for callable in [callable for callable in commands if callable not in hooks]:
             hooks.append(callable)
             for cmd in [cmd for cmd in callable.commands if cmd not in self.commands]:
@@ -67,6 +68,17 @@ def HookToCore(self, callables, reload=False):
                 info = (cmd, callable, params, req_modes, req_flags, req_class, module)
                 self.commands.append(info) ### (cmd, callable, params, req_modes, req_flags, req_class, module)
                 logging.info('Hooked command "{}" (params: {}, req_modes: {}, req_flags: {}, req_class: {}) to function {}'.format(cmd, params, req_modes, req_flags, req_class, callable))
+
+        hooks = []
+        for callable in [callable for callable in api if callable not in hooks]:
+            hooks.append(callable)
+            for a in [a for a in callable.api if a not in self.api]:
+                api_cmd = a[0]
+                api_host = None if len(a) < 2 else a[1]
+                api_password = None if len(a) < 3 else a[2]
+                info = (api_cmd, callable, api_host, api_password, module)
+                self.api.append(info) ### (cmd, callable, params, req_modes, req_flags, req_class, module)
+                logging.info('Hooked API "{}" (host: {}, password: {}) to function {}'.format(api_cmd, api_host, api_password, callable))
 
         hooks = []
         for callable in [callable for callable in channel_modes if callable not in hooks]:
@@ -214,7 +226,6 @@ def LoadModule(self, name, path, reload=False, module=None):
                 logging.debug('Requesting reload from importlib')
             else:
                 module = importlib.import_module(package)
-                print(module)
             if hasattr(module, 'init'):
                 try:
                     getattr(module, 'init')(self, reload=reload)
@@ -277,6 +288,35 @@ def UnloadModule(self, name):
                             self.commands.remove(info)
                         except ValueError:
                             logging.error('Callable {} not found in commands list.'.format(cmd))
+
+                for function in [function for function in self.modules[module][0] if hasattr(function, 'api')]:
+                    for a in list(function.api):
+                        function.api.remove(a)
+                        api_cmd = a[0]
+                        api_host = None if len(a) < 2 else a[1]
+                        api_password = None if len(a) < 3 else a[2]
+                        info = (api_cmd, function, api_host, api_password, module)
+                        try:
+                            self.api.remove(info)
+                        except ValueError:
+                            logging.error('Callable {} not found in API list.'.format(a))
+
+                ### info = (api_cmd, callable, api_host, api_password, module)
+
+                for function in [function for function in self.modules[module][0] if hasattr(function, 'api')]:
+                    for cmd in list(function.api):
+                        function.api.remove(cmd)
+                        host = None
+                        password = None
+                        if hasattr(function, "host"):
+                            host = function.host
+                        if hasattr(function, "password"):
+                            password = function.password
+                        info = (cmd, function, host, password)
+                        try:
+                            self.api.remove(info)
+                        except ValueError:
+                            logging.error('Callable {} not found in api list.'.format(cmd))
 
                 for function in [function for function in self.modules[module][1] if hasattr(function, 'channel_modes')]:
                     for chmode in [m for m in list(function.channel_modes) if m[0] in self.chmodes_string]:
@@ -364,6 +404,7 @@ def FindCallables(module):
     req_flags = []
     req_class = [] # Defaults to User class.
     commands = []
+    api = []
     params = [] # For commands.
     support = []
     hooks = []
@@ -390,7 +431,9 @@ def FindCallables(module):
                 support.append(i)
             if hasattr(i, 'hooks'):
                 hooks.append(i)
-    info = callables, channel_modes, user_modes, events, req_modes, req_flags, req_class, commands, params, support, hooks, module
+            if hasattr(i, 'api'):
+                api.append(i)
+    info = callables, channel_modes, user_modes, events, req_modes, req_flags, req_class, commands, params, support, hooks, api, module
     return info
 
 def commands(*command_list):
@@ -398,6 +441,16 @@ def commands(*command_list):
         if not hasattr(function, "commands"):
             function.commands = []
         function.commands.extend(command_list)
+        return function
+    return add_attribute
+
+
+def api(*args):
+    ### ('command', host=None, password=None)
+    def add_attribute(function):
+        if not hasattr(function, "api"):
+            function.api = []
+        function.api.append(args)
         return function
     return add_attribute
 
