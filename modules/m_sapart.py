@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 /sapart command
 """
@@ -13,6 +10,8 @@ import re
 @ircd.Modules.req_flags('localsacmds|globalsacmds')
 @ircd.Modules.commands('sapart')
 def sapart(self, localServer, recv):
+    """Forcefully part a user from a channel.
+Syntax: /SAPART <user> <channel>"""
     target = list(filter(lambda c: c.nickname.lower() == recv[1].lower(), localServer.users))
     if not target:
         return self.sendraw(401, '{} :No such nick'.format(recv[1]))

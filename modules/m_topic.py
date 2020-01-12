@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 /topic command
 """
@@ -8,11 +5,9 @@
 import ircd
 
 import time
-import os
-import sys
-from handle.functions import checkSpamfilter, _print
+from handle.functions import checkSpamfilter, logging
 
-topiclen = 307
+topiclen = 350
 
 @ircd.Modules.params(1)
 @ircd.Modules.support('TOPICLEN='+str(topiclen))
@@ -103,7 +98,4 @@ def topic(self, localServer, recv, override=False):
                 data = ':{} TOPIC {} {} {} :{}'.format(sourceID, channel.name, channel.topic_author, channel.topic_time, channel.topic)
                 localServer.new_sync(localServer, sourceServer, data)
     except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        _print(e, server=localServer)
+        logging.exception(ex)

@@ -4,8 +4,6 @@
 
 import ircd
 import time
-import os
-import sys
 
 from handle.functions import logging
 
@@ -17,6 +15,13 @@ def init(localServer, reload=False):
 @ircd.Modules.support('WATCHOPTS=A')
 @ircd.Modules.commands('watch')
 def watch(self, localServer, recv):
+    """Maintain your WATCH list. You will be notified when a nickname on your WATCH list
+connects or disconnects, even if you don't share a channel.
+Your watchlist will be cleared when you disconnect.
+-
+Add a nickname:             /WATCH +nickname
+Remove a nickname:          /WATCH -nickname
+View current online users:  /WATCH"""
     if int(time.time()) - self.signon < 10:
         self.flood_safe = True
     else:

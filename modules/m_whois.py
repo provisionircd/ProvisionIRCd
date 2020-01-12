@@ -11,6 +11,10 @@ from handle.functions import logging
 @ircd.Modules.user_modes('W', 1, 'See when people are doing a /WHOIS on you') ### ('mode', 0, 1 or 2 for normal user, oper or server, 'Mode description')
 @ircd.Modules.commands('whois')
 def whois(self, localServer, recv):
+    """Displays information about the given user, such as hostmask, channels, idle time, etc...
+Output may vary depending on user- and channel modes.
+-
+Example: /WHOIS Bob"""
     try:
         if len(recv) < 2:
             self.sendraw(431, ':No nickname given')
@@ -132,6 +136,9 @@ def whois(self, localServer, recv):
 
 @ircd.Modules.commands('whowas')
 def whowas(self, localServer, recv):
+    """Request saved user information for offline users.
+-
+Example: /WHOWAS ZoeyDeutch"""
     try:
         if len(recv) < 2:
             self.sendraw(431, ':No nickname given')

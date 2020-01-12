@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 """
 /gc command
 """
@@ -19,4 +17,5 @@ def cmd_gc(self, localServer, recv):
     #    del localServer.whowas[w]
 
     gc.collect()
+    gc.get_objects()
     del gc.garbage[:]

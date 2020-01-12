@@ -10,7 +10,7 @@ from ircd import Server
 ### Import classes.
 from classes.user import User
 #User = user.User
-from handle.functions import is_sslport, check_flood, logging
+from handle.functions import is_sslport, check_flood, logging, save_db
 from modules.m_connect import connectTo
 import select
 import ssl
@@ -52,12 +52,12 @@ def sock_accept(localServer, s):
             port = conn.getsockname()[1]
             is_ssl = is_sslport(localServer, port)
             conn_backlog = [user for user in localServer.users if user.socket and not user.registered]
-            logging.info('Accepting client on {} -- fd: {}, with IP {}'.format(s, conn.fileno(), addr[0]))
             if len(conn_backlog) > 500:
                 logging.warning('Current connection backlog is >{}, so not allowing any more connections for now. Bye.'.format(len(conn_backlog)))
                 conn.close()
                 return
             conn.settimeout(10)
+            logging.info('Accepting client on {} -- fd: {}, with IP {}'.format(s, conn.fileno(), addr[0]))
             if is_ssl and not localServer.pre_wrap:
                 is_ssl = 0
                 version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
@@ -84,8 +84,20 @@ def sock_accept(localServer, s):
             u = User(localServer, conn, addr, is_ssl)
             if localServer.use_poll:
                 localServer.fd_to_socket[u.fileno()] = (u.socket, u)
-            u.socket.setblocking(1) ### Uncomment this.
-            gc.collect()
+
+            if not hasattr(u, 'socket'):
+                u.quit('Missing socket')
+                return
+
+            try:
+                u.socket.setblocking(1) ### Uncomment this. Why? I don't remember.
+            except OSError as ex:
+                logging.debug(R+'Client {} probably refused the connection due to self-signed cert (ZNC?). This can cause memory leaks.'.format(u)+W)
+                logging.debug(R+'Gently disconnecting user. IP: {}'.format(u.ip)+W)
+                #logging.exception(ex)
+                u.quit(ex)
+                return
+
             if u.fileno() == -1:
                 logging.error('{}Invalid fd for {} -- quit() on user{}'.format(R, u, W))
                 u.quit('Invalid fd')
@@ -99,19 +111,13 @@ def sock_accept(localServer, s):
                 #localServer.snotice('t', '[{}](1) {}'.format(addr[0], ex))
                 logging.exception(ex)
                 u.quit(ex)
-                try:
-                    conn.close()
-                except:
-                    pass
                 return
 
         except Exception as ex:
-            try:
-                u.quit(ex)
-            except:
-                pass
             logging.exception(ex)
+            conn.close()
             return
+
     elif localServer.listen_socks[s] == 'servers':
         try:
             conn, addr = s.accept()
@@ -121,6 +127,7 @@ def sock_accept(localServer, s):
             is_ssl = is_sslport(localServer, port)
 
             if is_ssl and not localServer.pre_wrap:
+                # Uncomment handshake shit if isssues.
                 conn = ssl.wrap_socket(conn,
                                         server_side=True,
                                         certfile=localServer.server_cert, keyfile=localServer.server_key, ca_certs=localServer.ca_certs,
@@ -267,6 +274,7 @@ class data_handler: #(threading.Thread):
                             threading.Thread(target=sock_accept, args=([localServer, s])).start()
                             continue
                     check_loops(localServer)
+                    save_db(localServer)
             except Exception as ex:
                 logging.exception(ex)
         logging.warning('data_handler loop broke! This should only happen after /restart.')
@@ -412,7 +420,24 @@ def check_loops(localServer):
     if not os.path.exists('logs'):
         os.mkdir('logs')
 
+    if not os.path.exists('db'):
+        os.mkdir('db')
+
+    '''
+    for file in [file for file in os.listdir('logs') if file.split('.')[-1].isdigit() and 1 <= int(file[-1]) <= 5]:
+        date = file[3:].split('.')[0]
+        timestamp = int(time.mktime(time.strptime(date, '%Y-%m-%d')))
+        difference = int(time.time()) - timestamp
+        if difference >= 86400*7: ### Remove after 7 days.
+            os.remove('logs/'+file)
+            logging.debug('Expired logfile "{}" removed.'.format(file))
+    '''
+
 def read_socket(localServer, sock):
+    if not hasattr(sock, 'socket'):
+        # Client probably repidly disconnected. Possible causes can be ZNC that have not yet accepted new cert.
+        #sock.quit('No socket')
+        return
     try:
         if sock.cls:
             buffer_len = int(localServer.conf['class'][sock.cls]['sendq']) * 2
@@ -420,14 +445,22 @@ def read_socket(localServer, sock):
             buffer_len = 8192 if type(sock).__name__ == 'User' else 65536
         try:
             recv = sock.socket.recv(buffer_len).decode('utf-8')
-        except Exception as ex:
-            logging.exception(ex)
+        except (UnicodeDecodeError, ConnectionResetError, OSError, AttributeError) as ex:
+            logging.debug('Failed to read socket: {}'.format(ex))
+            logging.debug('Disconnecting user: {}'.format(sock))
+            if hasattr(sock, 'ip'):
+                logging.debug('IP: {}'.format(sock.ip))
+            #logging.exception(ex)
             sock.quit('Read error: {}'.format(ex))
+            return
+        except Exception as ex:
+            logging.debug(R+'Alternative exception occurred: {}'.format(ex)+W)
+            logging.exception(ex)
             return
 
         if not recv:
             #logging.error('No data received from {}'.format(sock))
-            sock.quit('Read error')
+            sock.quit('Read error: no data')
             return
 
         sock.recvbuffer += recv
@@ -435,4 +468,5 @@ def read_socket(localServer, sock):
         sock.handle_recv()
         return recv
     except Exception as ex:
+        logging.debug(R+'Final exception occurred for {}: {}'.format(sock, ex)+W)
         logging.exception(ex)

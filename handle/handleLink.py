@@ -220,13 +220,12 @@ class Link(threading.Thread):
 
         except Exception as ex:
             logging.exception(ex)
-
             if serv:
                 serv.quit(str(ex))
             if self.origin:
                 self.origin.send('NOTICE', '*** Error connecting to server {}[{}:{}]: {}'.format(self.name, self.host, self.port, ex))
-            if self.is_ssl:
-                self.origin.send('NOTICE', '*** Make sure SSL is enabled on both ends and ports are listening for SSL connections.'.format(self.name, self.host, self.port, ex))
+                if self.is_ssl:
+                    self.origin.send('NOTICE', '*** Make sure SSL is enabled on both ends and ports are listening for SSL connections.'.format(self.name, self.host, self.port, ex))
         finally:
             if self.name.lower() in self.localServer.pendingLinks:
                 self.localServer.pendingLinks.remove(self.name.lower())

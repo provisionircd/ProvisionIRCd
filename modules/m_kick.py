@@ -1,22 +1,20 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 /kick command
 """
 
 import ircd
-import os
-import sys
 
 from handle.functions import logging
 
-kicklen = 307
+kicklen = 312
 
 @ircd.Modules.params(2)
 @ircd.Modules.support('KICKLEN='+str(kicklen))
 @ircd.Modules.commands('kick')
 def kick(self, localServer, recv, override=False, sync=True):
+    """Syntax: KICK <channel> <user> [reason]
+-
+As a channel operator, you kick users from your channel."""
     try:
         oper_override = False
         if type(self).__name__ == 'Server':
@@ -82,7 +80,6 @@ def kick(self, localServer, recv, override=False, sync=True):
             reason = reason[1:]
         reason = reason[:kicklen]
 
-
         broadcast = list(channel.users)
         ### Check module hooks for visible_in_channel()
         for u in broadcast:
@@ -96,17 +93,19 @@ def kick(self, localServer, recv, override=False, sync=True):
                     broadcast.remove(u)
                     logging.debug('/KICK: User {} is not allowed to see {} on channel {}'.format(u.nickname, user.nickname, channel.name))
                     break
-        success = True
-        for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_local_kick']:
-            try:
-                success = callable[2](self, localServer, user, channel, reason)
-                if not success and success is not None:
-                    logging.debug('KICK denied by: {}'.format(callable))
-                    break
-            except Exception as ex:
-                logging.exception(ex)
-        if not success and success is not None:
-            return
+
+        if type(self).__name__ == 'User':
+            success = True
+            for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_local_kick']:
+                try:
+                    success = callable[2](self, localServer, user, channel, reason)
+                    if not success and success is not None:
+                        logging.debug('KICK denied by: {}'.format(callable))
+                        break
+                except Exception as ex:
+                    logging.exception(ex)
+            if not success and success is not None:
+                return
 
         if oper_override:
             self.server.snotice('s', '*** OperOverride by {} ({}@{}) with KICK {} {} ({})'.format(self.nickname, self.ident, self.hostname, channel.name, user.nickname, reason))
@@ -125,9 +124,9 @@ def kick(self, localServer, recv, override=False, sync=True):
                 except Exception as ex:
                     logging.exception(ex)
 
-        for callable in [callable for callable in localServer.events if callable[0].lower() == hook]:
+        for callable in [callable for callable in localServer.hooks if callable[0].lower() == hook]:
             try:
-                callable[1](self, localServer, user, channel, reason)
+                callable[2](self, localServer, user, channel, reason)
             except Exception as ex:
                 logging.exception(ex)
 

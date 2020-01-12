@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 /privmsg and /notice commands
 """
@@ -10,14 +7,12 @@ import ircd
 from handle.functions import match, checkSpamfilter, logging
 
 import time
-import os
-import sys
 import re
 
 maxtargets = 20
 
 @ircd.Modules.support('MAXTARGETS='+str(maxtargets))
-@ircd.Modules.commands('privmsg', 'msg', 'rivmsg')
+@ircd.Modules.commands('privmsg', 'msg')
 def privmsg(self, localServer, recv, override=False):
     try:
         if type(self).__name__ == 'Server':
@@ -65,17 +60,20 @@ def privmsg(self, localServer, recv, override=False):
                     continue
 
                 if type(self).__name__ == 'User':
+                    block_msg = 0
                     for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_usermsg']:
                         try:
-                            result = callable[2](self, localServer, user, msg)
-                            if result is not None:
-                                msg = result
-                            if not msg:
+                            mod_msg = callable[2](self, localServer, user, msg)
+                            if mod_msg:
+                                msg = mod_msg
+                            elif not mod_msg and mod_msg is not None:
+                                block_msg = 1
                                 break
                         except Exception as ex:
                             logging.exception(ex)
-                    if not msg:
+                    if block_msg:
                         continue
+
                 if user.away:
                     self.sendraw(301, '{} :{}'.format(user.nickname, user.away))
 
@@ -119,14 +117,18 @@ def privmsg(self, localServer, recv, override=False):
                         continue
 
                 if type(self).__name__ == 'User':
+                    block_msg = 0
                     for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_chanmsg']:
                         try:
-                            msg = callable[2](self, localServer, channel, msg)
-                            if not msg:
+                            mod_msg = callable[2](self, localServer, channel, msg)
+                            if mod_msg:
+                                msg = mod_msg
+                            elif not mod_msg and mod_msg is not None:
+                                block_msg = 1
                                 break
                         except Exception as ex:
                             logging.exception(ex)
-                    if not msg:
+                    if block_msg:
                         continue
 
                 users = [user for user in channel.users if user != self and 'd' not in user.modes]
@@ -201,6 +203,20 @@ def notice(self, localServer, recv, override=False, s_sync=True):
                 if type(self).__name__ == 'User' and checkSpamfilter(self, localServer, user.nickname, 'private', msg):
                     continue
 
+                if type(self).__name__ == 'User':
+                    block_msg = 0
+                    for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_usernotice']:
+                        try:
+                            mod_msg = callable[2](self, localServer, user, msg)
+                            if mod_msg:
+                                msg = mod_msg
+                            elif not mod_msg and mod_msg is not None:
+                                block_msg = 1
+                                break
+                        except Exception as ex:
+                            logging.exception(ex)
+                    if block_msg:
+                        continue
 
                 if user.server != localServer:
                     localServer.new_sync(localServer, sourceServer, ':{} NOTICE {} :{}'.format(sourceID, target, msg, direct=user.server))
@@ -209,6 +225,12 @@ def notice(self, localServer, recv, override=False, s_sync=True):
 
                 if type(self).__name__ == 'User':
                     self.idle = int(time.time())
+                    for callable in [callable for callable in localServer.events if callable[0].lower() == 'usernotice']:
+                        try:
+                            callable[2](self, localServer, user, msg)
+                        except Exception as ex:
+                            logging.exception(ex)
+
             else:
                 channel = list(filter(lambda c: c.name.lower() == target.lower(), localServer.channels))
 
@@ -229,15 +251,35 @@ def notice(self, localServer, recv, override=False, s_sync=True):
                 if type(self).__name__ == 'User' and checkSpamfilter(self, localServer, channel.name, 'channel', msg):
                     continue
 
-                self.broadcast([user for user in channel.users], 'NOTICE {} :{}'.format(channel.name, msg))
-
                 if type(self).__name__ == 'User':
+                    block_msg = 0
+                    for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_channotice']:
+                        try:
+                            mod_msg = callable[2](self, localServer, channel, msg)
+                            if mod_msg:
+                                msg = mod_msg
+                            elif not mod_msg and mod_msg is not None:
+                                block_msg = 1
+                                break
+                        except Exception as ex:
+                            logging.exception(ex)
+                    if block_msg:
+                        continue
+
+                    self.broadcast([user for user in channel.users], 'NOTICE {} :{}'.format(channel.name, msg))
                     self.idle = int(time.time())
 
                 if s_sync:
                     localServer.new_sync(localServer, sourceServer, ':{} NOTICE {} :{}'.format(sourceID, target, msg))
                 else:
                     logging.debug('Not syncing because s_sync: {}'.format(msg))
+
+                if type(self).__name__ == 'User':
+                    for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'channotice']:
+                        try:
+                            callable[2](self, localServer, channel, msg)
+                        except Exception as ex:
+                            logging.exception(ex)
 
     except Exception as ex:
         logging.exception(ex)

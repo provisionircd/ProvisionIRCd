@@ -18,6 +18,7 @@ import datetime
 import threading
 import hashlib
 import select
+import objgraph
 
 if sys.version_info[0] < 3:
     print('Python 2 is not supported.')
@@ -86,6 +87,24 @@ READ_ONLY = (
 )
 READ_WRITE = READ_ONLY | select.POLLOUT
 
+def resolve_ip(self):
+    try:
+        ip_resolved = socket.gethostbyaddr(self.ip)[0]
+    except socket.herror: ### Not a typo.
+        ip_resolved = self.ip
+    except Exception as ex:
+        logging.exception(ex)
+    deny_except = False
+    if 'except' in self.server.conf and 'deny' in self.server.conf['except']:
+        for e in self.server.conf['except']['deny']:
+            if match(e, self.ident+'@'+ip_resolved) or match(e, self.ident+'@'+self.ip):
+                deny_except = True
+                break
+    if not deny_except:
+        for entry in self.server.deny:
+            if match(entry, self.ident+'@'+ip_resolved) or match(entry, self.ident+'@'+self.ip):
+                return self.quit('Your host matches a deny block, and is therefore not allowed.')
+
 class User:
     def __init__(self, server, sock=None, address=None, is_ssl=None, serverClass=None, params=None):
         try:
@@ -125,9 +144,15 @@ class User:
                 self.localServer = server
                 self.addr = address
                 self.ip, self.hostname = self.addr[0], self.addr[0]
+                threading.Thread(target=resolve_ip, args=([self])).start()
                 self.cls = None
                 self.signon = int(time.time())
                 self.registered = False
+                for callable in [callable for callable in server.hooks if callable[0].lower() == 'new_connection']:
+                    try:
+                        callable[2](self, server)
+                    except Exception as ex:
+                        logging.exception(ex)
                 if 'dnsbl' in self.server.conf:
                     #self.sendraw('020', ':Please wait while we process your connection.')
                     dnsbl_except = False
@@ -151,8 +176,7 @@ class User:
                         if match(e, self.ip):
                             throttle_except = True
                 if len(totalConns) >= throttleTreshhold and not throttle_except:
-                    self.quit('Throttling - You are (re)connecting too fast')
-                    return
+                    return self.quit('Throttling - You are (re)connecting too fast')
 
                 self.server.throttle[self] = {}
                 self.server.throttle[self]['ip'] = self.ip
@@ -178,14 +202,14 @@ class User:
                         logging.exception(ex)
 
                 self.idle = int(time.time())
-
                 if self.ip in self.server.hostcache:
                     self.hostname = self.server.hostcache[self.ip]['host']
                     self._send(':{} NOTICE AUTH :*** Found your hostname ({}) [cached]'.format(self.server.hostname, self.hostname))
                 elif 'dontresolve' not in self.server.conf['settings'] or ('dontresolve' in self.server.conf['settings'] and not self.server.conf['settings']['dontresolve']):
                     try:
                         self.hostname = socket.gethostbyaddr(self.ip)[0]
-                        self.hostname.split('.')[1]
+                        if not self.hostname.split('.')[1]:
+                            raise
                         self.server.hostcache[self.ip] = {}
                         self.server.hostcache[self.ip]['host'] = self.hostname
                         self.server.hostcache[self.ip]['ctime'] = int(time.time())
@@ -250,9 +274,18 @@ class User:
             logging.exception(ex)
 
     def __del__(self):
-        pass
-        #_print('User {} closed'.format(self, server=self.localServer))
+        #pass
+        logging.debug('User {} closed'.format(self))
         #objgraph.show_most_common_types()
+        '''
+        reflist = gc.get_referrers(self)
+        if reflist:
+            logging.debug('Found these references after __del__:')
+            for r in reflist:
+                logging.debug(r)
+        else:
+            logging.debug('Excellent, no more references after __del__!')
+        '''
 
     def handle_recv(self):
         try:
@@ -274,7 +307,7 @@ class User:
                 if not self.flood_penalty_time:
                     self.flood_penalty_time = int(time.time())
 
-                dont_parse = ['topic', 'swhois']
+                dont_parse = ['topic', 'swhois', 'prop']
                 if command in dont_parse:
                     parsed = recv.split(' ')
                 else:
@@ -285,8 +318,25 @@ class User:
                 if command not in ignore:
                     pass
                     #_print('> {} :: {}'.format(self.nickname, recv), server=self.server)
+
+                # Looking for API calls.
+                if not self.registered:
+                    for callable in [callable for callable in self.server.api if callable[0].lower() == command.lower()]:
+                        api_func = callable[1]
+                        api_host = callable[2]
+                        api_password = callable[3]
+                        if api_host and not match(api_host, self.ip):
+                            self.quit('API', api=1)
+                            break
+                        if api_password and recv[1] != api_password:
+                            self.quit('API', api=1)
+                            break
+                        api_func(self, localServer, parsed)
+                        self.quit('API', api=1)
+                        return
+
                 #print('ik ga zo slaaaaaapen maar jij bent ernie?')
-                if type(self).__name__ == 'User' and command != 'nick' and command != 'user' and command != 'pong' and command != 'cap' and command != 'starttls' and not self.registered:
+                if type(self).__name__ == 'User' and command != 'nick' and command != 'user' and command != 'pong' and command != 'cap' and command != 'starttls' and command != 'webirc' and not self.registered:
                     return self.sendraw(451, 'You have not registered')
                 if command == 'pong':
                     if self in self.server.pings:
@@ -299,8 +349,8 @@ class User:
                             if self.ident != '' and self.nickname != '*' and (self.cap_end or not self.sends_cap):
                                 self.welcome()
                         else:
-                            self.quit('Unauthorized connection')
-                            return
+                            return self.quit('Unauthorized connection')
+
                 try:
                     cmd = importlib.import_module('cmds.cmd_'+command.lower())
                     getattr(cmd, 'cmd_'+command.upper())(self, localServer, parsed)
@@ -419,14 +469,11 @@ class User:
             if not info or not type:
                 return
             if not source:
-                logging.error('No source provided in setinfo()!')
-                return
+                return logging.error('No source provided in setinfo()!')
             if type(source) == str or type(source).__name__ != 'Server':
-                logging.error('Wrong source type provided in setinfo(): {}'.format(source))
-                return
+                return logging.error('Wrong source type provided in setinfo(): {}'.format(source))
             if t not in ['host', 'ident']:
-                logging.error('Incorrect type received in setinfo(): {}'.format(t))
-                return
+                return logging.error('Incorrect type received in setinfo(): {}'.format(t))
             valid = 'abcdefghijklmnopqrstuvwxyz0123456789.-'
             for c in str(info):
                 if c.lower() not in valid:
@@ -473,18 +520,15 @@ class User:
                     break
 
             if not self.cls:
-                self.quit('You are not authorized to connect to this server')
-                return
+                return self.quit('You are not authorized to connect to this server')
 
             totalClasses = list(filter(lambda u: u.registered and u.server == self.server and u.cls == self.cls, self.server.users))
             if len(totalClasses) > int(self.server.conf['class'][self.cls]['max']):
-                self.quit('Maximum connections for this class reached')
-                return
+                return self.quit('Maximum connections for this class reached')
 
             clones = list(filter(lambda u: u.registered and u.socket and u.ip == self.ip, self.server.users))
             if len(clones) > int(self.server.conf['allow'][self.cls]['maxperip']):
-                self.quit('Maximum connections from your IP')
-                return
+                return self.quit('Maximum connections from your IP')
 
             current_lusers = len([user for user in self.server.users if user.server == self.server])
             if current_lusers > self.server.maxusers:
@@ -494,11 +538,6 @@ class User:
                 self.server.maxgusers = len(self.server.users)
                 if self.server.maxgusers % 10 == 0:
                     self.server.snotice('s', '*** New global user record: {}'.format(self.server.maxgusers))
-            for callable in [callable for callable in self.server.hooks if callable[0].lower() == 'welcome']:
-                try:
-                    callable[2](self, self.server)
-                except Exception as ex:
-                    logging.exception(ex)
 
             self.sendraw('001', ':Welcome to the {} IRC Network {}!{}@{}'.format(self.server.name, self.nickname, self.ident, self.hostname))
             self.sendraw('002', ':Your host is {}, running version {}'.format(self.server.hostname, self.server.version))
@@ -517,6 +556,7 @@ class User:
 
             self.sendraw('004', '{} {} {} {}'.format(self.server.hostname, self.server.version, umodes, chmodes))
             show_support(self, self.server)
+
             if self.ssl and hasattr(self.socket, 'cipher'):
                 self.send('NOTICE', ':*** You are connected to {} with {}-{}'.format(self.server.hostname, self.socket.version(), self.socket.cipher()[0]))
             msg = '*** Client connecting: {} ({}@{}) {{{}}} [{}{}]'.format(self.nickname, self.ident, self.hostname, self.cls, 'secure' if self.ssl else 'plain', ' '+self.socket.cipher()[0] if self.ssl else '')
@@ -529,6 +569,11 @@ class User:
             self.registered = True
             self.handle('lusers')
             self.handle('motd')
+            for callable in [callable for callable in self.server.hooks if callable[0].lower() == 'welcome']:
+                try:
+                    callable[2](self, self.server)
+                except Exception as ex:
+                    logging.exception(ex)
             if self.fingerprint:
                 self.send('NOTICE', ':*** Your SSL fingerprint is {}'.format(self.fingerprint))
                 data = 'MD client {} certfp :{}'.format(self.uid, self.fingerprint)
@@ -596,8 +641,10 @@ class User:
             return True
         return False
 
-    def quit(self, reason, error=True, banmsg=None, kill=False, silent=False): ### Why source?
+    def quit(self, reason, error=True, banmsg=None, kill=False, silent=False, api=False): ### Why source?
         try:
+            if not hasattr(self, 'socket'):
+                self.socket = None
             self.recvbuffer = ''
             localServer = self.localServer if not self.socket else self.server
             sourceServer = self.server if (self.server.socket or self.server == localServer) else self.server.uplink
@@ -618,7 +665,7 @@ class User:
                     reason = reason[:-1]
                 reason += ': '+self.nickname
 
-            if self.socket and reason:
+            if self.socket and reason and not api:
                 self._send('ERROR :Closing link: [{}] ({})'.format(self.hostname, reason))
 
             while self.sendbuffer:
@@ -628,6 +675,10 @@ class User:
                     self.sendbuffer = self.sendbuffer[sent:]
                 except:
                     break
+
+            if self in localServer.pings:
+                del localServer.pings[self]
+                #logging.debug('Removed {} from server PING check'.format(self))
 
             if self.registered and (self.server == localServer or self.server.eos):
                 if reason and not kill:
@@ -694,9 +745,9 @@ class User:
                     localServer.pollerObject.unregister(self.socket)
                 try:
                     self.socket.shutdown(socket.SHUT_WR)
-                    self.socket.close()
                 except:
-                    self.socket.close()
+                    pass
+                self.socket.close()
 
             hook = 'local_quit' if self.server == localServer else 'remote_quit'
             for callable in [callable for callable in localServer.hooks if callable[0].lower() == hook]:
@@ -705,14 +756,28 @@ class User:
                 except Exception as ex:
                     logging.exception(ex)
 
-            self.registered = False
-            del self
             gc.collect()
             del gc.garbage[:]
 
-            #if localServer.forked:
-            #    _print('Growth after self.quit() (if any):', server=localServer)
-            #    objgraph.show_growth(limit=10)
+            if not localServer.forked:
+                logging.debug('Growth after self.quit() (if any):')
+                objgraph.show_growth(limit=20)
+            '''
+            reflist = gc.get_referrers(self)
+            if reflist:
+                logging.debug('Found these references after quit:')
+                for r in reflist:
+                    logging.debug(r)
+            else:
+                logging.debug('Excellent, no more references!')
+            '''
+            #objgraph.show_refs([self], filename='refs.png')
+
+            #for k, v in list(globals().items()):
+            #    print("{} -- {}".format(k, v))
+
+            del self.socket
+            del self
 
         except Exception as ex:
             logging.exception(ex)

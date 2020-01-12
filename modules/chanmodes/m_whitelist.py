@@ -17,7 +17,18 @@ from collections import OrderedDict
 chmode = 'w'
 mode_prefix = '^' ### This is used in SJOIN to indicate that it is a whitelist-entry.
 list_name = 'whitelist' ### Name of the list, i.e. channel.whitelist. Used in SJOIN to check if there's a duplicate entry, or to remove all entries.
-info = """Help is coming soon."""
+info = """
+Add or remove entries to your channel "whitelist",
+allowing users to automatically get a status on join based on nick!ident@host matches.
+Syntax:     +w <level>:<host>
+-
+Example:    +w 5:*!*@*.trusted.host --- will give +o to anyone joining whose host matches *!*@*.trusted.host
+Levels:     >=1     = +v
+            >=4     = +h
+            >=5     = +o
+            >= 10   = +ao
+            >= 9999 = +oq
+"""
 helpop = {"whitelist": info}
 
 @ircd.Modules.hooks.local_join()

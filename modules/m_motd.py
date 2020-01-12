@@ -1,23 +1,33 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 /motd command
 """
 
 import ircd
-import ast
-import os
-import sys
 
-from handle.functions import _print
+from handle.functions import logging
 
 @ircd.Modules.commands('motd')
 def motd(self, localServer, recv):
-    #print(recv)
     try:
-        if len(recv) == 1:
-            if type(self).__name__ == 'User':
+        if type(self).__name__ == 'Server':
+            if len(recv) == 1:
+                with open(localServer.confdir+'ircd.motd') as f:
+                    b_motd = bytes(f.read(), 'utf-8')
+                    logging.debug('Sending to remote: {}'.format(b_motd))
+                    self._send('MOTD {}'.format(b_motd))
+                    return
+            else:
+                logging.debug('Received remote motd response.')
+                logging.debug('Sending reply to: {}'.format(localServer.remote_motd_request[self]))
+                b_motd = ' '.join(recv[1:])
+                logging.debug('Bytes: {}'.format(b_motd))
+                localServer.remote_motd_request[self].sendraw(375, '{} Message of the Day'.format(self.hostname))
+                for line in eval(b_motd).decode('utf-8').split('\n'):
+                    localServer.remote_motd_request[self].sendraw(372, ':- {}'.format(line))
+                localServer.remote_motd_request[self].sendraw(376, ':End of Message of the Day.')
+
+        else:
+            if len(recv) == 1:
                 self.sendraw(375, '{} Message of the Day'.format(localServer.hostname))
                 with open(localServer.confdir+'ircd.motd') as f:
                     for line in f.read().split('\n'):
@@ -25,65 +35,20 @@ def motd(self, localServer, recv):
                     self.sendraw(376, ':End of Message of the Day.')
             else:
                 remoteserver = recv[1].lower()
-                #print('Server {} is requesting the MOTD of {}'.format(self.hostname, remoteserver))
-                server_exists = [server for server in localServer.servers if server.hostname.lower() == remoteserver]
-                if not server_exists:
-                    return
-                localServer.remote_request[self.hostname] = remoteserver
-                with open(localServer.confdir+'ircd.motd') as f:
-                    local_motd = []
-                    for line in f:
-                        local_motd.append(line)
-                self._send('MOTD {} {}'.format(localServer.hostname, local_motd))
-
-        else:
-            #localServer.remote_request = {}
-            remoteserver = recv[1].lower()
-            if hasattr(localServer, 'remote_request') and localServer.remote_request:
-                if type(self).__name__ == 'Server':
-                    #print('Server {} is requesting the MOTD of {}'.format(self.hostname, remoteserver))
-                    localServer.remote_request[self.hostname] = remoteserver
-
-                '''
-                localServer.remote_request.sendraw(375, '{} Message of the Day'.format(self.hostname))
-                lines = ' '.join(recv[1:])
-                #print('Remote lines: {}'.format(lines))
-                #lines = ast.literal_eval(lines)
-                for line in ''.join(lines).split('\n'):
-                    localServer.remote_request.sendraw(372, ':- {}'.format(line))
-                localServer.remote_request.sendraw(376, ':End of Message of the Day.')
-                localServer.remote_request = None
-                return
-                '''
-
-            server_exists = [server for server in localServer.servers if server.hostname.lower() == remoteserver]
-            if not server_exists and remoteserver != localServer.hostname:
-                return self.sendraw(402, '{} :No such server'.format(remoteserver))
-
-            if remoteserver == localServer.hostname:
-                #print('Server {} is requesting my MOTD'.format(self.hostname))
-                send_motd(localServer, self)
-                return
-            else:
-                server = server_exists[0] if server_exists[0].socket else server_exists[0].introducedBy
-            #print('Attempting to fetch MOTD from {}: {}'.format(remoteserver, server))
-            server._send('MOTD {}'.format(remoteserver))
-            #localServer.remote_request = {}
-
+                if hasattr(localServer, 'remote_motd_request') and remoteserver.lower() != localServer.hostname.lower():
+                    server_exists = [server for server in localServer.servers if server.hostname.lower() == remoteserver]
+                    if not server_exists and remoteserver != localServer.hostname:
+                        return self.sendraw(402, '{} :No such server'.format(remoteserver))
+                    if not server_exists[0].socket: ### Will fix hops later.
+                        return localServer.notice(self, '* You can only request remote MOTDs from directly linked servers.')
+                    if 'o' not in self.modes:
+                        self.flood_penalty += 50000
+                    server = server_exists[0] if server_exists[0].socket else server_exists[0].introducedBy
+                    localServer.remote_motd_request[server] = self
+                    server._send('MOTD')
 
     except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        _print(e, server=localServer)
-
-def send_motd(localServer, destination):
-    #print('Sending local MOTD to {}'.format(destination))
-    with open(localServer.confdir+'ircd.motd') as f:
-        local_motd = []
-        for line in f:
-            local_motd.append(line)
-    destination._send('MOTD {} {}'.format(localServer.hostname, local_motd))
+        logging.exception(ex)
 
 def init(self, reload=False):
-    self.remote_request = {}
+    self.remote_motd_request = {}

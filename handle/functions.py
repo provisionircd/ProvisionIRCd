@@ -1,5 +1,4 @@
 import os
-import sys
 import time
 import datetime
 import hashlib
@@ -7,6 +6,7 @@ import binascii
 import base64
 import logging
 import logging.handlers
+import json
 
 W = '\033[0m'  # white (normal)
 R = '\033[31m' # red
@@ -21,15 +21,19 @@ def initlogging(localServer):
     datefile = time.strftime('%Y%m%d')
     if not os.path.exists('logs'):
         os.mkdir('logs')
-    loghandlers = [logging.handlers.TimedRotatingFileHandler('logs/logs.txt', when='midnight')]
+    #loghandlers = [logging.handlers.TimedRotatingFileHandler('logs/log.txt', when='midnight')]
+    filename = 'logs/ircd.log'.format(datetime.datetime.today().strftime('%Y-%m-%d'))
+    loghandlers = [logging.handlers.RotatingFileHandler(filename, maxBytes=1024*1000, backupCount=9)]
     if not localServer.forked:
-        loghandlers.append(logging.StreamHandler())
-    format = '%(asctime)s %(levelname)s [%(module)s]: %(message)s'+W
+        stream = logging.StreamHandler()
+        stream.terminator = '\n'+W
+        loghandlers.append(stream)
+    format = '%(asctime)s %(levelname)s [%(module)s]: %(message)s'#+W
     logging.basicConfig(level=logging.DEBUG, format=format, datefmt='%Y/%m/%d %H:%M:%S', handlers=loghandlers)
     logging.addLevelName(logging.WARNING, Y+"%s" % logging.getLevelName(logging.WARNING))
     logging.addLevelName(logging.ERROR, R2+"%s" % logging.getLevelName(logging.ERROR))
-    logging.addLevelName(logging.INFO, W+"%s" % logging.getLevelName(logging.INFO))
-    logging.addLevelName(logging.DEBUG, W+"%s" % logging.getLevelName(logging.DEBUG))
+    logging.addLevelName(logging.INFO, "%s" % logging.getLevelName(logging.INFO))
+    logging.addLevelName(logging.DEBUG, "%s" % logging.getLevelName(logging.DEBUG))
 
 class TKL:
     def check(self, localServer, user, type):
@@ -125,7 +129,7 @@ class TKL:
                 return
             date = '{} {}'.format(datetime.datetime.fromtimestamp(float(localServer.tkl[tkltype][fullmask]['ctime'])).strftime('%a %b %d %Y'), datetime.datetime.fromtimestamp(float(localServer.tkl[tkltype][fullmask]['ctime'])).strftime('%H:%M:%S %Z'))
             date = date.strip()
-            if tkltype == 'Q' and ident != 'H':
+            if ident != 'H': # tkltype == 'Q' and
                 display_mask = fullmask.split('@')[1] if tkltype == 'Q' else fullmask
                 msg = '*** {}{}TKL {} {} removed (set by {} on {}) [{}]'.format('Expiring ' if expire else '', 'Global ' if tkltype in 'GZ' else '', tkltype, display_mask, localServer.tkl[tkltype][fullmask]['setter'], date, localServer.tkl[tkltype][fullmask]['reason'])
                 localServer.snotice('G', msg)
@@ -150,7 +154,7 @@ def match(first, second):
     if len(first) > 1 and first[0] == '*' and not second:
         return False
     if (len(first) > 1 and first[0] == '?') or (first and second and first[0] == second[0]):
-            return match(first[1:], second[1:])
+        return match(first[1:], second[1:])
     if first and first[0] == '*':
         return match(first[1:], second) or match(first, second[1:])
     return False
@@ -164,7 +168,7 @@ def _print(txt, server=None):
     write(str(txt), server)
 
 def valid_expire(s):
-    spu = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
+    spu = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800, "M": 2592000}
     if s.isdigit():
         return int(s) * 60
     if s[-1] not in spu:
@@ -270,13 +274,14 @@ def show_support(self, localServer):
     self.sendraw('005', '{} :are supported by this server'.format(' '.join(line)))
 
 def cloak(localServer, host):
+    static = ['static.kpn.net']
     cloakkey = localServer.conf['settings']['cloak-key']
     key = '{}{}'.format(host, cloakkey)
     hashhost = hashlib.sha512(bytes(key, 'utf-8'))
     hex_dig = hashhost.hexdigest()
     cloak1 = hex(binascii.crc32(bytes(hex_dig[0:32], 'utf-8')) % (1<<32))[2:]
     cloak2 = hex(binascii.crc32(bytes(hex_dig[32:64], 'utf-8')) % (1<<32))[2:]
-    if host.replace('.', '').isdigit() or '.ip-' in host:
+    if host.replace('.', '').isdigit() or '.ip-' in host or host in static:
         cloak3 = hex(binascii.crc32(bytes(hex_dig[64:96], 'utf-8')) % (1<<32))[2:]
         cloakhost = cloak1+'.'+cloak2+'.'+cloak3+'.IP'
         return cloakhost
@@ -390,3 +395,40 @@ def check_flood(localServer, target):
                 return
     except Exception as ex:
         logging.exception(ex)
+
+def save_db(localServer):
+    perm_chans = {}
+    current_perm = {}
+
+    try:
+        with open(localServer.rootdir+'/db/chans.db') as f:
+            current_perm = f.read().split('\n')[0]
+            current_perm = json.loads(current_perm)
+    except Exception as ex:
+        pass
+    for chan in [chan for chan in localServer.channels if 'P' in chan.modes]:
+        perm_chans[chan.name] = {}
+        perm_chans[chan.name]['creation'] = chan.creation
+        perm_chans[chan.name]['modes'] = chan.modes
+        perm_chans[chan.name]['bans'] = chan.bans
+        perm_chans[chan.name]['invex'] = chan.invex
+        perm_chans[chan.name]['excepts'] = chan.excepts
+        perm_chans[chan.name]['modeparams'] = localServer.chan_params[chan]
+        perm_chans[chan.name]['topic'] = [] if not chan.topic else [chan.topic, chan.topic_author, chan.topic_time]
+
+    if perm_chans and current_perm != perm_chans:
+        logging.debug('Perm channels data changed, updating file... If this message gets spammed, you probably have another instance running.')
+        with open(localServer.rootdir+'/db/chans.db', 'w+') as f:
+            json.dump(perm_chans, f)
+
+    current_tkl = {}
+    try:
+        with open(localServer.rootdir+'/db/tkl.db') as f:
+            current_tkl = f.read().split('\n')[0]
+            current_tkl = json.loads(current_tkl)
+    except:
+        pass
+    if localServer.tkl and current_tkl != localServer.tkl:
+        logging.debug('TKL data changed, updating file... If this message gets spammed, you probably have another instance running.')
+        with open(localServer.rootdir+'/db/tkl.db', 'w+') as f:
+            json.dump(localServer.tkl, f)

@@ -34,6 +34,7 @@ from handle.handleLink import Link as link
 import handle.handleModules as Modules
 from collections import OrderedDict
 import select
+import objgraph
 
 path = os.path.abspath(__file__)
 dir_path = os.path.dirname(path)
@@ -70,9 +71,6 @@ class Channel:
             self.topic_author = ""
             self.topic_time = 0
             self.creation = int(time.time())
-            self.limit = 0
-            self.key = None
-            self.redirect = None
             self.invites = {}
             self.bans = OrderedDict({})
             self.excepts = OrderedDict({})
@@ -111,6 +109,7 @@ class Server:
                 self.modules_dir = dir_path+'/modules/'
                 self.conffile = conffile
                 self.commands = []
+                self.api = []
                 self.modules = {}
                 self.events = []
                 self.hooks = []
@@ -121,7 +120,7 @@ class Server:
                 self.sync_queue = {}
                 self.creationtime = int(time.time())
 
-                self.versionnumber = '1.3'
+                self.versionnumber = '1.4'
                 self.version = 'ProvisionIRCd-{}'.format(self.versionnumber)
                 self.hostinfo = 'Python {}'.format(sys.version.split('\n')[0].strip())
 
@@ -133,7 +132,6 @@ class Server:
                     self.fd_to_socket = {}
                 ### Polling does not work.
 
-                self.caps = ['account-notify', 'away-notify', 'server-time', 'chghost', 'echo-message', 'tls', 'userhost-in-names', 'extended-join']
                 self.socket = None
                 self.introducedBy = None
                 self.uplink = None
@@ -250,6 +248,7 @@ class Server:
                 self.maxlist['e'] = 500
                 self.maxlist['I'] = 500
                 self.maxlist_string = 'b:{},e:{},I:{}'.format(self.maxlist['b'], self.maxlist['e'], self.maxlist['I'])
+                self.servers = []
 
                 validconf = handle.handleConf.checkConf(self, None, self.confdir, self.conffile)
 
@@ -258,9 +257,6 @@ class Server:
                     return
 
                 self.running = 1
-                self.hostname = self.conf['me']['server']
-                self.name = self.conf['me']['name']
-                self.sid = self.conf['me']['sid']
 
             except Exception as ex:
                 logging.exception(ex)
@@ -269,7 +265,6 @@ class Server:
 
             self.totalcons = 0
             self.gusers = []
-            self.servers = []
 
             self.linkrequester = {}
             self.pendingLinks = []
@@ -309,6 +304,10 @@ class Server:
             self.origin = origin
             self.localServer.servers.append(self)
 
+    def __del__(self):
+        #pass
+        logging.debug('Server {} closed'.format(self))
+
     def fileno(self):
         return self.socket.fileno()
 
@@ -331,7 +330,7 @@ class Server:
                 dest._send(data)
                 return
 
-            for server in [server for server in localServer.servers if server.socket and server not in skip]:
+            for server in [server for server in localServer.servers if server and server.socket and server not in skip]:
                 if not server.eos:
                     if server not in localServer.sync_queue:
                         localServer.sync_queue[server] = []
@@ -382,8 +381,6 @@ class Server:
                 if not recv:
                     self.recvbuffer = ''
                     continue
-                #if self.eos:
-                #    self.ping = time.time()
                 raw = ' '.join(recv)
                 command = recv[0].lower()
                 prefix = command[:1]
@@ -470,8 +467,8 @@ class Server:
                         try:
                             callable[1](self, localServer, recvNoStrip)
                         except Exception as ex:
-                            _print('Exception in module {}: {}'.format(callable[6], ex), server=localServer)
-                            _print('Should we disconnect the server because of this issue?', server=localServer)
+                            logging.exception(ex)
+                            logging.error('Should we disconnect the server because of this issue?')
                     continue
 
                 else:
@@ -531,6 +528,12 @@ class Server:
             if self.hostname in set(localServer.pendingLinks):
                 localServer.pendingLinks.remove(self.hostname)
 
+            if self in localServer.sync_queue:
+                del localServer.sync_queue[self]
+
+            if self.socket and reason:
+                self._send('ERROR :Closing link: [{}] ({})'.format(self.socket.getpeername()[0] if not self.hostname else self.hostname, reason))
+
             while self.sendbuffer:
                 logging.info('Server {} has sendbuffer remaining: {}'.format(self, self.sendbuffer.rstrip()))
                 try:
@@ -560,32 +563,37 @@ class Server:
                     localServer.pollerObject.unregister(self.socket)
                 try:
                     self.socket.shutdown(socket.SHUT_WR)
-                    self.socket.close()
                 except:
-                    self.socket.close()
+                    pass
+                self.socket.close()
 
-            del self
             gc.collect()
             del gc.garbage[:]
+
+            if not localServer.forked:
+                logging.debug('[SERVER] Growth after self.quit() (if any):')
+                objgraph.show_growth(limit=20)
+
+            del self.socket
+            del self
 
         except Exception as ex:
             logging.exception(ex)
 
     def run(self):
+        pid = str(os.getpid())
+        try:
+            with open(pidfile, 'w') as file:
+                file.write(pid)
+        except Exception as ex:
+            print('Could not write pidfile. Make sure you have write access: {}'.format(ex))
+            sys.exit()
+            return
         if self.forked:
-            pid = os.fork()
-            if pid:
-                pid = str(pid)
-                try:
-                    print('PID [{}] forked to the background'.format(pid))
-                    with open(pidfile, 'w') as file:
-                        file.write(pid)
-                except Exception as ex:
-                    print('Could not write pidfile. Make sure you have write access: {}'.format(ex))
-                    sys.exit()
-                    return
-                sys.exit()
-                atexit.register(exit_handler)
+            os.fork()
+            print('PID [{}] forked to the background'.format(pid))
+            sys.exit()
+        atexit.register(exit_handler)
 
         from handle.handleSockets import data_handler
         self.datahandler = data_handler(self)
@@ -621,7 +629,7 @@ class Server:
         localServer = self.localServer
         try:
             if sno:
-                users = list(filter(lambda u: 'o' in u.modes and sno in u.snomasks, localServer.users))
+                users = list(filter(lambda u: 'o' in u.modes and 's' in u.modes and sno in u.snomasks, localServer.users))
             for user in users:
                 try:
                     if sno in localServer.conf['opers'][user.operaccount]['ignore']['snomask']:
@@ -673,36 +681,63 @@ class Server:
             print('Another instance running?')
             sys.exit()
 
+import signal
+
+
+
+
+def receiveSignal(signalNumber, frame):
+    print('Received:', signalNumber)
+    return
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='IRCd.')
     parser.add_argument('-c', '--conf', help='Conf file.')
     parser.add_argument('--nofork', help='No fork.',action='store_true')
-    parser.add_argument('--mkpasswd', help='Generate bcrypt password')
+    parser.add_argument('--rehash', help='Rehash current server.',action='store_true')
+    parser.add_argument('--dorehash', help='Rehash current server.',action='store_true')
+    try:
+        mkp = 1
+        import bcrypt
+        parser.add_argument('--mkpasswd', help='Generate bcrypt password')
+    except ImportError:
+        mkp = 0
     args = parser.parse_args()
+    if not mkp:
+        args.mkpasswd = None
+    if args.mkpasswd:
+        hashed = bcrypt.hashpw(args.mkpasswd.encode('utf-8'),bcrypt.gensalt(10)).decode('utf-8')
+        print('Your salted password: {}'.format(hashed))
+        sys.exit()
+    signal.signal(signal.SIGALRM, receiveSignal)
+    if args.rehash:
+        if os.path.isfile(pidfile):
+            print('Process already running.')
+            with open(pidfile) as p:
+                pid = p.read()
+                print('Pid: {}'.format(pid))
+
+
+        sys.exit()
+
+    if args.dorehash:
+        print('REHASH?')
+
     global conffile
     if not args.conf:
         conffile = 'ircd.conf'
     else:
         conffile = args.conf
     fork = not args.nofork
+    version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
+    if int(version) < 36:
+        print('Python version 3.6 or higher is recommended due to better memory management.')
+        time.sleep(1)
     try:
-        import bcrypt
-    except ImportError:
-        print("Could not import required 'bcrypt' module. You can install it with pip")
-        sys.exit()
-    if args.mkpasswd:
-        hashed = bcrypt.hashpw(args.mkpasswd.encode('utf-8'),bcrypt.gensalt(15)).decode('utf-8')
-        print('Your salted password: {}'.format(hashed))
-    else:
-        version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
-        if int(version) < 36:
-            print('Python version 3.6 or higher is recommended due to better memory management.')
-            time.sleep(1)
-        try:
-            S = Server(conffile=conffile, forked=fork)
-            S.run()
-        except Exception as ex:
-            exc_type, exc_obj, exc_tb = sys.exc_info()
-            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-            print(e)
+        S = Server(conffile=conffile, forked=fork)
+        S.run()
+    except Exception as ex:
+        exc_type, exc_obj, exc_tb = sys.exc_info()
+        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
+        print(e)

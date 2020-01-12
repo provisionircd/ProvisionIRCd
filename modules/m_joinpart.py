@@ -9,11 +9,9 @@ Channel = ircd.Channel
 from handle.functions import match, logging
 import time
 import re
-import os
-import sys
 
 chantypes = '#+&'
-chanlen = 33
+chanlen = 36
 
 def init(localServer, reload=False):
     ### Other modules also require this information, like /privmsg and /notice
@@ -48,9 +46,9 @@ def checkMatch(self, localServer, type, channel):
 @ircd.Modules.support('CHANNELLEN='+str(chanlen))
 @ircd.Modules.commands('join')
 def join(self, localServer, recv, override=False, skipmod=None, sourceServer=None):
+    """Syntax: JOIN <channel> [key]
+Joins a given channel with optional [key]."""
     try:
-        """Syntax: /JOIN <channel> [key]
-        Joins a given channel with optional [key]."""
         hook = 'local_join'
         if type(self).__name__ == 'Server':
             if not sourceServer:
@@ -72,17 +70,17 @@ def join(self, localServer, recv, override=False, skipmod=None, sourceServer=Non
 
         pc = 0
         key = None
-        for chan in recv[1].split(','):
+        for chan in recv[1].split(',')[:12]:
             if int(time.time()) - self.signon > 5:
                 self.flood_penalty += 10000
             regex = re.compile('\x1d|\x1f|\x02|\x12|\x0f|\x16|\x03(?:\d{1,2}(?:,\d{1,2})?)?', re.UNICODE)
             chan = regex.sub('', chan).strip()
-            channel = list(filter(lambda c: c.name.lower() == chan.lower(), localServer.channels))
+            channel = [c for c in localServer.channels if c.name.lower() == chan.lower()]
             if channel and self in channel[0].users or not chan:
                 continue
 
-            if len(chan) == 1 and not override:
-                continue
+            #if len(chan) == 1 and not override:
+            #    continue
 
             continueLoop = False
             valid = "abcdefghijklmnopqrstuvwxyz0123456789`~!@#$%^&*()-=_+[]{}\\|;':\"./<>?"
@@ -102,7 +100,7 @@ def join(self, localServer, recv, override=False, skipmod=None, sourceServer=Non
                 except:
                     pass
 
-            if chan[0] not in chantypes and recv[0] != '0' and (sourceServer == localServer and not channel):
+            if chan[0] not in chantypes and recv[0] != '0' and (sourceServer == localServer and not channel) or chan in chantypes:
                 self.sendraw(403, '{} :Invalid channel name'.format(chan))
                 continue
 
@@ -115,25 +113,41 @@ def join(self, localServer, recv, override=False, skipmod=None, sourceServer=Non
                     localServer.notice(self, '*** Channel creation is limited to IRC operators.')
                     continue
                 new = Channel(chan)
+                logging.debug('New channel instance created: {}'.format(new))
                 localServer.channels.append(new)
                 channel = [new]
+                for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'channel_create']:
+                    try:
+                        callable[2](self, localServer, channel[0])
+                    except Exception as ex:
+                        logging.error('Exception in {}:'.format(callable))
+                        logging.exception(ex)
+
             channel = channel[0]
 
             invite_override = False
             if self in channel.invites:
                 invite_override = channel.invites[self]['override']
 
-            success = True
-            overrides = []
-            for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_'+hook and callable[3] != skipmod]:
-                try:
-                    success, overrides = callable[2](self, localServer, channel)
-                    if not success:
-                        break
-                except Exception as ex:
-                    logging.exception(ex)
-            if not success:
-                continue
+            ### Check for module hooks.
+            if type(self).__name__ == 'User':
+                success = True
+                overrides = []
+                kwargs = {}
+                if override:
+                    kwargs['override'] = True
+                for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_'+hook and callable[3] != skipmod]:
+                    try:
+                        success, overrides = callable[2](self, localServer, channel, **kwargs)
+                        if not success:
+                            logging.debug('Join denied for {} {} by module {}'.format(self, channel, callable))
+                            break
+                    except Exception as ex:
+                        logging.error('Exception in {}:'.format(callable))
+                        logging.exception(ex)
+                if not success:
+                    continue
+
             if not override:
                 if 'O' in channel.modes and 'o' not in self.modes:
                     self.sendraw(520, '{} :Cannot join channel (IRCops only)'.format(channel.name))
@@ -141,17 +155,31 @@ def join(self, localServer, recv, override=False, skipmod=None, sourceServer=Non
 
                 if 'R' in channel.modes and 'r' not in self.modes and not invite_override:
                     self.sendraw(477, '{} :You need a registered nick to join that channel'.format(channel.name))
+                    if channel.redirect:
+                        self.handle('JOIN', channel.redirect)
+                        self.sendraw(471, '{} :Channel is +R so you are redirected to {}'.format(channel.name, channel.redirect))
+                        continue
                     continue
 
                 if 'z' in channel.modes and 'z' not in self.modes and not invite_override:
                     self.sendraw(489, '{} :Cannot join channel (not using a secure connection)'.format(channel.name))
+                    if channel.redirect:
+                        self.handle('JOIN', channel.redirect)
+                        self.sendraw(471, '{} :Channel is +z so you are redirected to {}'.format(channel.name, channel.redirect))
+                        continue
                     continue
 
                 if checkMatch(self, localServer, 'b', channel) and not checkMatch(self, localServer, 'e', channel) and not invite_override and 'b' not in overrides:
                     self.sendraw(474, '{} :Cannot join channel (+b)'.format(channel.name))
+                    if channel.redirect:
+                        self.handle('JOIN', channel.redirect)
+                        self.sendraw(471, '{} :You arae banned so you are redirected to {}'.format(channel.name, channel.redirect))
+                        continue
                     continue
 
-                if channel.limit != 0 and len(channel.users) >= channel.limit and not invite_override:
+                #if channel.limit != 0 and len(channel.users) >= channel.limit and not invite_override:
+                #print(channel.modes)
+                if 'l' in channel.modes and len(channel.users) >= int(localServer.chan_params[channel]['l']) and not invite_override:
                     if channel.redirect:
                         self.handle('JOIN', channel.redirect)
                         self.sendraw(471, '{} :Channel is full so you are redirected to {}'.format(channel.name, channel.redirect))
@@ -160,7 +188,8 @@ def join(self, localServer, recv, override=False, skipmod=None, sourceServer=Non
                     self.sendraw(471, '{} :Cannot join channel (+l)'.format(channel.name))
                     continue
 
-                if channel.key and key != channel.key and not invite_override:
+                #if channel.key and key != channel.key and not invite_override:
+                if 'k' in channel.modes and key != localServer.chan_params[channel]['k'] and not invite_override:
                     ### Check key based on modes that require params.
                     self.sendraw(475, '{} :Cannot join channel (+k)'.format(channel.name))
                     continue
@@ -169,7 +198,8 @@ def join(self, localServer, recv, override=False, skipmod=None, sourceServer=Non
                     self.sendraw(473, '{} :Cannot join channel (+i)'.format(channel.name))
                     continue
 
-            if not channel.users:
+            logging.info('Joining {} in {}'.format(self, channel))
+            if not channel.users and channel not in localServer.chan_params:
                 localServer.chan_params[channel] = {}
             if not channel.users and (self.server.eos or self.server == localServer) and channel.name[0] != '+':
                 channel.usermodes[self] = 'o'
@@ -197,6 +227,7 @@ def join(self, localServer, recv, override=False, skipmod=None, sourceServer=Non
                         logging.debug('{} returned {}'.format(callable, visible))
                         break
 
+            #print('Broadcasting join to: {}'.format(broadcast))
             for user in broadcast:
                 data = ':{}!{}@{} JOIN {}{}'.format(self.nickname, self.ident, self.cloakhost, channel.name, ' {} :{}'.format(self.svid, self.realname) if 'extended-join' in user.caplist else '')
                 user._send(data)
@@ -228,6 +259,8 @@ def join(self, localServer, recv, override=False, skipmod=None, sourceServer=Non
 @ircd.Modules.params(1)
 @ircd.Modules.commands('part')
 def part(self, localServer, recv, reason=None):
+    """Syntax: PART <channel> [reason]
+Parts the given channel with optional [reason]."""
     try:
         if type(self).__name__ == 'Server':
             hook = 'remote_part'

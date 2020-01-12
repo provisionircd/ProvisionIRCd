@@ -9,6 +9,7 @@ import importlib
 import sys
 import time
 import re
+import json
 
 from handle.functions import valid_expire, match, cloak, logging
 from collections import OrderedDict
@@ -180,31 +181,30 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         continue
                     if int(param_mode) <= 0:
                         continue
-                    if channel.limit == int(param_mode):
+                    if m in localServer.chan_params[channel] and int(localServer.chan_params[channel][m]) == int(param_mode):
                         continue
                     else:
                         if m not in channel.modes:
                             channel.modes += m
                         modebuf.append(m)
                         parambuf.append(param_mode)
-                        channel.limit = int(param_mode)
+                        #channel.limit = int(param_mode)
                         #continue
 
-                elif m == 'k' and not channel.key:
-                    if channel.key == param_mode:
-                        continue
+                elif m == 'k' and m not in localServer.chan_params[channel]:
                     if m not in channel.modes:
                         channel.modes += m
                     modebuf.append(m)
                     parambuf.append(param_mode)
-                    channel.key = param_mode
+                    #channel.key = param_mode
                     #continue
 
-                elif m == 'L' and channel.limit:
+                elif m == 'L': # and channel.limit:
                     param_mode = param_mode.split(',')[0]
                     if param_mode[0] not in localServer.chantypes:
                         continue
-                    if channel.redirect == param_mode or param_mode.lower() == channel.name.lower():
+                    redirect = None if 'L' not in channel.modes else localServer.chan_params[channel]['L']
+                    if redirect == param_mode or param_mode.lower() == channel.name.lower():
                         continue
                     chan_exists = [chan for chan in localServer.channels if chan.name.lower() == param_mode.lower()]
                     if not chan_exists:
@@ -213,13 +213,16 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                     if self.chlevel(chan_exists[0]) < 3 and not self.ocheck('o', 'override'):
                         self.sendraw(690, ':You must be opped on target channel {} to set it as redirect.'.format(chan_exists[0].name))
                         continue
+                    if 'L' in chan_exists[0].modes and localServer.chan_params[chan_exists[0]]['L'].lower() == channel.name.lower():
+                        self.sendraw(690, ':Recursive redirect is not allowed.')
+                        continue
                     elif self.chlevel(channel) < modeLevel[m]:
                         oper_override = True
                     if m not in channel.modes:
                         channel.modes += m
                     modebuf.append(m)
                     parambuf.append(param_mode)
-                    channel.redirect = param_mode
+                    #channel.redirect = param_mode
                     #continue
 
                 elif m in 'beI':
@@ -304,25 +307,36 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                 ###
                 if m in channel.modes:
                     if m == 'l':
-                        channel.limit = 0
+                        #channel.limit = 0
                         if 'L' in channel.modes:
                             channel.modes = channel.modes.replace('L', '')
                             modebuf.append('L')
-                            parambuf.append(channel.redirect)
-                            channel.redirect = None
+                            parambuf.append(localServer.chan_params[channel]['L'])
+                            #channel.redirect = None
 
                     elif m == 'k':
-                        if param_mode != channel.key:
+                        if param_mode != localServer.chan_params[channel]['k']:
                             continue
-                        parambuf.append(channel.key)
-                        channel.key = None
+                        parambuf.append(localServer.chan_params[channel][m])
+                        #channel.key = None
 
-                    elif m  == 'L' and channel.redirect:
-                        parambuf.append(channel.redirect)
-                        channel.redirect = None
+                    elif m  == 'L':
+                        parambuf.append(localServer.chan_params[channel]['L'])
+                        #channel.redirect = None
 
-                    elif m == 'P' and len(channel.users) == 0:
-                        localServer.channels.remove(channel)
+                    elif m == 'P':
+                        if len(channel.users) == 0:
+                            localServer.channels.remove(channel)
+
+                        try:
+                            with open(localServer.rootdir+'/db/chans.db') as f:
+                                current_perm = f.read().split('\n')[0]
+                                current_perm = json.loads(current_perm)
+                                del current_perm[channel.name]
+                            with open(localServer.rootdir+'/db/chans.db', 'w+') as f:
+                                json.dump(current_perm, f)
+                        except Exception as ex:
+                            logging.debug(ex)
 
                     if m in channel.modes:
                         #logging.debug('Mode {} is a core mode?'.format(m))
@@ -487,6 +501,12 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
 @ircd.Modules.support('MODES='+str(maxmodes))
 @ircd.Modules.commands('mode')
 def mode(self, localServer, recv, override=False, handleParams=None):
+    """Change channel or user modes.
+For an overview of available modes, type /HELPOP CHMODES or /HELPOP UMODES
+-
+Syntax:  MODE <channel/user> <modes> [params]
+Example: MODE #Home +m
+         MODE Alice +c"""
     global oper_override
     oper_override = False
     try:
@@ -511,53 +531,25 @@ def mode(self, localServer, recv, override=False, handleParams=None):
             sourceUser = self
 
         if len(recv) == 2 and recv[1][:1] in localServer.chantypes:
-            if recv[1][0] == '+':
-                return
-            channel = list(filter(lambda c: c.name.lower() == recv[1].lower(), localServer.channels))
-            if not channel:
-                return self.sendraw(401, '{} :No such channel'.format(recv[1]))
-            channel = channel[0]
-            if 's' in channel.modes and self not in channel.users and not self.ocheck('o', 'override'):
-                return
-            params = []
-            show_params = []
-            for m in channel.modes:
-                if m in localServer.chan_params[channel]:
-                    show_params.append(localServer.chan_params[channel][m])
-                '''
-                if m == 'l':
-                    params.append(str(channel.limit))
-                elif m == 'L':
-                    params.append(str(channel.redirect))
-                elif m == 'f':
-                    error = False
-                    fparams = '['
-                    if len(channel.chmodef) == 0:
-                        error = True
-                    for t in channel.chmodef:
-                        fstring = '{}:{}:{}'.format(channel.chmodef[t]['amount'], t, channel.chmodef[t]['time'])
-                        #print('fstring set: {}'.format(fstring))
-                        if channel.chmodef[t]['action']:
-                            try:
-                                fstring += ':{}:{}'.format(channel.chmodef[t]['action'], channel.chmodef[t]['duration'])
-                            except KeyError:
-                                ### Entry has no 'duration'.
-                                fparams += fstring+','
-                                continue
-                            except Exception as ex:
-                                error = True
-                                #print('t: {} -- {}'.format(t, ex))
-                        fparams += fstring+','
-                    if not error:
-                        fparams = fparams[:-1]
-                        fparams += ']'
-                        params.append(fparams)
-                elif m == 'k':
-                    params.append(channel.key)
-                '''
-            #self.sendraw(324, '{} +{} {}'.format(channel.name, channel.modes, ' '.join(params) if params and (self in channel.users or 'o' in self.modes) else ''))
-            self.sendraw(324, '{} +{} {}'.format(channel.name, channel.modes, ' '.join(show_params) if show_params and (self in channel.users or 'o' in self.modes) else ''))
-            self.sendraw(329, '{} {}'.format(channel.name, channel.creation))
+            try:
+                if recv[1][0] == '+':
+                    return
+                channel = list(filter(lambda c: c.name.lower() == recv[1].lower(), localServer.channels))
+                if not channel:
+                    return self.sendraw(401, '{} :No such channel'.format(recv[1]))
+                channel = channel[0]
+                if 's' in channel.modes and self not in channel.users and not self.ocheck('o', 'override'):
+                    return
+                params = []
+                show_params = []
+                for m in channel.modes:
+                    if channel in localServer.chan_params and m in localServer.chan_params[channel]:
+                        show_params.append(localServer.chan_params[channel][m])
+                #self.sendraw(324, '{} +{} {}'.format(channel.name, channel.modes, ' '.join(params) if params and (self in channel.users or 'o' in self.modes) else ''))
+                self.sendraw(324, '{} +{} {}'.format(channel.name, channel.modes, ' '.join(show_params) if show_params and (self in channel.users or 'o' in self.modes) else ''))
+                self.sendraw(329, '{} {}'.format(channel.name, channel.creation))
+            except Exception as ex:
+                logging.exception(ex)
             return
 
         elif recv[1][0] not in localServer.chantypes:
@@ -699,6 +691,16 @@ def chgumode(self, localServer, recv, override, sourceServer=None, sourceUser=No
                                     target.snomasks += s
                                     continue
 
+                    elif m == 'o':
+                        updated = []
+                        for user in self.localServer.users:
+                            for user in [user for user in self.localServer.users if 'operwatch' in user.caplist and user not in updated and user.socket]:
+                                common_chan = list(filter(lambda c: user in c.users and self in c.users, self.localServer.channels))
+                                if not common_chan:
+                                    continue
+                                user._send(':{} UMODE {}{}'.format(self.fullmask(), action, m))
+                                updated.append(user)
+
                     if m not in target.modes:
                         if m in 'sqHSW' and (not hasattr(target, 'opermodes') or m not in target.opermodes):
                             if not hasattr(target, 'opermodes'):
@@ -755,6 +757,15 @@ def chgumode(self, localServer, recv, override, sourceServer=None, sourceUser=No
 
                         target.opermodes = ''
                         self.operaccount = None
+
+                        updated = []
+                        for user in self.localServer.users:
+                            for user in [user for user in self.localServer.users if 'operwatch' in user.caplist and user not in updated and user.socket]:
+                                common_chan = list(filter(lambda c: user in c.users and self in c.users, self.localServer.channels))
+                                if not common_chan:
+                                    continue
+                                user._send(':{} UMODE {}{}'.format(self.fullmask(), action, m))
+                                updated.append(user)
 
                     if m not in modes:
                         modes.append(m)

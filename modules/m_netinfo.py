@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 /netinfo command (server)
 """
@@ -8,8 +5,6 @@
 import ircd
 
 import time
-import os
-import sys
 import hashlib
 import socket
 

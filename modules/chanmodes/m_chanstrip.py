@@ -1,14 +1,9 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 provides chmode +S (strip messages)
 """
 
 import ircd
 import re
-import os
-import sys
 
 chmode = 'S'
 
@@ -16,8 +11,7 @@ chmode = 'S'
 @ircd.Modules.channel_modes(chmode, 3, 2, 'Strip colors from messages') ### ('mode', type, level, 'Mode description')
 @ircd.Modules.hooks.pre_chanmsg()
 def stripmsg_S(self, localServer, channel, msg):
-    if chmode not in channel.modes:
+    if chmode in channel.modes:
+        regex = re.compile("\x1d|\x1f|\x02|\x12|\x0f|\x16|\x03(?:\d{1,2}(?:,\d{1,2})?)?", re.UNICODE)
+        msg = regex.sub('', msg)
         return msg
-    regex = re.compile("\x1d|\x1f|\x02|\x12|\x0f|\x16|\x03(?:\d{1,2}(?:,\d{1,2})?)?", re.UNICODE)
-    msg = regex.sub('', msg)
-    return msg

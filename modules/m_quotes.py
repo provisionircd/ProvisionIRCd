@@ -118,7 +118,7 @@ Error: Keyboard not attached. Press F1 to continue.
 "He has become One with Himself!" "He's passed out!" "That too." - B5
 For a funny quote, call back later.
 Famous last words: 'You saw a WHAT around the corner?!'
-I like work ... I can sit and watch it for hours.
+I like work... I can sit and watch it for hours.
 Copywight 1994 Elmer Fudd. All wights wesewved.
 Cannot find REALITY.SYS. Universe halted.
 BUFFERS=20 FILES=15 2nd down, 4th quarter, 5 yards to go!

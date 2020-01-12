@@ -7,13 +7,19 @@ import collections
 import time
 import ssl
 import gc
+import ircd
 gc.enable()
 
+
+bc = 0
 try:
     import bcrypt
+    bc = 1
 except ImportError:
-    print("Could not import 'bcrypt' module. You can install it with pip")
-    sys.exit()
+    #print("Could not import 'bcrypt' module. You can install it with pip")
+    #sys.exit()
+    pass
+print('Bcrypt support: {}'.format(bc))
 
 import handle.handleModules as Modules
 from handle.functions import _print, logging
@@ -111,6 +117,10 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
                 conferr('\'me::sid\' must be a 3 length number')
             if isinstance(tempconf['me']['sid'], int):
                 tempconf['me']['sid'] = str(tempconf['me']['sid'])
+
+        localServer.hostname = tempconf['me']['server']
+        localServer.name = tempconf['me']['name']
+        localServer.sid = tempconf['me']['sid']
 
         if 'admin' not in tempconf:
             conferr('\'admin\' block not found!')
@@ -215,7 +225,7 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
                 try:
                     with open(confdir+tempconf['dnsbl']['iplist'], 'r') as f:
                         localServer.bannedList = f.read().splitlines()
-                        _print('Added {} entries to bannedList: {}'.format(len(localServer.bannedList), localServer.bannedList), server=localServer)
+                        logging.debug('Added {} entries to bannedList: {}'.format(len(localServer.bannedList), localServer.bannedList))
                 except Exception as ex:
                     pass
 
@@ -250,9 +260,7 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
                                 conferr('\'list\' containing DNSBL\'s missing')
 
                 except Exception as ex:
-                    exc_type, exc_obj, exc_tb = sys.exc_info()
-                    fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-                    e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
+                    logging.exception(ex)
                     conferr(ex, err_conf=include)
         if 'opers' in tempconf:
             check_opers(tempconf, err_conf=oper_conf)
@@ -265,6 +273,12 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
                     localServer.excepts[type] = []
                 for entry in tempconf['except'][type]:
                     localServer.excepts[type].append(entry)
+
+        localServer.deny = {}
+        if 'deny' in tempconf:
+            for entry in tempconf['deny']:
+                localServer.deny[entry] = tempconf['deny'][entry]
+                logging.debug('Added deny for {}: {}'.format(entry, localServer.deny))
 
         ### Checking optional modules.
         if 'modules' not in tempconf:
@@ -386,6 +400,70 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
             localServer.broadcast([user], 'NOTICE {} :*** Configuration reloaded without any problems.'.format(user.nickname))
 
         del j, t, tempconf, tempmods
+
+        ### Load +P channels from db/chans.db with their modes/settings.
+        if os.path.exists(localServer.rootdir+'/db/chans.db'):
+            perm_data = {}
+            try:
+                with open(localServer.rootdir+'/db/chans.db') as f:
+                    perm_data = f.read().split('\n')[0]
+                    perm_data = json.loads(perm_data)
+                    ### Restoring permanent channels.
+                    for chan in [chan for chan in perm_data if chan.lower() not in [c.name.lower() for c in localServer.channels]]:
+                        c = ircd.Channel(chan)
+                        localServer.channels.append(c)
+                        localServer.chan_params[c] = {}
+                        for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'channel_create']:
+                            try:
+                                callable[2](localServer, localServer, c)
+                            except Exception as ex:
+                                logging.exception(ex)
+                        '''
+                        for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_local_join']:
+                            try:
+                                success, overrides = callable[2](localServer, localServer, c)
+                            except Exception as ex:
+                                logging.exception(ex)
+                        for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'local_join']:
+                            try:
+                                callable[2](localServer, localServer, c)
+                            except Exception as ex:
+                                logging.exception(ex)
+                        '''
+                        if 'creation' in perm_data[chan]:
+                            c.creation = perm_data[chan]['creation']
+                        params = []
+                        for m in [m for m in perm_data[chan]['modes'] if m in perm_data[chan]['modeparams']]:
+                            params.append(perm_data[chan]['modeparams'][m])
+                        #params = ' '.join([perm_data[chan]['modeparams'][key] for key in perm_data[chan]['modeparams']])
+                        modestring = '+{} {}'.format(perm_data[chan]['modes'], ' '.join(params))
+                        logging.debug('Sending: {}'.format(modestring))
+                        localServer.handle('MODE', c.name+' '+modestring)
+                        logging.debug('Sent: {}'.format(modestring))
+                        c.bans = perm_data[chan]['bans']
+                        c.excepts = perm_data[chan]['excepts']
+                        c.invex = perm_data[chan]['invex']
+                        if perm_data[chan]['topic']:
+                            c.topic = perm_data[chan]['topic'][0]
+                            c.topic_author = perm_data[chan]['topic'][1]
+                            c.topic_time = perm_data[chan]['topic'][2]
+                        logging.debug('Restored: {}'.format(c))
+                        logging.debug('Modes: {}'.format(c.modes))
+                        logging.debug('Params: {}'.format(localServer.chan_params[c]))
+            except Exception as ex:
+                logging.debug(ex)
+
+        ### Restore TKL.
+        if os.path.exists(localServer.rootdir+'/db/tkl.db') and not localServer.tkl:
+            try:
+                with open(localServer.rootdir+'/db/tkl.db') as f:
+                    tkl_data = f.read().split('\n')[0]
+                    tkl_data = json.loads(tkl_data)
+                    localServer.tkl = tkl_data
+                    logging.debug('Restored TKL: {}'.format(localServer.tkl))
+            except Exception as ex:
+                logging.exception(ex)
+
         return 1
     gc.collect()
     return 1
@@ -410,11 +488,16 @@ def check_opers(tempconf, err_conf):
         if operclass not in tempconf['operclass']:
             conferr('operclass \'{}\' not found'.format(operclass), err_conf=err_conf)
 
-        operpass = tempconf['opers'][oper]['password'].encode('utf-8')
-        try:
-            bcrypt.checkpw(b'test', operpass)
-        except ValueError:
-            conferr('Invalid salt for oper {} password. Make sure you use bcrypt. You can get one with /mkpasswd on IRC or use the --mkpasswd argument.'.format(oper))
+        #operpass = tempconf['opers'][oper]['password'].encode('utf-8')
+        if tempconf['opers'][oper]['password'].startswith('$2b$') and len(tempconf['opers'][oper]['password']) > 58:
+            if not bc:
+                ### detected bcrypt pass.
+                conferr('Oper block {} has a bcrypt password but the bcrypt package is not installed. Either install it with pip or use a plaintext password.'.format(oper))
+
+        #try:
+        #    bcrypt.checkpw(b'test', operpass)
+        #except ValueError:
+        #    conferr('Invalid salt for oper {} password. Make sure you use bcrypt. You can get one with /mkpasswd on IRC or use the --mkpasswd argument.'.format(oper))
 
 def check_links(tempconf, mainconf, err_conf):
     if 'link' not in tempconf:
