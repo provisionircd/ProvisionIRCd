@@ -7,6 +7,9 @@ import ircd
 @ircd.Modules.params(1)
 @ircd.Modules.commands('cap')
 def cap(self, localServer, recv):
+    if type(self).__name__ == 'Server':
+        return
+
     if recv[1].lower() in ['ls', 'list']:
         self.sends_cap = True
         caps = []

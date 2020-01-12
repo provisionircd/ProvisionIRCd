@@ -23,11 +23,13 @@ Syntax: /NICK <newnick>"""
             sourceServer = self
             override = True
             _self = self
-            self = list(filter(lambda u: u.uid == recv[0][1:], localServer.users))
+            # If the first param is not a UID, it means some new user is trying to connect.
+            # Closing connection.
+            self = [u for u in localServer.users if u.uid == recv[0][1:]]
             if not self:
-                _self.quit('This port is for servers only', error=True)
+                _self.quit('This port is for servers only')
                 return
-            ### Cut the recv to match original syntax. (there's now an extra :UID at the beginning.
+
             self = self[0]
             recv = recv[1:]
             hook = 'remote_nickchange'

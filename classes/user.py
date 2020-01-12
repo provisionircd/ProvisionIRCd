@@ -275,7 +275,7 @@ class User:
 
     def __del__(self):
         #pass
-        logging.debug('User {} closed'.format(self, server=self.localServer))
+        logging.debug('User {} closed'.format(self))
         #objgraph.show_most_common_types()
         '''
         reflist = gc.get_referrers(self)

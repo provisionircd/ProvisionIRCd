@@ -9,11 +9,8 @@ import ircd
 def user(self, localServer, recv):
     """Used to register your connection to the server."""
     if type(self).__name__ == 'Server':
-        _self = self
-        self = list(filter(lambda u: u.uid == recv[0][1:], localServer.users))
-        if not self:
-            _self.quit('This port is for servers only', error=True)
-            return
+        # Command USER is not being used by any server. Assume normal user.
+        return self.quit('This port is for servers only')
 
     if self.ident:
         return self.sendraw(462, ':You may not reregister')

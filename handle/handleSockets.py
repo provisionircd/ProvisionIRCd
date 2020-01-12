@@ -127,6 +127,7 @@ def sock_accept(localServer, s):
             is_ssl = is_sslport(localServer, port)
 
             if is_ssl and not localServer.pre_wrap:
+                # Uncomment handshake shit if isssues.
                 conn = ssl.wrap_socket(conn,
                                         server_side=True,
                                         certfile=localServer.server_cert, keyfile=localServer.server_key, ca_certs=localServer.ca_certs,
@@ -433,6 +434,10 @@ def check_loops(localServer):
     '''
 
 def read_socket(localServer, sock):
+    if not hasattr(sock, 'socket'):
+        # Client probably repidly disconnected. Possible causes can be ZNC that have not yet accepted new cert.
+        #sock.quit('No socket')
+        return
     try:
         if sock.cls:
             buffer_len = int(localServer.conf['class'][sock.cls]['sendq']) * 2
@@ -443,9 +448,10 @@ def read_socket(localServer, sock):
         except (UnicodeDecodeError, ConnectionResetError, OSError, AttributeError) as ex:
             logging.debug('Failed to read socket: {}'.format(ex))
             logging.debug('Disconnecting user: {}'.format(sock))
-            logging.debug('IP: {}'.format(sock.ip))
+            if hasattr(sock, 'ip'):
+                logging.debug('IP: {}'.format(sock.ip))
             #logging.exception(ex)
-            sock.quit('Read error')
+            sock.quit('Read error: {}'.format(ex))
             return
         except Exception as ex:
             logging.debug(R+'Alternative exception occurred: {}'.format(ex)+W)
@@ -454,7 +460,7 @@ def read_socket(localServer, sock):
 
         if not recv:
             #logging.error('No data received from {}'.format(sock))
-            sock.quit('Read error')
+            sock.quit('Read error: no data')
             return
 
         sock.recvbuffer += recv
