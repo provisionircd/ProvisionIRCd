@@ -17,11 +17,8 @@ def checkExpiredBacklog(localServer):
         latest_date = chan.msg_backlog['lines'][-1][1]/10
         expire = chan.msg_backlog['expire'] * 60
         if float(datetime.utcnow().strftime("%s.%f")) - latest_date > expire:
-            #localServer.handle('PRIVMSG', '{} :Message expired: {}'.format(chan.name, line))
             chan.msg_backlog['lines'] = [] # Remove all lines.
             #chan.msg_backlog['lines'] = chan.msg_backlog['lines'][1:] # Remove only expired line.
-    #for user in [user for user in localServer.m_history if int(time.time()) - localServer.m_history[user]['replayed_time'] > 60]:
-    #    pass
 
 ircd.Modules.hooks.channel_destroy()
 def destroy(self, localServer, channel):
@@ -101,7 +98,7 @@ def show_history(self, localServer, channel):
             localServer.m_history[channel][self]['last'] = None
             localServer.m_history[channel][self]['replay_time'] = int(time.time())
         if 'replay_time' in localServer.m_history[channel][self] and 'last' in localServer.m_history[channel][self]:
-            if localServer.m_history[channel][self]['last'] != channel.msg_backlog['lines'][-1] or int(time.time()) - localServer.m_history[channel][self]['replay_time'] > 900:
+            if localServer.m_history[channel][self]['last'] != channel.msg_backlog['lines'][-1] or int(time.time()) - localServer.m_history[channel][self]['replay_time'] > 1800:
                 ### New messages for user.
                 show = 1
         else:
