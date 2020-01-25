@@ -312,7 +312,7 @@ def check_loops(localServer):
                 localServer.handle('tkl', data, params=p)
 
     ### Request links
-    if localServer.users:
+    if localServer.users and 'link' in localServer.conf:
         linkServers = [link for link in localServer.conf['link'] if link.lower() != localServer.hostname.lower() and 'outgoing' in localServer.conf['link'][link] and 'options' in localServer.conf['link'][link] and not list(filter(lambda s: s.hostname == link, localServer.servers))]
         servers = (link for link in linkServers if link not in localServer.linkRequests)
         for link in servers:

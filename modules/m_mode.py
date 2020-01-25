@@ -214,8 +214,8 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                     if self.chlevel(chan_exists[0]) < 3 and not self.ocheck('o', 'override'):
                         self.sendraw(690, ':You must be opped on target channel {} to set it as redirect.'.format(chan_exists[0].name))
                         continue
-                    if 'L' in chan_exists[0].modes and localServer.chan_params[chan_exists[0]]['L'].lower() == channel.name.lower():
-                        self.sendraw(690, ':Recursive redirect is not allowed.')
+                    if 'L' in chan_exists[0].modes: # and localServer.chan_params[chan_exists[0]]['L'].lower() == channel.name.lower():
+                        self.sendraw(690, ':Destination channel already has +L.')
                         continue
                     elif self.chlevel(channel) < modeLevel[m]:
                         oper_override = True

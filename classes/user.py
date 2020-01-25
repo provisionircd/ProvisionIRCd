@@ -180,6 +180,7 @@ class User:
                     for e in self.server.conf['except']['throttle']:
                         if match(e, self.ip):
                             throttle_except = True
+                            break
                 if len(totalConns) >= throttleTreshhold and not throttle_except:
                     return self.quit('Throttling - You are (re)connecting too fast')
 
@@ -276,8 +277,8 @@ class User:
             logging.exception(ex)
 
     def __del__(self):
-        pass
-        #logging.debug('User {} closed'.format(self))
+        #pass
+        logging.debug('User {} closed'.format(self))
         #objgraph.show_most_common_types()
         '''
         reflist = gc.get_referrers(self)
@@ -323,7 +324,7 @@ class User:
 
                 # Looking for API calls.
                 if not self.registered:
-                    for callable in [callable for callable in self.server.api if callable[0].lower() == command.lower()]:
+                    for callable in [callable for callable in self.server.api if callable[0].lower() == command]:
                         api_func = callable[1]
                         api_host = callable[2]
                         api_password = callable[3]
@@ -725,9 +726,9 @@ class User:
             if self.nickname != '*' and self.ident != '' and reason:
                 self.broadcast(all_broadcast, 'QUIT :{}'.format(reason))
 
-            for channel in list(self.channels):
+            for channel in [self.channels]:
                 channel.users.remove(self)
-                channel.usermodes.pop(self)
+                del channel.usermodes[self]
                 self.channels.remove(channel)
                 if len(channel.users) == 0 and 'P' not in channel.modes:
                     localServer.channels.remove(channel)
@@ -784,7 +785,7 @@ class User:
             #for k, v in list(globals().items()):
             #    print("{} -- {}".format(k, v))
 
-            #del self.socket
+            del self.socket
             del self
 
         except Exception as ex:
