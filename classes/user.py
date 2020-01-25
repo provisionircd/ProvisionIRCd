@@ -59,7 +59,7 @@ class blacklist_check(threading.Thread):
             if user in user.server.users:
                 user._send(':{} 304 * :{}'.format(user.server.hostname, reason))
             user.quit(reason)
-        except:
+        except Exception as ex:
             logging.exception(ex)
 
 def DNSBLCheck(self):
