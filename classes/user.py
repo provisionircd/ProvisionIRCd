@@ -45,7 +45,7 @@ class blacklist_check(threading.Thread):
     def run(self):
         user = self.user
         blacklist = self.blacklist
-        logging.debug('Looking up DNSBL query on {}: [{}]'.format(self.blacklist, user.ip))
+        logging.info('Looking up DNSBL query on {}: {}'.format(self.blacklist, user.ip))
         try:
             result = socket.gethostbyname(RevIP(user.ip)+ '.' + blacklist)
             reason = 'Your IP is blacklisted by {}'.format(blacklist)
@@ -726,7 +726,7 @@ class User:
             if self.nickname != '*' and self.ident != '' and reason:
                 self.broadcast(all_broadcast, 'QUIT :{}'.format(reason))
 
-            for channel in [self.channels]:
+            for channel in list(self.channels):
                 channel.users.remove(self)
                 del channel.usermodes[self]
                 self.channels.remove(channel)
@@ -771,15 +771,7 @@ class User:
                     objgraph.show_growth(limit=20)
                 except: # Prevent weird spam shit.
                     pass
-            '''
-            reflist = gc.get_referrers(self)
-            if reflist:
-                logging.debug('Found these references after quit:')
-                for r in reflist:
-                    logging.debug(r)
-            else:
-                logging.debug('Excellent, no more references!')
-            '''
+
             #objgraph.show_refs([self], filename='refs.png')
 
             #for k, v in list(globals().items()):

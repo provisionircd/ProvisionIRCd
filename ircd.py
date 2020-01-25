@@ -10,13 +10,6 @@ if sys.version_info[0] < 3:
     print('Python 2 is not supported.')
     sys.exit()
 
-import signal
-
-def handler(signum, frame):
-    if signum == 17:
-        return
-    exit_handler()
-
 try:
     import faulthandler
     faulthandler.enable()
@@ -566,6 +559,7 @@ class Server:
                 except:
                     pass
                 self.socket.close()
+                del self.socket
 
             gc.collect()
             del gc.garbage[:]
@@ -574,7 +568,6 @@ class Server:
                 logging.debug('[SERVER] Growth after self.quit() (if any):')
                 objgraph.show_growth(limit=20)
 
-            del self.socket
             del self
 
         except Exception as ex:
@@ -682,14 +675,6 @@ class Server:
             print('Another instance running?')
             sys.exit()
 
-import signal
-
-
-
-
-def receiveSignal(signalNumber, frame):
-    print('Received:', signalNumber)
-    return
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='IRCd.')
@@ -709,7 +694,7 @@ if __name__ == "__main__":
         hashed = bcrypt.hashpw(args.mkpasswd.encode('utf-8'),bcrypt.gensalt(10)).decode('utf-8')
         print('Your salted password: {}'.format(hashed))
         sys.exit()
-    signal.signal(signal.SIGALRM, receiveSignal)
+
     if args.rehash:
         if os.path.isfile(pidfile):
             print('Process already running.')
@@ -727,8 +712,8 @@ if __name__ == "__main__":
     fork = not args.nofork
     version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
     if int(version) < 36:
-        print('Python version 3.6 or higher is recommended due to better memory management.')
-        time.sleep(1)
+        print('Python version 3.6 or higher is recommended for better performance.')
+        time.sleep(3)
     try:
         S = Server(conffile=conffile, forked=fork)
         S.run()

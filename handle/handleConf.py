@@ -313,12 +313,15 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
             localServer.server_cert = 'ssl/server.cert.pem'
             localServer.server_key = 'ssl/server.key.pem'
             localServer.ca_certs = 'ssl/curl-ca-bundle.crt'
-            temp_sslctx = ssl.SSLContext(ssl.PROTOCOL_TLS)
-            temp_sslctx.load_cert_chain(certfile=localServer.server_cert, keyfile=localServer.server_key)
-            temp_sslctx.load_default_certs(purpose=ssl.Purpose.CLIENT_AUTH)
-            temp_sslctx.load_verify_locations(cafile=localServer.ca_certs)
-            temp_sslctx.verify_mode = ssl.CERT_NONE
-            localServer.sslctx = temp_sslctx
+            version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
+            if int(version) >= 36:
+                temp_sslctx = ssl.SSLContext(ssl.PROTOCOL_TLS)
+                temp_sslctx.load_cert_chain(certfile=localServer.server_cert, keyfile=localServer.server_key)
+                temp_sslctx.load_default_certs(purpose=ssl.Purpose.CLIENT_AUTH)
+                temp_sslctx.load_verify_locations(cafile=localServer.ca_certs)
+                temp_sslctx.verify_mode = ssl.CERT_NONE
+                localServer.sslctx = temp_sslctx
+
         except PermissionError as ex:
             err = 'Reloading TLS certificates failed with PermissionError. Make sure the files can be read by the current user.'
             if rehash:

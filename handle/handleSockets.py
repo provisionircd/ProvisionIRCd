@@ -66,10 +66,10 @@ def sock_accept(localServer, s):
                     is_ssl = 1
                 else:
                     conn = ssl.wrap_socket(conn,
-                                            #server_side=True,
+                                            server_side=True,
                                             certfile=localServer.server_cert, keyfile=localServer.server_key, ca_certs=localServer.ca_certs,
                                             suppress_ragged_eofs=True,
-                                            cert_reqs=ssl.CERT_OPTIONAL,
+                                            cert_reqs=ssl.CERT_NONE,
                                             ciphers='HIGH'
                                             )
                     is_ssl = 1
@@ -128,15 +128,19 @@ def sock_accept(localServer, s):
 
             if is_ssl and not localServer.pre_wrap:
                 # Uncomment handshake shit if isssues.
-                conn = ssl.wrap_socket(conn,
-                                        server_side=True,
-                                        certfile=localServer.server_cert, keyfile=localServer.server_key, ca_certs=localServer.ca_certs,
-                                        suppress_ragged_eofs=True,
-                                        do_handshake_on_connect=False,
-                                        #cert_reqs=ssl.CERT_OPTIONAL,
-                                        ciphers='HIGH'
-                                        )
-                conn.do_handshake()
+                version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
+                if int(version) >= 36:
+                    conn = localServer.sslctx.wrap_socket(conn, server_side=True)
+                else:
+                    conn = ssl.wrap_socket(conn,
+                                            server_side=True,
+                                            certfile=localServer.server_cert, keyfile=localServer.server_key, ca_certs=localServer.ca_certs,
+                                            suppress_ragged_eofs=True,
+                                            do_handshake_on_connect=False,
+                                            #cert_reqs=ssl.CERT_OPTIONAL,
+                                            ciphers='HIGH'
+                                            )
+                    conn.do_handshake()
                 logging.info('Wrapped incoming server socket {} in SSL'.format(conn))
 
             s = Server(origin=localServer, serverLink=True, sock=conn, is_ssl=is_ssl)
