@@ -497,7 +497,7 @@ class Server:
         if self in localServer.introducedTo:
             localServer.introducedTo.remove(self)
         try:
-            if self.hostname and self.eos:
+            if self.hostname and self.eos and self.netinfo:
                 logging.info('{}Lost connection to remote server {}: {}{}'.format(R2, self.hostname, reason, W))
                 if squit:
                     skip = [self]
@@ -505,11 +505,11 @@ class Server:
                         skip.append(self.uplink)
                     localServer.new_sync(localServer, skip, ':{} SQUIT {} :{}'.format(localServer.sid, self.hostname, reason))
 
-            if not silent and self.hostname and self.socket:
+            if not silent and self.hostname and (hasattr(self, 'socket') and self.socket):
                 if not self.eos and self not in localServer.linkrequester:
                     msg = 'Link denied for server {}: {}'.format(self.hostname, reason)
                 else:
-                    msg = '{} to server {}: {}'.format('Unable to connect' if not self.eos else 'Lost connection', self.hostname, reason)
+                    msg = '*** {} to server {}: {}'.format('Unable to connect' if not self.eos else 'Lost connection', self.hostname, reason)
                 localServer.snotice('s', msg, local=True)
             if self in localServer.linkrequester:
                 del localServer.linkrequester[self]

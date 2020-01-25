@@ -8,11 +8,21 @@ import time
 import hashlib
 import socket
 
+from handle.functions import logging
+
 @ircd.Modules.params(1)
 @ircd.Modules.req_class('Server')
 @ircd.Modules.commands('netinfo')
 def netinfo(self, localServer, recv):
-    source = list(filter(lambda s: s.sid == recv[0][1:], localServer.servers))[0]
+    sid = recv[0][1:]
+    #source = list(filter(lambda s: s.sid == recv[0][1:], localServer.servers))[0]
+    source = [s for s in localServer.servers if s.sid == sid]
+    if not source:
+        logging.error('Received NETINFO from unknown server with SID: {}'.format(sid))
+        logging.error('Uplink: {}'.format(self))
+        logging.error('Data: {}'.format(recv))
+        return
+    source = source[0]
 
     maxglobal = int(recv[2])
     remotetime = int(recv[3])

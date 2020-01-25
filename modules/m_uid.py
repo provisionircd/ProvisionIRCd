@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 /uid command (server)
 """
@@ -36,6 +33,8 @@ def uid(self, localServer, recv):
                 continue
             else:
                 allow = 0
+                logging.debug('Disallowing remote user {}'.format(user))
+                return
         if allow:
             u = ircd.User(self, serverClass=localServer, params=params)
             cmd = ' '.join(recv)

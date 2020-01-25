@@ -46,13 +46,12 @@ class TKL:
                 ex = False
                 for mask in localServer.tkl[type]:
                     host = '{}@{}'.format('*' if type.lower() == 'z' else user.ident, user.ip if type.lower() == 'z' else user.hostname)
-                    try:
+                    if 'except' in localServer.conf and 'tkl' in localServer.conf['except']:
                         for e in localServer.conf['except']['tkl']:
                             if match(e, host) and user.server == localServer:
                                 ex = True
                                 break
-                    except:
-                        pass
+
                     if match(mask, host) and not ex:
                         if type in 'GZ' and not localServer.tkl[type][mask]['global']:
                             continue

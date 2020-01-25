@@ -42,6 +42,7 @@ class blacklist_check(threading.Thread):
         threading.Thread.__init__(self)
         self.user = user
         self.blacklist = blacklist
+
     def run(self):
         user = self.user
         blacklist = self.blacklist
@@ -59,7 +60,7 @@ class blacklist_check(threading.Thread):
                 user._send(':{} 304 * :{}'.format(user.server.hostname, reason))
             user.quit(reason)
         except:
-            pass
+            logging.exception(ex)
 
 def DNSBLCheck(self):
     user = self
@@ -280,15 +281,6 @@ class User:
         #pass
         logging.debug('User {} closed'.format(self))
         #objgraph.show_most_common_types()
-        '''
-        reflist = gc.get_referrers(self)
-        if reflist:
-            logging.debug('Found these references after __del__:')
-            for r in reflist:
-                logging.debug(r)
-        else:
-            logging.debug('Excellent, no more references after __del__!')
-        '''
 
     def handle_recv(self):
         try:
