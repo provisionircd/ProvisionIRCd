@@ -717,7 +717,7 @@ if __name__ == "__main__":
                 pid = p.read()
                 print('Pid: {}'.format(pid))
 
-        sys.exit())
+        sys.exit()
 
     global conffile
     if not args.conf:
