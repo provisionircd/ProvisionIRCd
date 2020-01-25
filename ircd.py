@@ -551,7 +551,7 @@ class Server:
                 logging.info('Quitting server {}'.format(server))
                 server.quit('{} {}'.format(self.hostname, source.hostname if source else localServer.hostname))
 
-            if self.socket:
+            if hasattr(self, 'socket') and self.socket:
                 if localServer.use_poll:
                     localServer.pollerObject.unregister(self.socket)
                 try:
@@ -712,7 +712,7 @@ if __name__ == "__main__":
     fork = not args.nofork
     version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
     if int(version) < 36:
-        print('Python version 3.6 or higher is recommended for better performance.')
+        print('Python version 3.6 or higher is recommended for better performance and stability.')
         time.sleep(3)
     try:
         S = Server(conffile=conffile, forked=fork)
