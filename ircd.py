@@ -696,7 +696,6 @@ if __name__ == "__main__":
     parser.add_argument('-c', '--conf', help='Conf file.')
     parser.add_argument('--nofork', help='No fork.',action='store_true')
     parser.add_argument('--rehash', help='Rehash current server.',action='store_true')
-    parser.add_argument('--dorehash', help='Rehash current server.',action='store_true')
     try:
         mkp = 1
         import bcrypt
@@ -718,11 +717,7 @@ if __name__ == "__main__":
                 pid = p.read()
                 print('Pid: {}'.format(pid))
 
-
-        sys.exit()
-
-    if args.dorehash:
-        print('REHASH?')
+        sys.exit())
 
     global conffile
     if not args.conf:
