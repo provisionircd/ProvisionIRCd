@@ -157,6 +157,7 @@ class User:
                 self.ping = int(time.time())
                 self.recvbuffer = ''
                 self.validping = False
+                self.server_pass_accepted = False
                 self.server.users.append(self)
                 for callable in [callable for callable in server.hooks if callable[0].lower() == 'new_connection']:
                     try:
@@ -232,6 +233,21 @@ class User:
                 TKL.check(self, self.server, self, 'G')
 
                 self.cloakhost = cloak(self.server, self.hostname)
+
+                for cls in self.server.conf['allow']:
+                    if 'ip' in self.server.conf['allow'][cls]:
+                        clientmask = '{}@{}'.format(self.ident, self.ip)
+                        isMatch = match(self.server.conf['allow'][cls]['ip'], clientmask)
+                    if 'hostname' in self.server.conf['allow'][cls]:
+                        clientmask = '{}@{}'.format(self.ident, self.hostname)
+                        isMatch = match(self.server.conf['allow'][cls]['hostname'], clientmask)
+                    if isMatch:
+                        if 'options' in self.server.conf['allow'][cls]:
+                            if 'ssl' in self.server.conf['allow'][cls]['options'] and not self.ssl:
+                                continue
+                        self.cls = cls
+                        logging.debug('Assigned class {} to {}'.format(self.cls, self.nickname))
+                        break
 
             else:
                 try:
@@ -312,6 +328,11 @@ class User:
                 else:
                     parsed = self.parse_command(recv)
 
+                pre_reg_cmds = ['nick', 'user', 'pass', 'pong', 'cap', 'starttls', 'webirc']
+
+                if not self.registered and not self.server_pass_accepted and 'password' in localServer.conf['allow'][self.cls] and command not in ['pass', 'cap']:
+                    return self.quit('Password required')
+
                 ignore = ['ping', 'pong', 'ison', 'watch', 'who', 'privmsg', 'notice', 'ns', 'cs', 'nickserv', 'chanserv', 'id', 'identify', 'login', 'auth']
                 #ignore = []
                 if command not in ignore:
@@ -335,7 +356,7 @@ class User:
                         return
 
                 #print('ik ga zo slaaaaaapen maar jij bent ernie?')
-                if type(self).__name__ == 'User' and command != 'nick' and command != 'user' and command != 'pong' and command != 'cap' and command != 'starttls' and command != 'webirc' and not self.registered:
+                if type(self).__name__ == 'User' and command not in pre_reg_cmds and not self.registered:
                     return self.sendraw(451, 'You have not registered')
                 if command == 'pong':
                     if self in self.server.pings:
@@ -507,6 +528,7 @@ class User:
                     callable[2](self, self.server)
                 except Exception as ex:
                     logging.exception(ex)
+            '''
             for cls in self.server.conf['allow']:
                 if 'ip' in self.server.conf['allow'][cls]:
                     clientmask = '{}@{}'.format(self.ident, self.ip)
@@ -520,6 +542,7 @@ class User:
                             continue
                     self.cls = cls
                     break
+            '''
 
             if not self.cls:
                 return self.quit('You are not authorized to connect to this server')

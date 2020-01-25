@@ -23,7 +23,7 @@ Syntax: /NICK <newnick>"""
             sourceServer = self
             override = True
             _self = self
-            # If the first param is not a UID, it means some new user is trying to connect.
+            # If the first param is not a UID, it means a new user is trying to connect.
             # Closing connection.
             self = [u for u in localServer.users if u.uid == recv[0][1:]]
             if not self:
@@ -34,6 +34,7 @@ Syntax: /NICK <newnick>"""
             recv = recv[1:]
             hook = 'remote_nickchange'
         else:
+
             sourceServer = localServer
             hook = 'local_nickchange'
 

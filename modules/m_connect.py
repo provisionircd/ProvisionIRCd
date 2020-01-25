@@ -3,10 +3,9 @@
 """
 
 import ircd
-import sys
-import os
+
 from handle.handleLink import Link
-from handle.functions import _print
+from handle.functions import logging
 
 def connectTo(self, localServer, name, autoLink=False):
     try:
@@ -15,16 +14,14 @@ def connectTo(self, localServer, name, autoLink=False):
             return
         pswd = localServer.conf['link'][name]['pass']
         is_ssl = False
-        if 'options' in localServer.conf['link'][name] and 'ssl' in localServer.conf['link'][name]['options']:
+        if 'options' in localServer.conf['link'][name] and ('tls' in localServer.conf['link'][name]['options'] or 'ssl' in localServer.conf['link'][name]['options']):
             is_ssl = True
         l = Link(self, localServer, name, host, port, pswd, is_ssl, autoLink)
         l.start()
 
     except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        _print(e, server=localServer)
+        logging.exception(ex)
+
         if self:
             if name.lower() in localServer.pendingLinks:
                 localServer.pendingLinks.remove(name.lower())

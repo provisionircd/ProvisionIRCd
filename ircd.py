@@ -509,7 +509,7 @@ class Server:
                 if not self.eos and self not in localServer.linkrequester:
                     msg = 'Link denied for server {}: {}'.format(self.hostname, reason)
                 else:
-                    msg = '*** {} to server {}: {}'.format('Unable to connect' if not self.eos else 'Lost connection', self.hostname, reason)
+                    msg = '*** {} to server {}: {}'.format('Unable to connect' if not self.eos and not self.netinfo else 'Lost connection', self.hostname, reason)
                 localServer.snotice('s', msg, local=True)
             if self in localServer.linkrequester:
                 del localServer.linkrequester[self]

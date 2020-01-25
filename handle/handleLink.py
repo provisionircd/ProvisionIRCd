@@ -90,7 +90,9 @@ def selfIntroduction(localServer, newServer, outgoing=False):
                 modlist.append(entry)
             if modlist:
                 newServer._send('MODLIST :{}'.format(' '.join(modlist)))
-            newServer._send('SERVER {} 1 :{} {}'.format(localServer.hostname, version, localServer.name))
+            # Prefixed it with :SID, removed version info.
+            newServer._send(':{} SERVER {} 1 :{}'.format(localServer.sid, localServer.hostname, localServer.name))
+            #newServer._send('SERVER {} 1 :{} {}'.format(localServer.hostname, version, localServer.name)) # Old, should not be used.
             logging.info('{}Introduced myself to {}. Expecting remote sync sequence...{}'.format(Y, newServer.hostname, W))
         localServer.introducedTo.append(newServer)
 

@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 /protoctl command (server)
 """
@@ -28,6 +25,11 @@ def protoctl(self, localServer, recv):
                 if cap == 'EAUTH' and param:
                     self.hostname = param.split(',')[0]
                     logging.info('Hostname set from EAUTH: {}'.format(self.hostname))
+                    exists = [s for s in localServer.servers+[localServer] if s.hostname.lower() == self.hostname.lower() and s != self]
+                    if exists:
+                        logging.error('Server {} already exists.'.format(self.hostname))
+                        self.quit('Server already exists on this network.')
+                        return
                 elif cap == 'SID' and param:
                     for server in [server for server in localServer.servers if server.sid == param and server != self]:
                         self._send(':{} ERROR :SID {} is already in use on that network'.format(localServer.sid, param))

@@ -19,11 +19,16 @@ P = '\033[35m' # purple
 @ircd.Modules.req_class('Server')
 @ircd.Modules.commands('server')
 def server(self, localServer, recv):
+    sid = recv[0][1:]
+    if not [s for s in localServer.servers if s.sid == sid]:
+        logging.error('SERVER command received from unknown server with SID {}'.format(sid))
+        return self.quit('Unknown SID')
+
     try:
-        exists = list(filter(lambda s: s.hostname.lower() == recv[2].lower(), localServer.servers+[localServer]))
+        exists = [s for s in localServer.servers+[localServer] if s.hostname.lower() == recv[2].lower()]
         if exists and self != exists[0]:
             logging.error('Server {} already exists on this network2'.format(recv[2]))
-            #self.quit('Server already exists on this network')
+            self.quit('Server already exists on this network')
             return
         if not self.sid:
             logging.error('Direct link with {} denied because their SID is unknown to me'.format(recv[2]))
@@ -31,11 +36,12 @@ def server(self, localServer, recv):
             return
 
         if not self.linkAccept and not self.eos:
+            # Information is gathered backwards from recv.
             self.linkAccept = True
             tempName = ' '.join(recv).split(':')[-2]
             self.hostname = tempName.split()[-2].strip()
             self.hopcount = int(tempName.split()[-1])
-            self.name = ' '.join(recv[4:])
+            self.name = ' '.join(recv[1:]).split(':')[1] # ' '.join(recv[4:])
             self.rawname = ' '.join(recv[3:])
             if self.name.startswith(':'):
                 self.name = self.name[1:]

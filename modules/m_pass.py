@@ -4,18 +4,30 @@
 
 import ircd
 
-from handle.functions import _print
+from handle.functions import logging
 
 @ircd.Modules.params(1)
 @ircd.Modules.commands('pass')
 def cmd_pass(self, localServer, recv):
     """Used by servers to authenticate themselves during linking process."""
     source = recv[0][1:]
-    if type(self).__name__ == 'User' and self.registered:
-        return self.sendraw(462, ':You may not reregister')
+    if type(self).__name__ == 'User':
+        if self.registered:
+            return self.sendraw(462, ':You may not reregister')
+        # Check for server password.
+        if 'password' in localServer.conf['allow'][self.cls]:
+            if recv[1] == localServer.conf['allow'][self.cls]['password']:
+                self.server_pass_accepted = 1
+                logging.info('Server password accepted for {}'.format(self))
+                return
+            else:
+                return self.quit('Invalid password')
+
+    if type(self).__name__ == 'Server' and 'link' not in localServer.conf:
+        return self.quit('Target has no links configured')
 
     self.linkpass = recv[2][1:]
-    _print('Password for {} set: {}'.format(self, self.linkpass), server=localServer)
+    logging.info('Password for {} set: {}'.format(self, self.linkpass))
     ip, port = self.socket.getpeername()
     ip2, port2 = self.socket.getsockname()
 
