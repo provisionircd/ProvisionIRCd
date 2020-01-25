@@ -305,8 +305,8 @@ class Server:
             self.localServer.servers.append(self)
 
     def __del__(self):
-        #pass
-        logging.debug('Server {} closed'.format(self))
+        pass
+        #logging.debug('Server {} closed'.format(self))
 
     def fileno(self):
         return self.socket.fileno()
@@ -581,19 +581,20 @@ class Server:
             logging.exception(ex)
 
     def run(self):
-        pid = str(os.getpid())
-        try:
-            with open(pidfile, 'w') as file:
-                file.write(pid)
-        except Exception as ex:
-            print('Could not write pidfile. Make sure you have write access: {}'.format(ex))
-            sys.exit()
-            return
         if self.forked:
-            os.fork()
-            print('PID [{}] forked to the background'.format(pid))
-            sys.exit()
-        atexit.register(exit_handler)
+            pid = os.fork()
+            if pid:
+                try:
+                    with open(pidfile, 'w') as file:
+                        file.write(str(pid))
+                except Exception as ex:
+                    print('Could not write pidfile. Make sure you have write access: {}'.format(ex))
+                    sys.exit()
+                    return
+                print('PID [{}] forked to the background'.format(pid))
+                sys.exit()
+
+            atexit.register(exit_handler)
 
         from handle.handleSockets import data_handler
         self.datahandler = data_handler(self)
