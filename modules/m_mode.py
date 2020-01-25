@@ -68,6 +68,7 @@ def makeMask(localServer, data):
 oper_override = False
 def processModes(self, localServer, channel, recv, sync=True, sourceServer=None, sourceUser=None):
     logging.debug('processModes(): {}'.format(recv))
+
     try:
         if sourceServer != localServer or (type(sourceUser).__name__ == 'User' and sourceUser.server != localServer):
             hook = 'remote_chanmode'
@@ -509,6 +510,11 @@ Example: MODE #Home +m
          MODE Alice +c"""
     global oper_override
     oper_override = False
+
+    regex = re.compile("\x1d|\x1f|\x02|\x12|\x0f|\x16|\x03(?:\d{1,2}(?:,\d{1,2})?)?", re.UNICODE)
+    recv = regex.sub('', ' '.join(recv)).split()
+
+
     try:
         if type(self).__name__ == 'Server':
             sourceServer = self
@@ -575,6 +581,14 @@ Example: MODE #Home +m
             return self.sendraw(401, '{} :No such channel'.format(recv[1]))
 
         channel = channel[0]
+
+        for v in [v for v in channel.bans if not v]:
+            del channel.bans[b]
+        for v in [v for v in channel.excepts if not v]:
+            del channel.excepts[b]
+        for v in [v for v in channel.invex if not v]:
+            del channel.invex[b]
+
         if type(self).__name__ == 'Server' and not self.eos and self != localServer:
             return
 
@@ -583,19 +597,19 @@ Example: MODE #Home +m
                 return self.sendraw(401, '{} :No such channel'.format(recv[1]))
 
         if len(recv) == 3:
-            if recv[2] == '+b' or recv[2] == 'b':
+            if recv[2] in ['+b', 'b']:
                 for entry in OrderedDict(reversed(list(channel.bans.items()))):
                     self.flood_safe = True
                     self.sendraw(367, '{} {} {} {}'.format(channel.name, entry, channel.bans[entry]['setter'], channel.bans[entry]['ctime']))
                 return self.sendraw(368, '{} :End of Channel Ban List'.format(channel.name))
-            elif recv[2] == '+e' or recv[2] == 'e':
+            elif recv[2] in ['+e', 'e']:
                 if self.chlevel(channel) < 3 and not self.ocheck('o', 'override'):
                     return self.sendraw(482, '{} :You are not allowed to view the excepts list'.format(channel.name))
                 for entry in OrderedDict(reversed(list(channel.excepts.items()))):
                     self.flood_safe = True
                     self.sendraw(348, '{} {} {} {}'.format(channel.name, entry, channel.excepts[entry]['setter'], channel.excepts[entry]['ctime']))
                 return self.sendraw(349, '{} :End of Channel Exceptions List'.format(channel.name))
-            elif recv[2] == '+I' or recv[2] == 'I':
+            elif recv[2] in ['+I', 'I']:
                 if self.chlevel(channel) < 3 and not self.ocheck('o', 'override'):
                     return self.sendraw(482, '{} :You are not allowed to view the invex list'.format(channel.name))
                 for entry in OrderedDict(reversed(list(channel.invex.items()))):

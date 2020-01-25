@@ -101,7 +101,7 @@ def checkExpiredBans(localServer):
     remove_bans = {}
     for chan in localServer.channels:
         remove_bans[chan] = []
-        for ban in [ban for ban in chan.bans if ban[:2] == '~t']:
+        for ban in [ban for ban in chan.bans if ban and ban[:2] == '~t']:
             minutes = int(ban.split(':')[1]) * 60
             banset = int(chan.bans[ban]['ctime'])
             if int(time.time()) >= (minutes + banset):
