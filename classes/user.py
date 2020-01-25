@@ -46,7 +46,7 @@ class blacklist_check(threading.Thread):
     def run(self):
         user = self.user
         blacklist = self.blacklist
-        logging.info('Looking up DNSBL query on {}: {}'.format(self.blacklist, user.ip))
+        #logging.info('Looking up DNSBL query on {}: {}'.format(self.blacklist, user.ip))
         try:
             result = socket.gethostbyname(RevIP(user.ip)+ '.' + blacklist)
             reason = 'Your IP is blacklisted by {}'.format(blacklist)
@@ -59,6 +59,10 @@ class blacklist_check(threading.Thread):
             if user in user.server.users:
                 user._send(':{} 304 * :{}'.format(user.server.hostname, reason))
             user.quit(reason)
+
+        except socket.gaierror: # socket.gaierror: [Errno -2] Name or service not known -> no match.
+            pass
+
         except Exception as ex:
             logging.exception(ex)
 
