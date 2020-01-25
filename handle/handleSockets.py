@@ -464,7 +464,7 @@ def read_socket(localServer, sock):
 
         if not recv:
             #logging.error('No data received from {}'.format(sock))
-            sock.quit('Read error: no data')
+            sock.quit('Read error')
             return
 
         sock.recvbuffer += recv
