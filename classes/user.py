@@ -45,6 +45,7 @@ class blacklist_check(threading.Thread):
     def run(self):
         user = self.user
         blacklist = self.blacklist
+        logging.debug('Looking up DNSBL query on {}: [{}]'.format(self.blacklist, user.ip))
         try:
             result = socket.gethostbyname(RevIP(user.ip)+ '.' + blacklist)
             reason = 'Your IP is blacklisted by {}'.format(blacklist)
@@ -148,6 +149,10 @@ class User:
                 self.cls = None
                 self.signon = int(time.time())
                 self.registered = False
+                self.ping = int(time.time())
+                self.recvbuffer = ''
+                self.validping = False
+                self.server.users.append(self)
                 for callable in [callable for callable in server.hooks if callable[0].lower() == 'new_connection']:
                     try:
                         callable[2](self, server)
@@ -183,15 +188,12 @@ class User:
                 self.server.throttle[self]['ctime'] = int(time.time())
 
                 self.uid = '{}{}'.format(self.server.sid, ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(6)))
-                while list(filter(lambda u: u.uid == self.uid, self.server.users)):
+                while [u for u in self.server.users if hasattr(u, 'uid') and u != self and u.uid == self.uid]:
+                #while list(filter(lambda u: u.uid == self.uid, self.server.users)):
                     self.uid = '{}{}'.format(self.server.sid, ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(6)))
 
-                self.ping = int(time.time())
                 self.lastPingSent = time.time() * 1000
                 self.lag_measure = self.lastPingSent
-                self.server.users.append(self)
-                self.recvbuffer = ''
-                self.validping = False
                 self.server.totalcons += 1
                 if self.ssl and self.socket:
                     try:
@@ -274,8 +276,8 @@ class User:
             logging.exception(ex)
 
     def __del__(self):
-        #pass
-        logging.debug('User {} closed'.format(self))
+        pass
+        #logging.debug('User {} closed'.format(self))
         #objgraph.show_most_common_types()
         '''
         reflist = gc.get_referrers(self)
@@ -438,6 +440,9 @@ class User:
         return words
 
     def _send(self, data):
+        if not hasattr(self, 'socket'):
+            logging.debug('Socket {} got sent flashed out.'.format(self))
+            return
         if self.socket:
             self.sendbuffer += data + '\r\n'
             if self.server.use_poll:
@@ -760,8 +765,11 @@ class User:
             del gc.garbage[:]
 
             if not localServer.forked:
-                logging.debug('Growth after self.quit() (if any):')
-                objgraph.show_growth(limit=20)
+                try:
+                    logging.debug('Growth after self.quit() (if any):')
+                    objgraph.show_growth(limit=20)
+                except: # Prevent weird spam shit.
+                    pass
             '''
             reflist = gc.get_referrers(self)
             if reflist:
@@ -776,7 +784,7 @@ class User:
             #for k, v in list(globals().items()):
             #    print("{} -- {}".format(k, v))
 
-            del self.socket
+            #del self.socket
             del self
 
         except Exception as ex:
