@@ -328,10 +328,8 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
                 localServer.notice(user, '*** {}'.format(err))
             else:
                 conferr(err)
+
         except FileNotFoundError as ex:
-            exc_type, exc_obj, exc_tb = sys.exc_info()
-            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-            e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
             err = "One or more required SSL files could not be found."
             err += "\nCheck to see if the following files are present and valid:"
             err += "\n"+localServer.server_cert
