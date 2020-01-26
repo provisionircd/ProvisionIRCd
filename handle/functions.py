@@ -17,13 +17,69 @@ Y = '\033[33m' # yellow
 B = '\033[34m' # blue
 P = '\033[35m' # purple
 
+
+class EnhancedRotatingFileHandler(logging.handlers.TimedRotatingFileHandler):
+    def __init__(self, filename, when='h', interval=1, backupCount=0, encoding=None, delay=0, utc=0, maxBytes=0):
+        """ This is just a combination of TimedRotatingFileHandler and RotatingFileHandler (adds maxBytes to TimedRotatingFileHandler)  """
+        logging.handlers.TimedRotatingFileHandler.__init__(self, filename, when, interval, backupCount, encoding, delay, utc)
+        self.maxBytes=maxBytes
+
+
+    def shouldRollover(self, record):
+        """
+        Determine if rollover should occur.
+
+        Basically, see if the supplied record would cause the file to exceed
+        the size limit we have.
+
+        we are also comparing times
+        """
+        if self.stream is None:                 # delay was set...
+            self.stream = self._open()
+        if self.maxBytes > 0:                   # are we rolling over?
+            msg = "%s\n" % self.format(record)
+            self.stream.seek(0, 2)  #due to non-posix-compliant Windows feature
+            if self.stream.tell() + len(msg) >= self.maxBytes:
+                return 1
+        if int(time.time()) >= self.rolloverAt:
+            return 1
+        return 0
+
+    def doRollover(self):
+        """
+        Do a rollover, as described in __init__().
+        """
+        if self.stream:
+            self.stream.close()
+            self.stream = None
+        if self.backupCount > 0:
+            suffix = datetime.datetime.today().strftime('%Y-%m-%d')
+            for i in range(self.backupCount - 1, 0, -1):
+                n = "%03d"%(i)
+                sfn = self.rotation_filename("%s.%s.%03d" % (self.baseFilename, suffix, int(n)))
+                dfn = self.rotation_filename("%s.%s.%03d" % (self.baseFilename, suffix, int(n) + 1))
+                if os.path.exists(sfn):
+                    if os.path.exists(dfn):
+                        os.remove(dfn)
+                    os.rename(sfn, dfn)
+            dfn = self.rotation_filename(self.baseFilename + "." + suffix + ".001")
+            if os.path.exists(dfn):
+                os.remove(dfn)
+            self.rotate(self.baseFilename, dfn)
+        if not self.delay:
+            self.stream = self._open()
+
+
 def initlogging(localServer):
     datefile = time.strftime('%Y%m%d')
     if not os.path.exists('logs'):
         os.mkdir('logs')
     #loghandlers = [logging.handlers.TimedRotatingFileHandler('logs/log.txt', when='midnight')]
-    filename = 'logs/ircd.log'.format(datetime.datetime.today().strftime('%Y-%m-%d'))
-    loghandlers = [logging.handlers.RotatingFileHandler(filename, maxBytes=1024*2000, backupCount=29)]
+    filename = 'logs/ircd.log' #.{}'.format(datetime.datetime.today().strftime('%Y-%m-%d'))
+    #loghandlers = [logging.handlers.RotatingFileHandler(filename, maxBytes=1024*10, backupCount=9)]
+    h = EnhancedRotatingFileHandler(filename, maxBytes=1024*10, backupCount=10, when='M', interval=1)
+    h.suffix = '%Y-%m-%d'
+    loghandlers = [h]
     if not localServer.forked:
         stream = logging.StreamHandler()
         stream.terminator = '\n'+W
