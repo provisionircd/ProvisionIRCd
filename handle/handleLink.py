@@ -199,7 +199,7 @@ class Link(threading.Thread):
             if self.is_ssl:
                 version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
                 if int(version) >= 36:
-                    self.socket = self.localServer.sslctx.wrap_socket(self.socket)
+                    self.socket = self.localServer.sslctx.wrap_socket(self.socket, server_side=False)
                 else:
                     self.socket = ssl.wrap_socket(self.socket)
                 logging.info('Wrapped outgoing socket {} in SSL'.format(self.socket))
@@ -222,9 +222,3 @@ class Link(threading.Thread):
 
         except Exception as ex:
             logging.exception(ex)
-            if serv:
-                serv.quit(str(ex))
-
-        finally:
-            if self.name.lower() in self.localServer.pendingLinks:
-                self.localServer.pendingLinks.remove(self.name.lower())

@@ -23,11 +23,6 @@ def connectTo(self, localServer, name, autoLink=False):
     except Exception as ex:
         logging.exception(ex)
 
-        if self:
-            if name.lower() in localServer.pendingLinks:
-                localServer.pendingLinks.remove(name.lower())
-            self.send('NOTICE', '*** ERROR: {}'.format(e))
-
 
 @ircd.Modules.params(1)
 @ircd.Modules.req_modes('o')

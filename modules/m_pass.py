@@ -26,7 +26,7 @@ def cmd_pass(self, localServer, recv):
     if type(self).__name__ == 'Server' and 'link' not in localServer.conf:
         return self.quit('Target has no links configured')
 
-    if len(recv) < 2:
+    if len(recv) < 3:
         return
     self.linkpass = recv[2][1:]
     logging.info('Password for {} set: {}'.format(self, self.linkpass))

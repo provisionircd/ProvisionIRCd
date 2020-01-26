@@ -29,10 +29,6 @@ if sys.version_info[0] < 3:
 
 W = '\033[0m'  # white (normal)
 R = '\033[31m' # red
-G = '\033[32m' # green
-Y = '\033[33m' # yellow
-B = '\033[34m' # blue
-P = '\033[35m' # purple
 
 READ_ONLY = (
     select.POLLIN |
@@ -48,16 +44,15 @@ def sock_accept(localServer, s):
             conn, addr = s.accept()
             if localServer.use_poll:
                 localServer.pollerObject.register(conn, READ_ONLY)
-
             port = conn.getsockname()[1]
             is_ssl = is_sslport(localServer, port)
             conn_backlog = [user for user in localServer.users if user.socket and not user.registered]
+            logging.info('Accepting client on {} -- fd: {}, with IP {}'.format(s, conn.fileno(), addr[0]))
             if len(conn_backlog) > 500:
                 logging.warning('Current connection backlog is >{}, so not allowing any more connections for now. Bye.'.format(len(conn_backlog)))
                 conn.close()
                 return
             conn.settimeout(10)
-            logging.info('Accepting client on {} -- fd: {}, with IP {}'.format(s, conn.fileno(), addr[0]))
             if is_ssl and not localServer.pre_wrap:
                 is_ssl = 0
                 version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
@@ -66,16 +61,14 @@ def sock_accept(localServer, s):
                     is_ssl = 1
                 else:
                     conn = ssl.wrap_socket(conn,
-                                            server_side=True,
+                                            #server_side=True,
                                             certfile=localServer.server_cert, keyfile=localServer.server_key, ca_certs=localServer.ca_certs,
                                             suppress_ragged_eofs=True,
                                             cert_reqs=ssl.CERT_NONE,
                                             ciphers='HIGH'
                                             )
                     is_ssl = 1
-
                 logging.info('Wrapped incoming user socket {} in SSL'.format(conn))
-                '''
                 try:
                     fp = conn.getpeercert(True)
                     if fp:
@@ -83,14 +76,9 @@ def sock_accept(localServer, s):
                         logging.info('Fingerprint: {}'.format(ssl_fingerprint))
                 except Exception as ex:
                     logging.exception(ex)
-                '''
             u = User(localServer, conn, addr, is_ssl)
             if localServer.use_poll:
                 localServer.fd_to_socket[u.fileno()] = (u.socket, u)
-
-            if not hasattr(u, 'socket'):
-                u.quit('Missing socket')
-                return
 
             try:
                 u.socket.setblocking(1) ### Uncomment this. Why? I don't remember.
@@ -100,7 +88,7 @@ def sock_accept(localServer, s):
                 #logging.exception(ex)
                 u.quit(ex)
                 return
-
+            gc.collect()
             if u.fileno() == -1:
                 logging.error('{}Invalid fd for {} -- quit() on user{}'.format(R, u, W))
                 u.quit('Invalid fd')
@@ -130,7 +118,6 @@ def sock_accept(localServer, s):
             is_ssl = is_sslport(localServer, port)
 
             if is_ssl and not localServer.pre_wrap:
-                # Uncomment handshake shit if isssues.
                 version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
                 if int(version) >= 36:
                     conn = localServer.sslctx.wrap_socket(conn, server_side=True)
@@ -147,14 +134,11 @@ def sock_accept(localServer, s):
                 logging.info('Wrapped incoming server socket {} in SSL'.format(conn))
 
             s = Server(origin=localServer, serverLink=True, sock=conn, is_ssl=is_ssl)
-            #s.socket.setblocking(1)
 
         except ssl.SSLError as ex:
-            #localServer.snotice('t', '[{}](3) {}'.format(addr[0], ex))
             logging.exception(ex)
             return
         except Exception as ex:
-            #localServer.snotice('t', '[{}](4) {}'.format(addr[0], ex))
             logging.exception(ex)
             return
 
@@ -167,30 +151,11 @@ class data_handler: #(threading.Thread):
 
     def run(self):
         localServer = self.server
-        #localServer.ca_certs = 'ssl/wat.crt'
-
-        #print(localServer.sslctx.get_ca_certs(binary_form=False))
-        # self.sock = self.sslctx.wrap_socket(self.sock, server_side=True)
-        '''
-        version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
-        for sock in [sock for sock in self.listen_socks if is_sslport(localServer, sock.getsockname()[1])]:
-            port = sock.getsockname()[1]
-            print('Port {} is SSL'.format(port))
-            if int(version) >= 36:
-                localServer.sslctx.wrap_socket(sock, server_side=True)
-            else:
-                sock = ssl.wrap_socket(sock,
-                                        server_side=True,
-                                        certfile=localServer.server_cert, keyfile=localServer.server_key, ca_certs=localServer.ca_certs,
-                                        suppress_ragged_eofs=True,
-                                        cert_reqs=ssl.CERT_OPTIONAL,
-                                        ciphers='HIGH'
-                                        )
-        '''
         while 1:
             try:
                 if localServer.use_poll:
                     fdVsEvent = localServer.pollerObject.poll(1000)
+                    #print('y u no read? {}'.format(fdVsEvent))
                     for fd, Event in fdVsEvent:
                         try:
                             s = localServer.fd_to_socket[fd][0]
@@ -280,7 +245,6 @@ class data_handler: #(threading.Thread):
                             threading.Thread(target=sock_accept, args=([localServer, s])).start()
                             continue
                     check_loops(localServer)
-                    save_db(localServer)
             except Exception as ex:
                 logging.exception(ex)
         logging.warning('data_handler loop broke! This should only happen after /restart.')
@@ -318,7 +282,7 @@ def check_loops(localServer):
                 localServer.handle('tkl', data, params=p)
 
     ### Request links
-    if localServer.users and 'link' in localServer.conf:
+    if localServer.users:
         linkServers = [link for link in localServer.conf['link'] if link.lower() != localServer.hostname.lower() and 'outgoing' in localServer.conf['link'][link] and 'options' in localServer.conf['link'][link] and not list(filter(lambda s: s.hostname == link, localServer.servers))]
         servers = (link for link in linkServers if link not in localServer.linkRequests)
         for link in servers:
@@ -429,21 +393,12 @@ def check_loops(localServer):
     if not os.path.exists('db'):
         os.mkdir('db')
 
-    '''
-    for file in [file for file in os.listdir('logs') if file.split('.')[-1].isdigit() and 1 <= int(file[-1]) <= 5]:
-        date = file[3:].split('.')[0]
-        timestamp = int(time.mktime(time.strptime(date, '%Y-%m-%d')))
-        difference = int(time.time()) - timestamp
-        if difference >= 86400*7: ### Remove after 7 days.
-            os.remove('logs/'+file)
-            logging.debug('Expired logfile "{}" removed.'.format(file))
-    '''
-
 def read_socket(localServer, sock):
     if not hasattr(sock, 'socket'):
         # Client probably repidly disconnected. Possible causes can be ZNC that have not yet accepted new cert.
         #sock.quit('No socket')
         return
+
     try:
         if sock.cls:
             buffer_len = int(localServer.conf['class'][sock.cls]['sendq']) * 2
@@ -451,17 +406,9 @@ def read_socket(localServer, sock):
             buffer_len = 8192 if type(sock).__name__ == 'User' else 65536
         try:
             recv = sock.socket.recv(buffer_len).decode('utf-8')
-        except (UnicodeDecodeError, ConnectionResetError, OSError, AttributeError) as ex:
-            logging.debug('Failed to read socket: {}'.format(ex))
-            logging.debug('Disconnecting user: {}'.format(sock))
-            if hasattr(sock, 'ip'):
-                logging.debug('IP: {}'.format(sock.ip))
-            #logging.exception(ex)
-            sock.quit('Read error: {}'.format(ex))
-            return
         except Exception as ex:
-            logging.debug(R+'Alternative exception occurred: {}'.format(ex)+W)
             logging.exception(ex)
+            sock.quit('Read error: {}'.format(ex))
             return
 
         if not recv:
@@ -474,5 +421,4 @@ def read_socket(localServer, sock):
         sock.handle_recv()
         return recv
     except Exception as ex:
-        logging.debug(R+'Final exception occurred for {}: {}'.format(sock, ex)+W)
         logging.exception(ex)

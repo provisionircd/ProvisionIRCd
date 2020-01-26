@@ -11,7 +11,7 @@ import time
 import re
 import json
 
-from handle.functions import valid_expire, match, cloak, logging
+from handle.functions import valid_expire, match, cloak, logging, save_db
 from collections import OrderedDict
 
 W  = '\033[0m'  # white (normal)
@@ -491,6 +491,8 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
 
             for cmd, data in commandQueue:
                 localServer.handle(cmd, data)
+
+            save_db(localServer)
 
     except Exception as ex:
         logging.exception(ex)

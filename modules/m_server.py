@@ -30,6 +30,7 @@ def server(self, localServer, recv):
             self.quit('No SID received')
             return
 
+        # SERVER irc.example.com 1 :versionstring Server name goes here.
         if not self.linkAccept and not self.eos:
             # Information is gathered backwards from recv.
             self.linkAccept = True

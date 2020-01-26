@@ -5,7 +5,7 @@
 import ircd
 
 import time
-from handle.functions import checkSpamfilter, logging
+from handle.functions import checkSpamfilter, logging, save_db
 
 topiclen = 350
 
@@ -97,5 +97,7 @@ def topic(self, localServer, recv, override=False):
             if channel.name[0] != '&':
                 data = ':{} TOPIC {} {} {} :{}'.format(sourceID, channel.name, channel.topic_author, channel.topic_time, channel.topic)
                 localServer.new_sync(localServer, sourceServer, data)
+            save_data(localServer)
+
     except Exception as ex:
         logging.exception(ex)

@@ -486,7 +486,6 @@ class Server:
     def quit(self, reason, silent=False, error=False, source=None, squit=True):
         localServer = self.localServer
         if not hasattr(self, 'socket') or self not in localServer.servers:
-            #self.socket = None
             return
         logging.info('Server QUIT self: {} :: reason: {}'.format(self, reason))
         if self in localServer.servers:
@@ -508,7 +507,7 @@ class Server:
                         skip.append(self.uplink)
                     localServer.new_sync(localServer, skip, ':{} SQUIT {} :{}'.format(localServer.sid, self.hostname, reason))
 
-            if not silent and self.hostname:
+            if not silent and self.hostname and self.socket:
                 try:
                     ip, port = self.socket.getpeername()
                 except:
@@ -580,7 +579,6 @@ class Server:
                 except:
                     pass
                 self.socket.close()
-                del self.socket
 
             gc.collect()
             del gc.garbage[:]

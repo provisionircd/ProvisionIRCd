@@ -113,6 +113,7 @@ class TKL:
             if tkltype in 'GZQ':
                 data = ':{} TKL + {} {} {} {} {} {} :{}'.format(localServer.sid, tkltype, ident, mask, setter, expire, ctime, reason)
                 localServer.new_sync(localServer, self, data)
+            save_db(localServer)
             return
 
         except Exception as ex:
@@ -136,6 +137,7 @@ class TKL:
             if tkltype in 'GZQ' and not expire:
                 data = ':{} TKL - {} {} {}'.format(localServer.sid, tkltype, ident, mask)
                 localServer.new_sync(localServer, self, data)
+            save_db(localServer)
         except Exception as ex:
             logging.exception(ex)
 
@@ -398,7 +400,6 @@ def check_flood(localServer, target):
 def save_db(localServer):
     perm_chans = {}
     current_perm = {}
-
     try:
         with open(localServer.rootdir+'/db/chans.db') as f:
             current_perm = f.read().split('\n')[0]
