@@ -314,11 +314,11 @@ class Server:
             if data.split()[1] in ['UID', 'SID']:
                 data = data.split()
                 data = '{} {} {}'.format(' '.join(data[:3]), str(int(data[3]) + 1), ' '.join(data[4:]))
-            if direct: ### Private messages and notices.
+            if direct: ### Private messages and notices. direct represents the target.server
                 dest = direct if direct.socket else direct.uplink
-                if direct.socket:
-                    logging.info('Directly linked to us, no more hops needed.')
-                else:
+                #if direct.socket:
+                    #logging.info('Directly linked to us, no more hops needed.')
+                if not direct.socket:
                     logging.info('Server has hopcount of {}, sending to {} first.'.format(direct.hopcount, direct.uplink))
                 dest._send(data)
                 return

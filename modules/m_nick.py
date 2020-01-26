@@ -126,7 +126,7 @@ Syntax: /NICK <newnick>"""
                     for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'visible_in_channel']:
                         try:
                             visible = callable[2](u, localServer, self, channel)
-                            logging.debug('Is {} visible for {} on {}? :: {}'.format(self.nickname, u.nickname, channel.name, visible))
+                            #logging.debug('Is {} visible for {} on {}? :: {}'.format(self.nickname, u.nickname, channel.name, visible))
                         except Exception as ex:
                             logging.exception(ex)
                     if visible: ### Break out of the channels loop. No further checks are required.
