@@ -4,6 +4,8 @@
 
 import ircd
 
+from handle.functions import logging
+
 @ircd.Modules.params(1)
 @ircd.Modules.commands('cap')
 def cap(self, localServer, recv):
@@ -22,8 +24,10 @@ def cap(self, localServer, recv):
         for cap in caps.split():
             if cap.lower() in localServer.caps and cap not in self.caplist:
                 self.caplist.append(cap)
-        string = ':{} CAP {} ACK :{}'.format(localServer.hostname, self.nickname, ' '.join(self.caplist))
-        self._send(string)
+                string = ':{} CAP {} ACK :{}'.format(localServer.hostname, self.nickname, cap)
+                logging.debug('CAP {} ACK for {}'.format(cap, self))
+                self._send(string)
+
     elif recv[1].lower() == 'end':
         self.cap_end = True
         if not self.registered and self.nickname != '*' and self.ident:

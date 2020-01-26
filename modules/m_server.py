@@ -96,9 +96,10 @@ def server(self, localServer, recv):
                         return
 
             selfIntroduction(localServer, self)
-            data = ':{} SID {} 1 {} {}'.format(localServer.sid, self.hostname, self.sid, self.name)
+            data = ':{} SID {} 1 {} :{}'.format(localServer.sid, self.hostname, self.sid, self.name)
             localServer.new_sync(localServer, self, data)
             for server in [server for server in localServer.servers if server.sid and server != self and server.eos]:
+                logging.info('Introducing {} to {}'.format(server.hostname, self.hostname))
                 sid = localServer.sid if server.socket else server.uplink.sid
                 data = ':{} SID {} {} {} :{}'.format(sid, server.hostname, int(server.hopcount) + 1, server.sid, server.name)
                 self._send(data)
