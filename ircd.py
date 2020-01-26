@@ -484,6 +484,8 @@ class Server:
         return "<Server '{}:{}'>".format('*' if not hasattr(self, 'hostname') else self.hostname, '*' if not hasattr(self, 'sid') else self.sid)
 
     def quit(self, reason, silent=False, error=False, source=None, squit=True):
+        if not hasattr(self, 'socket'):
+            self.socket = None
         localServer = self.localServer
         logging.info('Server QUIT self: {} :: reason: {}'.format(self, reason))
         if self in localServer.servers:

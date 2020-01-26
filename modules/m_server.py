@@ -19,11 +19,6 @@ P = '\033[35m' # purple
 @ircd.Modules.req_class('Server')
 @ircd.Modules.commands('server')
 def server(self, localServer, recv):
-    sid = recv[0][1:]
-    if not [s for s in localServer.servers if s.sid == sid]:
-        logging.error('SERVER command received from unknown server with SID {}'.format(sid))
-        return self.quit('Unknown SID')
-
     try:
         exists = [s for s in localServer.servers+[localServer] if s.hostname.lower() == recv[2].lower()]
         if exists and self != exists[0]:

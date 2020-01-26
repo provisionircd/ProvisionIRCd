@@ -91,8 +91,10 @@ def selfIntroduction(localServer, newServer, outgoing=False):
             if modlist:
                 newServer._send('MODLIST :{}'.format(' '.join(modlist)))
             # Prefixed it with :SID, removed version info.
-            newServer._send(':{} SERVER {} 1 :{}'.format(localServer.sid, localServer.hostname, localServer.name))
-            #newServer._send('SERVER {} 1 :{} {}'.format(localServer.hostname, version, localServer.name)) # Old, should not be used.
+            # [Jan 26 02:21:47.873135 2020] Debug: Received: :001 SERVER dev.provisionweb.org 1 :ProvisionDev
+            # [Jan 26 02:21:47.873161 2020] Debug: unexpected non-server source 001 for SERVER
+
+            newServer._send('SERVER {} 1 :{} {}'.format(localServer.hostname, version, localServer.name)) # Old, should not be used.
             logging.info('{}Introduced myself to {}. Expecting remote sync sequence...{}'.format(Y, newServer.hostname, W))
         localServer.introducedTo.append(newServer)
 

@@ -330,7 +330,7 @@ class User:
 
                 pre_reg_cmds = ['nick', 'user', 'pass', 'pong', 'cap', 'starttls', 'webirc']
 
-                if not self.registered and not self.server_pass_accepted and 'password' in localServer.conf['allow'][self.cls] and command not in ['pass', 'cap']:
+                if not self.registered and self.cls and not self.server_pass_accepted and 'password' in localServer.conf['allow'][self.cls] and command not in ['pass', 'cap']:
                     return self.quit('Password required')
 
                 ignore = ['ping', 'pong', 'ison', 'watch', 'who', 'privmsg', 'notice', 'ns', 'cs', 'nickserv', 'chanserv', 'id', 'identify', 'login', 'auth']
