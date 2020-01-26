@@ -10,6 +10,7 @@ from handle.functions import logging
 def connectTo(self, localServer, name, autoLink=False):
     try:
         host, port = localServer.conf['link'][name]['outgoing']['host'], localServer.conf['link'][name]['outgoing']['port']
+        # If the host is local, and you are listening for servers on the port, do not connect to yourself.
         if host in ['127.0.0.1', '0.0.0.0', 'localhost'] and (port in localServer.conf['listen'] and localServer.conf['listen'][str(port)]['options'] == 'servers'):
             return
         pswd = localServer.conf['link'][name]['pass']

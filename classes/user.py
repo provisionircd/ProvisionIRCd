@@ -18,6 +18,7 @@ import datetime
 import threading
 import hashlib
 import select
+import ipaddress
 import objgraph
 
 if sys.version_info[0] < 3:
@@ -177,7 +178,7 @@ class User:
                         callable[2](self, server)
                     except Exception as ex:
                         logging.exception(ex)
-                if 'dnsbl' in self.server.conf and self.ip.replace('.', '').isdigit():
+                if 'dnsbl' in self.server.conf and self.ip.replace('.', '').isdigit() and not ipaddress.ip_address(self.ip).is_private:
                     #self.sendraw('020', ':Please wait while we process your connection.')
                     dnsbl_except = False
                     if 'except' in self.server.conf and 'dnsbl' in self.server.conf['except']:
@@ -536,21 +537,6 @@ class User:
                     callable[2](self, self.server)
                 except Exception as ex:
                     logging.exception(ex)
-            '''
-            for cls in self.server.conf['allow']:
-                if 'ip' in self.server.conf['allow'][cls]:
-                    clientmask = '{}@{}'.format(self.ident, self.ip)
-                    isMatch = match(self.server.conf['allow'][cls]['ip'], clientmask)
-                if 'hostname' in self.server.conf['allow'][cls]:
-                    clientmask = '{}@{}'.format(self.ident, self.hostname)
-                    isMatch = match(self.server.conf['allow'][cls]['hostname'], clientmask)
-                if isMatch:
-                    if 'options' in self.server.conf['allow'][cls]:
-                        if 'ssl' in self.server.conf['allow'][cls]['options'] and not self.ssl:
-                            continue
-                    self.cls = cls
-                    break
-            '''
 
             if not self.cls:
                 return self.quit('You are not authorized to connect to this server')
