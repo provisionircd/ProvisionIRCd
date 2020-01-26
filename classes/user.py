@@ -549,7 +549,7 @@ class User:
             if len(clones) > int(self.server.conf['allow'][self.cls]['maxperip']):
                 return self.quit('Maximum connections from your IP')
 
-            current_lusers = len([user for user in self.server.users if user.server == self.server])
+            current_lusers = len([user for user in self.server.users if user.server == self.server and user.registered])
             if current_lusers > self.server.maxusers:
                 self.server.maxusers = current_lusers
 

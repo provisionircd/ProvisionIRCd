@@ -23,7 +23,7 @@ def initlogging(localServer):
         os.mkdir('logs')
     #loghandlers = [logging.handlers.TimedRotatingFileHandler('logs/log.txt', when='midnight')]
     filename = 'logs/ircd.log'.format(datetime.datetime.today().strftime('%Y-%m-%d'))
-    loghandlers = [logging.handlers.RotatingFileHandler(filename, maxBytes=1024*1000, backupCount=9)]
+    loghandlers = [logging.handlers.RotatingFileHandler(filename, maxBytes=1024*2000, backupCount=29)]
     if not localServer.forked:
         stream = logging.StreamHandler()
         stream.terminator = '\n'+W
