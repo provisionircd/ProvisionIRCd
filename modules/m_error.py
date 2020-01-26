@@ -10,5 +10,5 @@ import ircd
 def error(self, localServer, recv):
     ### :00B ERROR :msg
     msg = ' '.join(recv[2:])[1:]
-    #localServer.snotice('s', '*** {}'.format(msg), local=True)
-    self.quit(msg)
+    localServer.snotice('s', '*** {}'.format(msg), local=True)
+    self.quit(msg, silent=True)

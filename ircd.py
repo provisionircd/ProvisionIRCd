@@ -484,9 +484,10 @@ class Server:
         return "<Server '{}:{}'>".format('*' if not hasattr(self, 'hostname') else self.hostname, '*' if not hasattr(self, 'sid') else self.sid)
 
     def quit(self, reason, silent=False, error=False, source=None, squit=True):
-        if not hasattr(self, 'socket'):
-            self.socket = None
         localServer = self.localServer
+        if not hasattr(self, 'socket') or self not in localServer.servers:
+            #self.socket = None
+            return
         logging.info('Server QUIT self: {} :: reason: {}'.format(self, reason))
         if self in localServer.servers:
             logging.info('Removing self {}'.format(self))
@@ -507,14 +508,32 @@ class Server:
                         skip.append(self.uplink)
                     localServer.new_sync(localServer, skip, ':{} SQUIT {} :{}'.format(localServer.sid, self.hostname, reason))
 
-            if not silent and self.hostname and (hasattr(self, 'socket') and self.socket):
-                if not self.eos and self not in localServer.linkrequester:
-                    msg = 'Link denied for server {}: {}'.format(self.hostname, reason)
-                else:
-                    msg = '*** {} to server {}: {}'.format('Unable to connect' if not self.eos and not self.netinfo else 'Lost connection', self.hostname, reason)
-                localServer.snotice('s', msg, local=True)
+            if not silent and self.hostname:
+                try:
+                    ip, port = self.socket.getpeername()
+                except:
+                    ip, port = self.socket.getsockname()
+                t = 0
+                placeholder = ''
+                if self.eos and self.netinfo:
+                    placeholder = "Lost connection to"
+                    t = 1
+                elif self.hostname in localServer.pendingLinks:
+                    placeholder = "Unable to connect to"
+                    t = 2
+                elif not self.eos: # and 'link' in localServer.conf and self.hostname in localServer.conf['link']:
+                    placeholder = "Link denied for"
+                    t = 3
+                if placeholder:
+                    msg = '*** {} server {}[{}:{}]: {}'.format(placeholder, self.hostname, ip, port, reason)
+                    localServer.snotice('s', msg, local=True)
+
+                if self.is_ssl and t == 2:
+                    localServer.snotice('s', '*** Make sure SSL is enabled on both ends and ports are listening for SSL connections.', local=True)
+
             if self in localServer.linkrequester:
                 del localServer.linkrequester[self]
+
             self.eos = False
 
             if self.hostname in localServer.linkRequests:
@@ -553,7 +572,7 @@ class Server:
                 logging.info('Quitting server {}'.format(server))
                 server.quit('{} {}'.format(self.hostname, source.hostname if source else localServer.hostname))
 
-            if hasattr(self, 'socket') and self.socket:
+            if self.socket:
                 if localServer.use_poll:
                     localServer.pollerObject.unregister(self.socket)
                 try:
@@ -568,7 +587,7 @@ class Server:
 
             if not localServer.forked:
                 logging.debug('[SERVER] Growth after self.quit() (if any):')
-                objgraph.show_growth(limit=20)
+                objgraph.show_growth(limit=10)
 
             del self
 
@@ -656,7 +675,7 @@ class Server:
 
     def listenToPort(self, port, type):
         try:
-            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
             self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self.sock.bind(("", port))
             self.sock.listen(5)

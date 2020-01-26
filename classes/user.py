@@ -94,21 +94,22 @@ READ_ONLY = (
 READ_WRITE = READ_ONLY | select.POLLOUT
 
 def resolve_ip(self):
+    ip = self.ip if self.ip.replace('.', '').isdigit() else self.ip[7:]
     try:
-        ip_resolved = socket.gethostbyaddr(self.ip)[0]
+        ip_resolved = socket.gethostbyaddr(ip)[0]
     except socket.herror: ### Not a typo.
-        ip_resolved = self.ip
+        ip_resolved = ip
     except Exception as ex:
         logging.exception(ex)
     deny_except = False
     if 'except' in self.server.conf and 'deny' in self.server.conf['except']:
         for e in self.server.conf['except']['deny']:
-            if match(e, self.ident+'@'+ip_resolved) or match(e, self.ident+'@'+self.ip):
+            if match(e, self.ident+'@'+ip_resolved) or match(e, self.ident+'@'+ip):
                 deny_except = True
                 break
     if not deny_except:
         for entry in self.server.deny:
-            if match(entry, self.ident+'@'+ip_resolved) or match(entry, self.ident+'@'+self.ip):
+            if match(entry, self.ident+'@'+ip_resolved) or match(entry, self.ident+'@'+ip):
                 return self.quit('Your host matches a deny block, and is therefore not allowed.')
 
 class User:
@@ -150,6 +151,10 @@ class User:
                 self.localServer = server
                 self.addr = address
                 self.ip, self.hostname = self.addr[0], self.addr[0]
+                if self.ip.startswith('::ffff:') and self.ip[7:].replace('.', '').isdigit():
+                    #logging.debug('Invalid IPv6, using {}'.format(self.ip[7:]))
+                    self.ip = self.ip[7:]
+
                 threading.Thread(target=resolve_ip, args=([self])).start()
                 self.cls = None
                 self.signon = int(time.time())
@@ -164,7 +169,7 @@ class User:
                         callable[2](self, server)
                     except Exception as ex:
                         logging.exception(ex)
-                if 'dnsbl' in self.server.conf:
+                if 'dnsbl' in self.server.conf and self.ip.replace('.', '').isdigit():
                     #self.sendraw('020', ':Please wait while we process your connection.')
                     dnsbl_except = False
                     if 'except' in self.server.conf and 'dnsbl' in self.server.conf['except']:
@@ -202,6 +207,7 @@ class User:
                 self.lastPingSent = time.time() * 1000
                 self.lag_measure = self.lastPingSent
                 self.server.totalcons += 1
+
                 if self.ssl and self.socket:
                     try:
                         fp = self.socket.getpeercert(binary_form=True)
@@ -246,7 +252,6 @@ class User:
                             if 'ssl' in self.server.conf['allow'][cls]['options'] and not self.ssl:
                                 continue
                         self.cls = cls
-                        logging.debug('Assigned class {} to {}'.format(self.cls, self.nickname))
                         break
 
             else:
@@ -587,7 +592,7 @@ class User:
             msg = '*** Client connecting: {} ({}@{}) {{{}}} [{}{}]'.format(self.nickname, self.ident, self.hostname, self.cls, 'secure' if self.ssl else 'plain', ' '+self.socket.cipher()[0] if self.ssl else '')
             self.server.snotice('c', msg)
 
-            binip = IPtoBase64(self.ip)
+            binip = IPtoBase64(self.ip) if self.ip.replace('.', '').isdigit() else self.ip
             data = '{} {} {} {} {} {} 0 +{} {} {} {} :{}'.format(self.nickname, self.server.hopcount, self.signon, self.ident, self.hostname, self.uid, self.modes, self.cloakhost, self.cloakhost, binip, self.realname)
             self.server.new_sync(self.server, self.server, ':{} UID {}'.format(self.server.sid, data))
 
@@ -787,7 +792,7 @@ class User:
             if not localServer.forked:
                 try:
                     logging.debug('Growth after self.quit() (if any):')
-                    objgraph.show_growth(limit=20)
+                    objgraph.show_growth(limit=10)
                 except: # Prevent weird spam shit.
                     pass
 

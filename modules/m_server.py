@@ -42,6 +42,13 @@ def server(self, localServer, recv):
                 self.name = self.name[1:]
 
             logging.info('{}Hostname for {} set: {}{}'.format(G, self, self.hostname, W))
+            if [s for s in localServer.servers+[localServer] if s.hostname.lower() == self.hostname.lower() and s != self]:
+                logging.error('Server {} already exists on this network'.format(self.hostname))
+                error = 'Error connecting to server {}[{}:{}]: server {} already exists on remote network'.format(self.hostname, ip, port, self.hostname)
+                self._send(':{} ERROR :{}'.format(localServer.sid, error))
+                self.quit('server {} already exists on this network'.format(self.hostname))
+                return
+
             logging.info('{}Server name for {} set: {}{}'.format(G, self, self.name, W))
             logging.info('{}Hopcount for {} set: {}{}'.format(G, self, self.hopcount, W))
             logging.info('{}SID for {} set: {}{}'.format(G, self, self.sid, W))
@@ -49,24 +56,16 @@ def server(self, localServer, recv):
             ip, port = self.socket.getpeername()
             ip2, port2 = self.socket.getsockname()
             if self.hostname not in localServer.conf['link']:
-                msg = 'Error connecting to server {}[{}:{}]: no matching link configuration: not found in conf'.format(self.hostname, ip, port)
-                error = 'Error connecting to server {}[{}:{}]: no matching link configuration1'.format(localServer.hostname, ip2, port2)
-                if self not in localServer.linkrequester:
-                    self._send(':{} ERROR :{}'.format(localServer.sid, error))
-                elif localServer.linkrequester[self]:
-                    localServer.linkrequester[self].send('NOTICE', '*** {}'.format(msg))
-                self.quit('no matching link configuration1')
+                error = 'Error connecting to server {}[{}:{}]: no matching link configuration'.format(localServer.hostname, ip2, port2)
+                self._send(':{} ERROR :{}'.format(localServer.sid, error))
+                self.quit('no matching link configuration')
                 return
 
             self.cls = localServer.conf['link'][self.hostname]['class']
             logging.info('{}Class: {}{}'.format(G, self.cls, W))
             if not self.cls:
-                msg = 'Error connecting to server {}[{}:{}]: no matching link configuration: remote server has no class'.format(self.hostname, ip, port)
-                error = 'Error connecting to server {}[{}:{}]: no matching link configuration1'.format(localServer.hostname, ip2, port2)
-                if self not in localServer.linkrequester:
-                    self._send(':{} ERROR :{}'.format(localServer.sid, error))
-                elif localServer.linkrequester[self]:
-                    localServer.linkrequester[self].send('NOTICE', '*** {}'.format(msg))
+                error = 'Error connecting to server {}[{}:{}]: no matching link configuration'.format(localServer.hostname, ip2, port2)
+                self._send(':{} ERROR :{}'.format(localServer.sid, error))
                 self.quit('no matching link configuration')
                 return
             totalClasses = list(filter(lambda s: s.cls == self.cls, localServer.servers))
@@ -76,22 +75,15 @@ def server(self, localServer, recv):
 
             if self.linkpass:
                 if self.linkpass != localServer.conf['link'][self.hostname]['pass']:
-                    msg = 'Error connecting to server {}[{}:{}]: no matching link configuration: wrong password'.format(self.hostname, ip, port)
-                    error = 'Error connecting to server {}[{}:{}]: no matching link configuration2'.format(localServer.hostname, ip2, port2)
-                    if self not in localServer.linkrequester:
-                        self._send(':{} ERROR :{}'.format(localServer.sid, error))
-                    elif localServer.linkrequester[self]:
-                        localServer.linkrequester[self].send('NOTICE', '*** {}'.format(msg))
-                    self.quit('no matching link configuration2')
-                    return
-            if not match(localServer.conf['link'][self.hostname]['incoming']['host'], ip):
-                msg = 'Error connecting to server {}[{}:{}]: no matching link configuration: incoming IP does not match'.format(self.hostname, ip, port)
-                error = 'Error connecting to server {}[{}:{}]: no matching link configuration3'.format(localServer.hostname, ip2, port2)
-                if self not in localServer.linkrequester:
+                    error = 'Error connecting to server {}[{}:{}]: no matching link configuration'.format(localServer.hostname, ip2, port2)
                     self._send(':{} ERROR :{}'.format(localServer.sid, error))
-                elif localServer.linkrequester[self]:
-                    localServer.linkrequester[self].send('NOTICE', '*** {}'.format(msg))
-                self.quit('no matching link configuration3')
+                    self.quit('no matching link configuration')
+                    return
+
+            if not match(localServer.conf['link'][self.hostname]['incoming']['host'], ip):
+                error = 'Error connecting to server {}[{}:{}]: no matching link configuration'.format(localServer.hostname, ip2, port2)
+                self._send(':{} ERROR :{}'.format(localServer.sid, error))
+                self.quit('no matching link configuration')
                 return
 
             if self.hostname not in localServer.conf['settings']['ulines']:

@@ -3,8 +3,10 @@
 """
 
 import ircd
-import bcrypt
-
+try:
+    import bcrypt
+except:
+    pass
 @ircd.Modules.params(1)
 @ircd.Modules.req_modes('o')
 @ircd.Modules.commands('mkpasswd')

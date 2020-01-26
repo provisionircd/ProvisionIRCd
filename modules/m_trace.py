@@ -9,6 +9,8 @@ import urllib.request
 import logging
 import time
 import re
+import ssl
+ssl._create_default_https_context = ssl._create_unverified_context
 from modules.chanmodes.m_extbans import prefix, ext_bans
 from modules.m_joinpart import checkMatch
 from handle.functions import match
@@ -22,7 +24,7 @@ for e in trace_bans:
 def connect_hook(self, localServer):
     if not hasattr(localServer, 'geodata'):
         localServer.geodata = {} ### Store info with IP.
-    if self.ip not in localServer.geodata:
+    if self.ip.replace('.', '').isdigit() and self.ip not in localServer.geodata:
         url = 'https://extreme-ip-lookup.com/json/'+self.ip
         #url = 'http://ip-api.com/json/'+self.ip
         with urllib.request.urlopen(url) as response:

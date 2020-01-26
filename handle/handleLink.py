@@ -90,10 +90,8 @@ def selfIntroduction(localServer, newServer, outgoing=False):
                 modlist.append(entry)
             if modlist:
                 newServer._send('MODLIST :{}'.format(' '.join(modlist)))
-            # Prefixed it with :SID, removed version info.
             # [Jan 26 02:21:47.873135 2020] Debug: Received: :001 SERVER dev.provisionweb.org 1 :ProvisionDev
             # [Jan 26 02:21:47.873161 2020] Debug: unexpected non-server source 001 for SERVER
-
             newServer._send('SERVER {} 1 :{} {}'.format(localServer.hostname, version, localServer.name)) # Old, should not be used.
             logging.info('{}Introduced myself to {}. Expecting remote sync sequence...{}'.format(Y, newServer.hostname, W))
         localServer.introducedTo.append(newServer)
@@ -110,7 +108,7 @@ def syncUsers(localServer, newServer, local_only):
             newServer.syncDone.append(server)
             logging.info('{}Syncing info from {} to {}{}'.format(Y, server.hostname, newServer.hostname, W))
             for u in [u for u in localServer.users if u.server == server and u.registered]:
-                ip = IPtoBase64(u.ip)
+                ip = IPtoBase64(u.ip) if u.ip.replace('.', '').isdigit() else u.ip
                 if not ip:
                     ip = '*'
                 hopcount = str(u.server.hopcount + 1)
@@ -226,10 +224,7 @@ class Link(threading.Thread):
             logging.exception(ex)
             if serv:
                 serv.quit(str(ex))
-            if self.origin:
-                #self.origin.send('NOTICE', '*** Error connecting to server {}[{}:{}]: {}'.format(self.name, self.host, self.port, ex))
-                if self.is_ssl:
-                    self.origin.send('NOTICE', '*** Make sure SSL is enabled on both ends and ports are listening for SSL connections.'.format(self.name, self.host, self.port, ex))
+
         finally:
             if self.name.lower() in self.localServer.pendingLinks:
                 self.localServer.pendingLinks.remove(self.name.lower())

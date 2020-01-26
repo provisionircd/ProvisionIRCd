@@ -73,7 +73,9 @@ def sock_accept(localServer, s):
                                             ciphers='HIGH'
                                             )
                     is_ssl = 1
+
                 logging.info('Wrapped incoming user socket {} in SSL'.format(conn))
+                '''
                 try:
                     fp = conn.getpeercert(True)
                     if fp:
@@ -81,6 +83,7 @@ def sock_accept(localServer, s):
                         logging.info('Fingerprint: {}'.format(ssl_fingerprint))
                 except Exception as ex:
                     logging.exception(ex)
+                '''
             u = User(localServer, conn, addr, is_ssl)
             if localServer.use_poll:
                 localServer.fd_to_socket[u.fileno()] = (u.socket, u)
@@ -188,7 +191,6 @@ class data_handler: #(threading.Thread):
             try:
                 if localServer.use_poll:
                     fdVsEvent = localServer.pollerObject.poll(1000)
-                    #print('y u no read? {}'.format(fdVsEvent))
                     for fd, Event in fdVsEvent:
                         try:
                             s = localServer.fd_to_socket[fd][0]

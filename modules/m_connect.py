@@ -54,5 +54,5 @@ def connect(self, localServer, recv):
     if [server for server in set(localServer.servers) if server.hostname == name and server.eos]:
         self.send('NOTICE', '*** Already linked to {}.'.format(name))
         return
-    localServer.pendingLinks.append(name.lower())
+    localServer.pendingLinks.append(name)
     connectTo(self, localServer, name)
