@@ -154,6 +154,9 @@ class User:
                 if self.ip.startswith('::ffff:') and self.ip[7:].replace('.', '').isdigit():
                     #logging.debug('Invalid IPv6, using {}'.format(self.ip[7:]))
                     self.ip = self.ip[7:]
+                if self.hostname.startswith('::ffff:') and self.hostname[7:].replace('.', '').isdigit():
+                    #logging.debug('Invalid IPv6, using {}'.format(self.ip[7:]))
+                    self.hostname = self.hostname[7:]
 
                 threading.Thread(target=resolve_ip, args=([self])).start()
                 self.cls = None
@@ -163,6 +166,11 @@ class User:
                 self.recvbuffer = ''
                 self.validping = False
                 self.server_pass_accepted = False
+                self.uid = '{}{}'.format(self.server.sid, ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(6)))
+                while [u for u in self.server.users if hasattr(u, 'uid') and u != self and u.uid == self.uid]:
+                #while list(filter(lambda u: u.uid == self.uid, self.server.users)):
+                    self.uid = '{}{}'.format(self.server.sid, ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(6)))
+
                 self.server.users.append(self)
                 for callable in [callable for callable in server.hooks if callable[0].lower() == 'new_connection']:
                     try:
@@ -198,11 +206,6 @@ class User:
                 self.server.throttle[self] = {}
                 self.server.throttle[self]['ip'] = self.ip
                 self.server.throttle[self]['ctime'] = int(time.time())
-
-                self.uid = '{}{}'.format(self.server.sid, ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(6)))
-                while [u for u in self.server.users if hasattr(u, 'uid') and u != self and u.uid == self.uid]:
-                #while list(filter(lambda u: u.uid == self.uid, self.server.users)):
-                    self.uid = '{}{}'.format(self.server.sid, ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(6)))
 
                 self.lastPingSent = time.time() * 1000
                 self.lag_measure = self.lastPingSent
