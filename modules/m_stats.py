@@ -8,13 +8,12 @@ import sys
 import os
 import time
 import datetime
-import threading
 try:
     import psutil
 except ImportError:
     pass
 
-from handle.functions import is_sslport
+from handle.functions import is_sslport, logging
 
 stats = 'deglpuCGLO'
 
@@ -100,7 +99,7 @@ def show_stats(self, localServer, recv):
             for link in localServer.conf['link']:
                 t = localServer.conf['link'][link]
                 name = link
-                if recv[1] == 'l' and not [ s for s in localServer.servers if s.hostname == name      ]:
+                if recv[1] == 'l' and not [ s for s in localServer.servers if s.hostname == name]:
                     continue
                 link_class = t['class']
                 incoming_host = t['incoming']['host']
@@ -110,7 +109,7 @@ def show_stats(self, localServer, recv):
                         outgoing_host = t['outgoing']['host']
                     if 'port' in t['outgoing']:
                         outgoing_port = t['outgoing']['port']
-                self.sendraw(223, '{} :{} {}'.format(recv[1], link, link_class))
+                self.sendraw(210, '{} :{} >{} {{{}}}'.format(recv[1], link, incoming_host, link_class))
 
 
         elif recv[1] == 'p':
@@ -148,7 +147,4 @@ def show_stats(self, localServer, recv):
         msg = '* Stats "{}" requested by {} ({}@{})'.format(recv[1], self.nickname, self.ident, self.hostname)
         localServer.snotice('s', msg)
     except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        print(e)
+        logging.exception(ex)
