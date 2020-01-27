@@ -132,6 +132,7 @@ class Server:
                 self.channels = []
                 self.dnsblCache = {}
                 self.hostcache = {}
+                self.deny_cache = {}
                 self.throttle = {}
                 self.tkl = {}
                 self.user_modes = {

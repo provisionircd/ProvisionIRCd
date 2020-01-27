@@ -302,6 +302,9 @@ def check_loops(localServer):
     if len(localServer.hostcache) >= 1024:
         del localServer.hostcache[localServer.hostcache[0]]
 
+    if len(localServer.deny_cache) >= 1024:
+        del localServer.deny_cache[localServer.deny_cache[0]]
+
     ### Remove cached host look-ups after 6 hours.
     for host in (host for host in dict(localServer.hostcache) if int(time.time()) - localServer.hostcache[host]['ctime'] > 3600.0*6):
         del localServer.hostcache[host]
@@ -309,6 +312,10 @@ def check_loops(localServer):
     ### Remove cached DNSBL after 1 day.
     for host in (host for host in dict(localServer.dnsblCache) if int(time.time()) - localServer.dnsblCache[host]['ctime'] > 3600.0*24):
         del localServer.dnsblCache[host]
+
+    ### Remove cached Deny entries after 1 day.
+    for host in (host for host in dict(localServer.deny_cache) if int(time.time()) - localServer.deny_cache[host]['ctime'] > 3600.0*24):
+        del localServer.deny_cache[host]
 
     ### Check for unregistered connections.
     for user in (user for user in list(localServer.users) if user.socket and not user.registered):

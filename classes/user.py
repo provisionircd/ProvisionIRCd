@@ -59,6 +59,8 @@ class blacklist_check(threading.Thread):
                 user.server.snotice('d', msg)
             if user in user.server.users:
                 user._send(':{} 304 * :{}'.format(user.server.hostname, reason))
+            user.sendbuffer = ''
+            user.recvbuffer = ''
             user.quit(reason)
 
         except socket.gaierror: # socket.gaierror: [Errno -2] Name or service not known -> no match.
@@ -74,10 +76,14 @@ def DNSBLCheck(self):
         reason = 'Your IP is blacklisted by {}'.format(localServer.dnsblCache[user.ip]['bl']+' [cached]')
         for u in [u for u in list(localServer.users) if u.ip == user.ip]:
             u._send(':{} 304 * :{}'.format(localServer.hostname, reason))
+            u.sendbuffer = ''
+            u.recvbuffer = ''
             u.quit(reason)
         return
     if user.ip in localServer.bannedList:
         user._send(':{} 304 * :Your IP has been banned (listed locally).'.format(localServer.hostname))
+        user.sendbuffer = ''
+        user.recvbuffer = ''
         user.quit('Your IP has been banned (listed locally)')
         return
 
@@ -96,21 +102,28 @@ READ_WRITE = READ_ONLY | select.POLLOUT
 
 def resolve_ip(self):
     ip = self.ip if self.ip.replace('.', '').isdigit() else self.ip[7:]
+
     try:
         ip_resolved = socket.gethostbyaddr(ip)[0]
     except socket.herror: ### Not a typo.
         ip_resolved = ip
     except Exception as ex:
         logging.exception(ex)
+
     deny_except = False
     if 'except' in self.server.conf and 'deny' in self.server.conf['except']:
         for e in self.server.conf['except']['deny']:
-            if match(e, self.ident+'@'+ip_resolved) or match(e, self.ident+'@'+ip):
+            if match(e, self.ident+'@'+ip_resolved):
                 deny_except = True
                 break
     if not deny_except:
         for entry in self.server.deny:
-            if match(entry, self.ident+'@'+ip_resolved) or match(entry, self.ident+'@'+ip):
+            if match(entry, self.ident+'@'+ip_resolved):
+                self.server.deny_cache[ip] = {}
+                self.server.deny_cache[ip]['ctime'] = int(time.time())
+                self.server.deny_cache[ip]['reason'] = self.server.deny[entry] if self.server.deny[entry] else ''
+                if self.server.deny_cache[ip]['reason']:
+                    self.server.notice(self, '* Connection denied: {}'.format(self.server.deny_cache[ip]['reason']))
                 return self.quit('Your host matches a deny block, and is therefore not allowed.')
 
 class User:
@@ -159,7 +172,6 @@ class User:
                     #logging.debug('Invalid IPv6, using {}'.format(self.ip[7:]))
                     self.hostname = self.hostname[7:]
 
-                threading.Thread(target=resolve_ip, args=([self])).start()
                 self.cls = None
                 self.signon = int(time.time())
                 self.registered = False
@@ -243,20 +255,6 @@ class User:
                 TKL.check(self, self.server, self, 'G')
 
                 self.cloakhost = cloak(self.server, self.hostname)
-
-                for cls in self.server.conf['allow']:
-                    if 'ip' in self.server.conf['allow'][cls]:
-                        clientmask = '{}@{}'.format(self.ident, self.ip)
-                        isMatch = match(self.server.conf['allow'][cls]['ip'], clientmask)
-                    if 'hostname' in self.server.conf['allow'][cls]:
-                        clientmask = '{}@{}'.format(self.ident, self.hostname)
-                        isMatch = match(self.server.conf['allow'][cls]['hostname'], clientmask)
-                    if isMatch:
-                        if 'options' in self.server.conf['allow'][cls]:
-                            if 'ssl' in self.server.conf['allow'][cls]['options'] and not self.ssl:
-                                continue
-                        self.cls = cls
-                        break
 
             else:
                 try:
@@ -477,6 +475,8 @@ class User:
                 self.server.pollerObject.modify(self.socket, READ_WRITE)
 
     def send(self, command, data):
+        if not self.socket:
+            return
         self._send(':{} {} {} {}'.format(self.server.hostname, command, self.nickname, data))
 
     def sendraw(self, numeric, data):
@@ -538,7 +538,60 @@ class User:
                 except Exception as ex:
                     logging.exception(ex)
 
-            if not self.cls:
+            deny, reason = 0, ''
+            if self.ip in self.server.deny_cache:
+                deny = 1
+                if 'reason' in self.server.deny_cache[self.ip]:
+                    reason = self.server.deny_cache[self.ip]['reason']
+
+            deny_except = False
+            if 'except' in self.server.conf and 'deny' in self.server.conf['except']:
+                for e in self.server.conf['except']['deny']:
+                    if match(e, self.ident+'@'+self.ip) or match(e, self.ident+'@'+self.hostname):
+                        deny_except = True
+                        break
+
+            if not deny_except and not deny:
+                for entry in self.server.deny:
+                    if match(entry, self.ident+'@'+self.ip) or match(entry, self.ident+'@'+self.hostname):
+                        self.server.deny_cache[self.ip] = {}
+                        self.server.deny_cache[self.ip]['ctime'] = int(time.time())
+                        reason = self.server.deny[entry] if self.server.deny[entry] else ''
+                        self.server.deny_cache[self.ip]['reason'] = reason
+                        logging.info('Denied client {} with match: {} [{}]'.format(self, entry, reason))
+                        deny = 1
+                        break
+
+            if deny:
+                if reason:
+                    self.server.notice(self, '* Connection denied: {}'.format(reason))
+                return self.quit('Your host matches a deny block, and is therefore not allowed.')
+
+            block = 0
+            for cls in [cls for cls in self.server.conf['allow'] if cls in self.server.conf['class']]:
+                t = self.server.conf['allow'][cls]
+                if 'ip' in t:
+                    clientmask = '{}@{}'.format(self.ident, self.ip)
+                    isMatch = match(t['ip'], clientmask)
+                if 'hostname' in t:
+                    clientmask = '{}@{}'.format(self.ident, self.hostname)
+                    isMatch = match(t, ['hostname'], clientmask)
+                if isMatch:
+                    if 'options' in t:
+                        if 'ssl' in t['options'] and not self.ssl:
+                            continue
+                    self.cls = cls
+                    if 'block' in t:
+                        for entry in t['block']:
+                            clientmask_ip = '{}@{}'.format(self.ident, self.ip)
+                            clientmask_host = '{}@{}'.format(self.ident, self.hostname)
+                            block = match(entry, clientmask_ip) or match(entry, clientmask_host)
+                            if block:
+                                logging.info('Client {} blocked by {}: {}'.format(self, cls, entry))
+                                break
+                    break
+
+            if not self.cls or block:
                 return self.quit('You are not authorized to connect to this server')
 
             totalClasses = list(filter(lambda u: u.registered and u.server == self.server and u.cls == self.cls, self.server.users))
@@ -549,6 +602,10 @@ class User:
             if len(clones) > int(self.server.conf['allow'][self.cls]['maxperip']):
                 return self.quit('Maximum connections from your IP')
 
+            # Resolve IP in the background to test against deny-block matches, if host resolution is disabled.
+            if 'dontresolve' in self.server.conf['settings']:
+                threading.Thread(target=resolve_ip, args=([self])).start()
+
             current_lusers = len([user for user in self.server.users if user.server == self.server and user.registered])
             if current_lusers > self.server.maxusers:
                 self.server.maxusers = current_lusers
@@ -558,6 +615,8 @@ class User:
                 if self.server.maxgusers % 10 == 0:
                     self.server.snotice('s', '*** New global user record: {}'.format(self.server.maxgusers))
 
+            if not hasattr(self, 'socket'):
+                return
             self.sendraw('001', ':Welcome to the {} IRC Network {}!{}@{}'.format(self.server.name, self.nickname, self.ident, self.hostname))
             self.sendraw('002', ':Your host is {}, running version {}'.format(self.server.hostname, self.server.version))
             d = datetime.datetime.fromtimestamp(self.server.creationtime).strftime('%a %b %d %Y')
@@ -575,10 +634,12 @@ class User:
 
             self.sendraw('004', '{} {} {} {}'.format(self.server.hostname, self.server.version, umodes, chmodes))
             show_support(self, self.server)
-
-            if self.ssl and hasattr(self.socket, 'cipher'):
-                self.send('NOTICE', ':*** You are connected to {} with {}-{}'.format(self.server.hostname, self.socket.version(), self.socket.cipher()[0]))
-            msg = '*** Client connecting: {} ({}@{}) {{{}}} [{}{}]'.format(self.nickname, self.ident, self.hostname, self.cls, 'secure' if self.ssl else 'plain', ' '+self.socket.cipher()[0] if self.ssl else '')
+            cipher = None
+            if self.ssl and hasattr(self.socket, 'cipher') and self.socket.cipher:
+                if self.socket.cipher():
+                    cipher = self.socket.cipher()[0]
+                    self.send('NOTICE', ':*** You are connected to {} with {}-{}'.format(self.server.hostname, self.socket.version(), cipher))
+            msg = '*** Client connecting: {} ({}@{}) {{{}}} [{}{}]'.format(self.nickname, self.ident, self.hostname, self.cls, 'secure' if self.ssl else 'plain', '' if not cipher else ' '+cipher)
             self.server.snotice('c', msg)
 
             binip = IPtoBase64(self.ip) if self.ip.replace('.', '').isdigit() else self.ip

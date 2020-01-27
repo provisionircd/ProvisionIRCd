@@ -14,11 +14,9 @@ try:
 except ImportError:
     pass
 
-#import resource
-#import objgraph
 from handle.functions import is_sslport
 
-stats = 'degpuCGO'
+stats = 'deglpuCGLO'
 
 @ircd.Modules.req_modes('o')
 @ircd.Modules.req_flags('stats')
@@ -30,10 +28,12 @@ def show_stats(self, localServer, recv):
             self.sendraw(210, ':d - Displays the local DNSBL cache')
             self.sendraw(210, ':e - View exceptions list')
             self.sendraw(210, ':g - View the local TKL info')
+            self.sendraw(210, ':l - View link information')
             self.sendraw(210, ':p - View open ports and their type')
             self.sendraw(210, ':u - View server uptime')
             self.sendraw(210, ':C - View raw server data and info')
             self.sendraw(210, ':G - View the global TKL info')
+            self.sendraw(210, ':L - View link all information, including unlinked')
             self.sendraw(210, ':O - Send the oper block list')
             self.sendraw(219, '* :End of /STATS report')
             return
@@ -95,6 +95,22 @@ def show_stats(self, localServer, recv):
                 for mask in localServer.tkl[type]:
                     display = mask.split('@')[1] if type == 'Q' else mask
                     self.sendraw(223, '{} {} {} {} {} :{}'.format(type, display, int(localServer.tkl[type][mask]['expire'])-int(time.time()) if localServer.tkl[type][mask]['expire'] != '0' else '0', localServer.tkl[type][mask]['ctime'], localServer.tkl[type][mask]['setter'], localServer.tkl[type][mask]['reason']))
+
+        elif recv[1] in 'lL':
+            for link in localServer.conf['link']:
+                t = localServer.conf['link'][link]
+                name = link
+                if recv[1] == 'l' and not [ s for s in localServer.servers if s.hostname == name      ]:
+                    continue
+                link_class = t['class']
+                incoming_host = t['incoming']['host']
+                outgoing_host, outgoing_port = None, None
+                if 'outgoing' in t:
+                    if 'host' in t['outgoing']:
+                        outgoing_host = t['outgoing']['host']
+                    if 'port' in t['outgoing']:
+                        outgoing_port = t['outgoing']['port']
+                self.sendraw(223, '{} :{} {}'.format(recv[1], link, link_class))
 
 
         elif recv[1] == 'p':
