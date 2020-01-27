@@ -60,14 +60,13 @@ They work similar to modes, + for positive and - for negative.
             if not [c for c in localServer.channels if self in c.users and user in c.users] and 'i' in self.modes and not 'o' in self.modes and user != self:
                 continue
                 #logging.debug('Checking mask: {}'.format(m))
-            if (mask[0] not in localServer.chantypes+'*' or mask.lower() not in [c.name.lower() for c in localServer.channels]) and user.nickname != mask:
+            if (mask[0] not in localServer.chantypes+'*' or mask.lower() not in [c.name.lower() for c in localServer.channels]) and mask not in [user.nickname, '*']:
                 continue
 
             if mask[0] in localServer.chantypes+'*':
                 ### Mask is a channel.
-                if mask.lower() not in [c.name.lower() for c in user.channels]:
+                if mask.lower() not in [c.name.lower() for c in user.channels] and mask != '*':
                     continue
-
             paramcount = 0
             pos_match = []
             neg_match = []

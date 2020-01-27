@@ -196,6 +196,15 @@ class Server:
                 logging.info('Core modes set: {}'.format(self.core_chmodes))
                 self.chmodes_string = chmodes_string[:-1]
                 #self.snomasks = 'cdfjkostzCFGNQS'
+
+                ## TODO: { "c": (desc, flags) },
+                self.snos = {
+                    # 1 = local
+                            "d": ("Can read local connect/disconnect notices", (1,3)),
+                            "o": ("See oper-up notices", (0,2)),
+                        }
+
+
                 self.snomasks = {
                                 "c": "Can read local connect/disconnect notices",
                                 "d": "Can see DNSNL hits",
@@ -642,6 +651,10 @@ class Server:
         localServer = self.localServer
         try:
             if sno:
+                if sno in localServer.snos:
+                    flags = localServer.snos[sno][1]
+                    #print('Flags for {}: {}'.format(sno, flags))
+
                 users = list(filter(lambda u: 'o' in u.modes and 's' in u.modes and sno in u.snomasks, localServer.users))
             for user in users:
                 try:
@@ -661,8 +674,8 @@ class Server:
                     displaySource = self.hostname
                 user._send(':{} NOTICE {} :{}'.format(displaySource, user.nickname, msg))
 
-            localsno = ['j', 't', 'G'] ### I removed 's' from localsno. See you soon.
-            if sno not in set(localsno) and sync and not local:
+            localsno = ['d', 'j', 't', 'G'] ### I removed 's' from localsno. See you soon.
+            if sno not in localsno and sync and not local:
                 if sno == 'c':
                     sno = 'C'
                 data = '@{} Ss {} :{}'.format(self.hostname, sno, msg)
