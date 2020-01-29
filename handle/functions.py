@@ -7,28 +7,22 @@ import base64
 import logging
 import logging.handlers
 import json
-import sys
 
 W = '\033[0m'  # white (normal)
 R = '\033[31m' # red
 R2 = '\033[91m' # bright red
-G = '\033[32m' # green
-G2 = '\033[92m' # bright green
 Y = '\033[33m' # yellow
-B = '\033[34m' # blue
-P = '\033[35m' # purple
-
 
 class EnhancedRotatingFileHandler(logging.handlers.TimedRotatingFileHandler):
-    def __init__(self, filename, when='h', interval=1, backupCount=0, encoding=None, delay=0, utc=0, maxBytes=0, backupExpire=0):
-        """ This is just a combination of TimedRotatingFileHandler and RotatingFileHandler (adds maxBytes to TimedRotatingFileHandler)  """
+    def __init__(self, filename, when='midnight', interval=1, backupCount=0, encoding=None, delay=0, utc=0, maxBytes=0, backupExpire=0):
+        """ This is just a combination of TimedRotatingFileHandler and RotatingFileHandler (adds maxBytes to TimedRotatingFileHandler) """
         logging.handlers.TimedRotatingFileHandler.__init__(self, filename, when, interval, backupCount, encoding, delay, utc)
-        self.maxBytes=maxBytes
+
+        self.maxBytes = maxBytes if maxBytes <= 1000*100000 else 1000*100000 # Limit single file to max. 100MB
         self.suffix = '%Y-%m-%d'
         self.filename = filename
-        if backupExpire > 315569260:
-            backupExpire = 315569260
-        self.backupExpire = backupExpire
+        self.backupExpire = backupExpire if backupExpire <= 315569260 else 315569260 # Limit expire to max. 10 years.
+        self.backupCount = backupCount if backupCount <= 999 else 999
 
     def shouldRollover(self, record):
         """
@@ -39,6 +33,7 @@ class EnhancedRotatingFileHandler(logging.handlers.TimedRotatingFileHandler):
 
         we are also comparing times
         """
+
         if self.stream is None:                 # Delay was set...
             self.stream = self._open()
         if self.maxBytes > 0:                   # Are we rolling over?
@@ -75,6 +70,36 @@ class EnhancedRotatingFileHandler(logging.handlers.TimedRotatingFileHandler):
         if not self.delay:
             self.stream = self._open()
 
+        currentTime = int(time.time())
+        dstNow = time.localtime(currentTime)[-1]
+        newRolloverAt = self.computeRollover(currentTime)
+
+        t = self.rolloverAt - self.interval
+        if self.utc:
+            timeTuple = time.gmtime(t)
+        else:
+            timeTuple = time.localtime(t)
+            dstThen = timeTuple[-1]
+            if dstNow != dstThen:
+                if dstNow:
+                    addend = 3600
+                else:
+                    addend = -3600
+                timeTuple = time.localtime(t + addend)
+
+        while newRolloverAt <= currentTime:
+            newRolloverAt = newRolloverAt + self.interval
+
+        if (self.when == 'MIDNIGHT' or self.when.startswith('W')) and not self.utc:
+            dstAtRollover = time.localtime(newRolloverAt)[-1]
+            if dstNow != dstAtRollover:
+                if not dstNow:  # DST kicks in before next rollover, so we need to deduct an hour
+                    addend = -3600
+                else:           # DST bows out before next rollover, so we need to add an hour
+                    addend = 3600
+                newRolloverAt += addend
+        self.rolloverAt = newRolloverAt
+
     def deleteOldFiles(self):
         dirName, baseName = os.path.split(self.baseFilename)
         files = os.listdir(dirName)
@@ -92,18 +117,6 @@ class EnhancedRotatingFileHandler(logging.handlers.TimedRotatingFileHandler):
             oldest = [os.path.join(dirName, f) for f in files if os.path.isfile(os.path.join(dirName, f))]
             oldest.sort(key=lambda f: int(os.path.getmtime(f)*1000))
 
-            '''
-            #oldest_file = oldest[0]
-            #print('According to my calculations, {} is the oldest file.'.format(oldest_file))
-            #ts = int(os.path.getmtime(oldest_file)*1000)
-            #print('Oldest timestamp: {}'.format(ts))
-            for o in oldest:
-                fn = os.path.join(dirName, o)
-                ts = int(os.path.getmtime(fn)*1000)
-                print('{} :: {}'.format(fn, ts))
-            #print('There are a total of {} files residing in the logdir.'.format(len(oldest)))
-            '''
-
             exceed = len(oldest) - self.backupCount
             #print('Exceeding by {} files.'.format(exceed))
             if exceed > 0:
@@ -120,7 +133,7 @@ def initlogging(localServer):
     filename = 'logs/ircd.log'
 
     # Removing files >backupCount OR >backupExpire (in seconds)
-    loghandlers = [EnhancedRotatingFileHandler(filename, maxBytes=1000*1000, backupCount=30, backupExpire=2629744)] # 2629744 = 1 month
+    loghandlers = [EnhancedRotatingFileHandler(filename, when='midnight', maxBytes=1000*1000, backupCount=30, backupExpire=2629744)] # 2629744 = 1 month
     if not localServer.forked:
         stream = logging.StreamHandler()
         stream.terminator = '\n'+W
@@ -151,13 +164,14 @@ def initlogging(localServer):
     mb_size = "%.2f" % mb_size
     logging.debug('Max possible total logs size: {} bytes ({} MB)'.format(max_size, mb_size))
 
+    logging.debug('Logs will rotate log files with interval: {}'.format(l.when))
+
     if max_size > 1000000000:
         gb_size = float(mb_size) / 1000
         gb_size = "%.2f" % gb_size
-        print('{}Total log size limit exceeds 1GB: {} GB{}'.format(R, gb_size, W))
-        print('Pausing for 5 seconds...')
+        print('{}WARNING: Total log size limit exceeds 1GB: {} GB{}'.format(R, gb_size, W))
+        print('Pausing for 5 seconds for visibility...')
         time.sleep(5)
-
 
 class TKL:
     def check(self, localServer, user, type):
