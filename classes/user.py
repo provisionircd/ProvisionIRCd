@@ -573,9 +573,9 @@ class User:
                 if 'ip' in t:
                     clientmask = '{}@{}'.format(self.ident, self.ip)
                     isMatch = match(t['ip'], clientmask)
-                if 'hostname' in t:
+                if 'hostname' in t and not isMatch:
                     clientmask = '{}@{}'.format(self.ident, self.hostname)
-                    isMatch = match(t, ['hostname'], clientmask)
+                    isMatch = match(t['hostname'], clientmask)
                 if isMatch:
                     if 'options' in t:
                         if 'ssl' in t['options'] and not self.ssl:
