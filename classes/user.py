@@ -570,10 +570,11 @@ class User:
             block = 0
             for cls in [cls for cls in self.server.conf['allow'] if cls in self.server.conf['class']]:
                 t = self.server.conf['allow'][cls]
+                isMatch = False
                 if 'ip' in t:
                     clientmask = '{}@{}'.format(self.ident, self.ip)
                     isMatch = match(t['ip'], clientmask)
-                if 'hostname' in t and not isMatch:
+                if 'hostname' in t and not isMatch: # Try with hostname. IP has higher priority.
                     clientmask = '{}@{}'.format(self.ident, self.hostname)
                     isMatch = match(t['hostname'], clientmask)
                 if isMatch:
