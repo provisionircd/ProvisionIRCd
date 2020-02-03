@@ -4,11 +4,14 @@
 
 import ircd
 
-@ircd.Modules.params(1)
-@ircd.Modules.req_class('Server')
-@ircd.Modules.commands('error')
-def error(self, localServer, recv):
-    ### :00B ERROR :msg
-    msg = ' '.join(recv[2:])[1:]
-    localServer.snotice('s', '*** {}'.format(msg), local=True)
-    self.quit(msg, silent=True)
+@ircd.Modules.command
+class Error(ircd.Command):
+    def __init__(self):
+        self.command = 'error'
+        self.params = 1
+        self.req_class = 'Server'
+
+    def execute(self, client, recv):
+        msg = ' '.join(recv[2:])[1:]
+        self.ircd.snotice('s', '*** {}'.format(msg), local=True)
+        client.quit(msg, silent=True)

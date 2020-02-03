@@ -16,15 +16,18 @@ W  = '\033[0m'  # white (normal)
 R  = '\033[31m' # red
 G  = '\033[32m' # green
 Y  = '\033[33m' # yellow
-B  = '\033[34m' # blue
-P  = '\033[35m' # purple
 
-@ircd.Modules.req_class('Server')
-@ircd.Modules.commands('sjoin')
-def sjoin(self, localServer, recv):
-    try:
+
+@ircd.Modules.command
+class Sjoin(ircd.Command):
+    def __init__(self):
+        self.command = 'sjoin'
+        self.req_class = 'Server'
+
+
+    def execute(self, client, recv):
         raw = ' '.join(recv)
-        source = list(filter(lambda s: s.sid == recv[0][1:] or s.hostname == recv[0][1:], localServer.servers))
+        source = list(filter(lambda s: s.sid == recv[0][1:] or s.hostname == recv[0][1:], self.ircd.servers))
         if not source:
             logging.error('/SJOIN source not found!')
             return
@@ -33,15 +36,14 @@ def sjoin(self, localServer, recv):
         channel = recv[3]
         if channel[0] == '&':
             logging.error('{}ERROR: received a local channel from remote server: {}{}'.format(R, channel, W))
-            self.squit('Sync error! Remote server tried to link local channels.')
-            return
+            return client.squit('Sync error! Remote server tried to link local channels.')
 
-        if not self.eos:
-            localServer.new_sync(localServer, self, raw)
-        localServer.parammodes = localServer.chstatus
+        if not client.eos:
+            self.ircd.new_sync(self.ircd, client, raw)
+        self.ircd.parammodes = self.ircd.chstatus
         for x in range(0, 4):
-            for m in [m for m in localServer.channel_modes[x] if str(x) in '012' and m not in localServer.parammodes]:
-                localServer.parammodes += m
+            for m in [m for m in self.ircd.channel_modes[x] if str(x) in '012' and m not in self.ircd.parammodes]:
+                self.ircd.parammodes += m
         memberlist = []
         banlist = []
         excepts = []
@@ -69,7 +71,7 @@ def sjoin(self, localServer, recv):
                 ### Unrecognized mode, checking modules.
                 ### Loop over modules to check if they have a 'mode_prefix' attr.
                 try:
-                    for m in [m for m in localServer.modules if hasattr(m, 'mode_prefix') and pos[0] == m.mode_prefix]:
+                    for m in [m for m in self.ircd.modules if hasattr(m, 'mode_prefix') and pos[0] == m.mode_prefix]:
                         mod_list_data.append((m.chmode, pos[1:]))
                 except Exception as ex:
                     logging.exception(ex)
@@ -93,7 +95,7 @@ def sjoin(self, localServer, recv):
                     membernick.append(c)
             membernick = ''.join(membernick)
 
-            userClass = list(filter(lambda c: c.nickname.lower() == membernick.lower() or c.uid == membernick, localServer.users))
+            userClass = list(filter(lambda c: c.nickname.lower() == membernick.lower() or c.uid == membernick, self.ircd.users))
             if not userClass:
                 logging.error('{}ERROR: could not fetch userclass for remote user {}. Looks like the user did not sync correctly. Maybe nick collision, or remote leftover from a netsplit.{}'.format(R, membernick, W))
                 ##continue
@@ -101,13 +103,13 @@ def sjoin(self, localServer, recv):
                 continue
 
             userClass = userClass[0]
-            p = {'override': True, 'sourceServer': self}
+            p = {'override': True, 'sourceServer': client}
             userClass.handle('join', channel, params=p)
-            localChan = list(filter(lambda c: c.name.lower() == channel.lower(), localServer.channels))[0]
+            localChan = list(filter(lambda c: c.name.lower() == channel.lower(), self.ircd.channels))[0]
             if len(localChan.users) == 1:
-                ### Channel did not exist on localServer. Hook channel_create? Sure, why not.
+                ### Channel did not exist on self.ircd. Hook channel_create? Sure, why not.
                 pass
-            if userClass.server != localServer:
+            if userClass.server != self.ircd:
                 logging.info('{}External user {} joined {} on local server.{}'.format(G, userClass.nickname, channel, W))
             if timestamp < localChan.creation and not source.eos:
                 if '*' in member:
@@ -137,22 +139,22 @@ def sjoin(self, localServer, recv):
             localChan.name = channel
             pc = 5
             for m in localChan.modes:
-                if m not in modes and m in list(localServer.channel_modes[2])+list(localServer.channel_modes[3]):
+                if m not in modes and m in list(self.ircd.channel_modes[2])+list(self.ircd.channel_modes[3]):
                     removeModes.append(m)
                     continue
                 ### Remote info is different, remove old one first.
-                if m in localServer.channel_modes[1] and localServer.chan_params[localChan][m] != recv[pc]:
-                    removeParams.append(localServer.chan_params[localChan][m])
+                if m in self.ircd.channel_modes[1] and self.ircd.chan_params[localChan][m] != recv[pc]:
+                    removeParams.append(self.ircd.chan_params[localChan][m])
                     removeModes.append(m)
-                if m in localServer.parammodes:
+                if m in self.ircd.parammodes:
                     pc += 1
 
             pc = 5
             for m in modes:
-                if m not in localChan.modes and m in localServer.channel_modes[3]:
+                if m not in localChan.modes and m in self.ircd.channel_modes[3]:
                     giveModes.append(m)
                     continue
-                if m in localServer.parammodes:
+                if m in self.ircd.parammodes:
                     giveModes.append(m)
                     giveParams.append(recv[pc])
                     logging.debug('SJOIN: Mode {} has param: {}'.format(m, recv[pc]))
@@ -189,7 +191,7 @@ def sjoin(self, localServer, recv):
                 giveParams.append(I)
 
             ### Remove mod list data.
-            for m in [m for m in localServer.modules if hasattr(m, 'list_name') and hasattr(localChan, m.list_name)]:
+            for m in [m for m in self.ircd.modules if hasattr(m, 'list_name') and hasattr(localChan, m.list_name)]:
                 remote_temp = []
                 for e in mod_list_data:
                     remote_temp.append(e[1])
@@ -235,7 +237,7 @@ def sjoin(self, localServer, recv):
                 for m in modes:
                     if m not in localChan.modes:
                         giveModes.append(m)
-                        if m in localServer.parammodes:
+                        if m in self.ircd.parammodes:
                             giveParams.append(recv[pc])
                             pc += 1
                         continue
@@ -254,7 +256,7 @@ def sjoin(self, localServer, recv):
 
                 ### Merge mod list data.
                 for entry in mod_list_data:
-                    for m in [m for m in localServer.modules if hasattr(m, 'chmode') and hasattr(m, 'list_name') and m.chmode == entry[0]]:
+                    for m in [m for m in self.ircd.modules if hasattr(m, 'chmode') and hasattr(m, 'list_name') and m.chmode == entry[0]]:
                         if hasattr(localChan, m.list_name) and entry[1] not in getattr(localChan, m.list_name):
                             logging.debug('List mode +{} {} is missing from localChan'.format(entry[0], entry[1]))
                             giveModes.append(entry[0])
@@ -270,7 +272,4 @@ def sjoin(self, localServer, recv):
                     data.append(p)
 
         if modes and data:
-            processModes(self, localServer, localChan, data, sync=True, sourceServer=self, sourceUser=self)
-
-    except Exception as ex:
-        logging.exception(ex)
+            processModes(client, self.ircd, localChan, data, sync=True, sourceServer=client, sourceUser=client)

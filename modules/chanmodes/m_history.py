@@ -9,24 +9,37 @@ from datetime import datetime
 
 from handle.functions import logging
 
+
 chmode = 'H'
+
+
+@ircd.Modules.channel_mode
+class chmode_H(ircd.ChannelMode):
+    def __init__(self):
+        self.mode = chmode
+        self.desc = 'Displays the message backlog to new users'
+        self.type = 2
+        #self.param_regex = "(100|[1-9][0-9]?):(100|[1-9][0-9]?)" # "[0-9][0-9]:[0-9][0-9][0-9][0-9][0-9]" # "(.):(.)"
+        self.param_format = "<int>:<int>"
+        self.param_help = '[maxlines:expire_in_minutes]'
+
 
 @ircd.Modules.hooks.loop()
 def checkExpiredBacklog(localServer):
-    for chan in [channel for channel in localServer.channels if chmode in channel.modes and channel.msg_backlog['lines']]:
+    for chan in [channel for channel in localServer.channels if chmode in channel.modes and hasattr(channel, 'msg_backlog') and channel.msg_backlog['lines']]:
         latest_date = chan.msg_backlog['lines'][-1][1]/10
         expire = chan.msg_backlog['expire'] * 60
         if float(datetime.utcnow().strftime("%s.%f")) - latest_date > expire:
             chan.msg_backlog['lines'] = [] # Remove all lines.
             #chan.msg_backlog['lines'] = chan.msg_backlog['lines'][1:] # Remove only expired line.
 
+
 ircd.Modules.hooks.channel_destroy()
 def destroy(self, localServer, channel):
     if chmode in channel.modes:
         channel.backlog = {}
 
-### Types: 0 = mask, 1 = require param, 2 = optional param, 3 = no param
-@ircd.Modules.channel_modes(chmode, 2, 5, 'Displays the message backlog to new users', None, None, '[maxlines:expire_in_minutes]') ### ('mode', type, level, 'Mode description')
+
 @ircd.Modules.hooks.chanmsg()
 def history_msg(self, localServer, channel, msg):
     try:
@@ -55,15 +68,13 @@ def history_msg(self, localServer, channel, msg):
     except Exception as ex:
         logging.exception(ex)
 
+
 @ircd.Modules.hooks.pre_local_chanmode()
 @ircd.Modules.hooks.pre_remote_chanmode()
-def chmode_H(self, localServer, channel, modebuf, parambuf, action, m, param):
+def chmode_H2(self, localServer, channel, modebuf, parambuf, action, m, param):
     try:
         if m == chmode:
             if action == '+':
-                if not re.findall("(.):(.)", param) or not param.split(':')[0].isdigit() or not param.split(':')[1].isdigit():
-                    logging.info('Param {} is invalid for {}{}'.format(param, action, m))
-                    return
                 limit = int(param.split(':')[0])
                 if limit > 25:
                     limit = 25
@@ -82,10 +93,12 @@ def chmode_H(self, localServer, channel, modebuf, parambuf, action, m, param):
                 modebuf.append(m)
                 parambuf.append(param)
                 channel.modes += m
+                return 0
             else:
                 channel.msg_backlog = {}
     except Exception as ex:
         logging.exception(ex)
+
 
 @ircd.Modules.hooks.local_join()
 def show_history(self, localServer, channel):
@@ -116,10 +129,12 @@ def show_history(self, localServer, channel):
             localServer.m_history[channel][self]['replay_time'] = int(time.time())
             localServer.m_history[channel][self]['last'] = channel.msg_backlog['lines'][-1]
 
-@ircd.Modules.hooks.local_quit()
-def clear_info(localServer, self):
-    for chan in [chan for chan in localServer.channels if chan in localServer.m_history and self in localServer.m_history[chan]]:
-        del localServer.m_history[chan][self]
 
-def init(self, reload):
-    self.m_history = {}
+@ircd.Modules.hooks.local_quit()
+def clear_info(ircd, self):
+    for chan in [chan for chan in ircd.channels if chan in ircd.m_history and self in ircd.m_history[chan]]:
+        del ircd.m_history[chan][self]
+
+
+def init(ircd, reload=False):
+    ircd.m_history = {}

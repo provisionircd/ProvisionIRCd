@@ -474,14 +474,9 @@ def randomness(string, strict=True):
     return randomness
 
 
-@ircd.Modules.commands('nick')
-def antirandom_nick(*args, **kwargs):
-    self = args[0]
-    if type(self).__name__ == 'Server' or self.registered:
-        return
-    localServer = args[1]
-    recv = args[2]
-    nick = str(recv[1]).strip()
+@ircd.Modules.hooks.pre_local_connect()
+def antirandom_nick(self, localServer):
+    nick = self.nickname
     score = randomness(nick.lower())
     if score >= max_score:
         self.quit('Please provide a valid nickname', error=True)
@@ -492,11 +487,10 @@ def antirandom_nick(*args, **kwargs):
         self.quit('Please provide a valid nickname', error=True)
         localServer.snotice('s', '*** Aleatory match for {}[{}]'.format(nick, self.ip))
 
-@ircd.Modules.commands('user')
-def user(self, localServer, recv):
-    if self.registered:
-        return
-    ident = str(recv[1][:12]).strip()
+
+@ircd.Modules.hooks.pre_local_connect()
+def user(self, localServer):
+    ident = self.ident
     score = randomness(ident.lower())
     if score >= max_score+1: ### Less strict for idents.
         self.quit('Please provide a valid ident', error=True)

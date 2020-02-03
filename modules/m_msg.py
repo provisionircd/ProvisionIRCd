@@ -9,61 +9,68 @@ from handle.functions import match, checkSpamfilter, logging
 import time
 import re
 
-maxtargets = 20
+MAXTARGETS = 20
 
-@ircd.Modules.support('MAXTARGETS='+str(maxtargets))
-@ircd.Modules.commands('privmsg', 'msg')
-def privmsg(self, localServer, recv, override=False):
-    try:
-        if type(self).__name__ == 'Server':
-            sourceServer = self
-            sourceID = self.sid
+
+@ircd.Modules.command
+class Privmsg(ircd.Command):
+    """
+    Send a direct message to a channel or user.
+    Syntax: PRIVMSG <target> <msg>
+    """
+    def __init__(self):
+        self.command = ['privmsg', 'msg']
+        self.support = [('MAXTARGETS', MAXTARGETS)]
+
+
+    def execute(self, client, recv, override=False):
+        if type(client).__name__ == 'Server':
+            sourceServer = client
+            sourceID = client.sid
             override = True
-            if self != localServer:
+            if client != self.ircd:
                 S = recv[0][1:]
-                source = [s for s in localServer.servers+[localServer] if s.sid == S or s.hostname == S]+[u for u in localServer.users if u.uid == S or u.nickname == S]
-                self = source[0]
-                sourceID = self.uid if type(self).__name__ == 'User' else self.sid
+                source = [s for s in self.ircd.servers+[self.ircd] if s.sid == S or s.hostname == S]+[u for u in self.ircd.users if u.uid == S or u.nickname == S]
+                client = source[0]
+                sourceID = client.uid if type(client).__name__ == 'User' else client.sid
             recv = recv[1:]
-            recv = localServer.parse_command(' '.join(recv[0:]))
+            recv = self.ircd.parse_command(' '.join(recv[0:]))
         else:
-            sourceServer = self.server
-            sourceID = self.uid
-            if self.ocheck('o', 'override'):
+            sourceServer = client.server
+            sourceID = client.uid
+            if client.ocheck('o', 'override'):
                 override = True
 
         if len(recv) < 2:
-            self.sendraw(411, ':No recipient given')
-            return
+            return client.sendraw(411, ':No recipient given')
 
         elif len(recv) < 3:
-            self.sendraw(412, ':No text to send')
-            return
+            return client.sendraw(412, ':No text to send')
 
         targets = recv[1].split(',')
 
         msg = ' '.join(recv[2:]).rstrip()
 
-        if type(self).__name__ == 'User':
-            self.flood_penalty += len(msg) * 150
+        if type(client).__name__ == 'User':
+            client.flood_penalty += len(msg) * 150
 
-        for target in targets[:maxtargets]:
-            if target[0] not in localServer.chantypes:
-                user = list(filter(lambda u: u.nickname.lower() == target.lower() or u.uid.lower() == target.lower(), localServer.users))
+        for target in targets[:MAXTARGETS]:
+            if target[0] not in self.ircd.chantypes:
+                user = list(filter(lambda u: u.nickname.lower() == target.lower() or u.uid.lower() == target.lower(), self.ircd.users))
 
                 if not user:
-                    self.sendraw(401, '{} :No such nick'.format(target))
+                    client.sendraw(401, '{} :No such nick'.format(target))
                     continue
                 user = user[0]
 
-                if type(self).__name__ == 'User' and checkSpamfilter(self, localServer, user.nickname, 'private', msg):
+                if type(client).__name__ == 'User' and checkSpamfilter(client, self.ircd, user.nickname, 'private', msg):
                     continue
 
-                if type(self).__name__ == 'User':
+                if type(client).__name__ == 'User':
                     block_msg = 0
-                    for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_usermsg']:
+                    for callable in [callable for callable in self.ircd.hooks if callable[0].lower() == 'pre_usermsg']:
                         try:
-                            mod_msg = callable[2](self, localServer, user, msg)
+                            mod_msg = callable[2](client, self.ircd, user, msg)
                             if mod_msg:
                                 msg = mod_msg
                             elif not mod_msg and mod_msg is not None:
@@ -75,52 +82,52 @@ def privmsg(self, localServer, recv, override=False):
                         continue
 
                 if user.away:
-                    self.sendraw(301, '{} :{}'.format(user.nickname, user.away))
+                    client.sendraw(301, '{} :{}'.format(user.nickname, user.away))
 
-                if type(self).__name__ == 'User':
-                    self.broadcast([user], 'PRIVMSG {} :{}'.format(user.nickname, msg))
-                    self.idle = int(time.time())
-                    if 'echo-message' in self.caplist:
-                        self._send(':{} PRIVMSG {} :{}'.format(self.fullmask(), user.nickname, msg))
-                    for callable in [callable for callable in localServer.events if callable[0].lower() == 'usermsg']:
+                if type(client).__name__ == 'User':
+                    client.broadcast([user], 'PRIVMSG {} :{}'.format(user.nickname, msg))
+                    client.idle = int(time.time())
+                    if 'echo-message' in client.caplist:
+                        client._send(':{} PRIVMSG {} :{}'.format(client.fullmask(), user.nickname, msg))
+                    for callable in [callable for callable in self.ircd.events if callable[0].lower() == 'usermsg']:
                         try:
-                            callable[2](self, localServer, user, msg)
+                            callable[2](client, self.ircd, user, msg)
                         except Exception as ex:
                             logging.exception(ex)
 
-                if user.server != localServer:
+                if user.server != self.ircd:
                     data = ':{} PRIVMSG {} :{}'.format(sourceID, user.nickname, msg)
-                    localServer.new_sync(localServer, sourceServer, data, direct=user.server)
+                    self.ircd.new_sync(self.ircd, sourceServer, data, direct=user.server)
 
             else:
-                channel = [channel for channel in localServer.channels if channel.name.lower() == target.lower()]
+                channel = [channel for channel in self.ircd.channels if channel.name.lower() == target.lower()]
 
                 if not channel:
-                    self.sendraw(401, '{} :No such channel'.format(target))
+                    client.sendraw(401, '{} :No such channel'.format(target))
                     continue
 
                 channel = channel[0]
-                if type(self).__name__ == 'User' and checkSpamfilter(self, localServer, channel.name, 'channel', msg):
+                if type(client).__name__ == 'User' and checkSpamfilter(client, self.ircd, channel.name, 'channel', msg):
                     continue
 
                 if not override:
-                    if self not in channel.users and 'n' in channel.modes and not override:
-                        self.sendraw(404, '{} :No external messages'.format(channel.name))
+                    if client not in channel.users and 'n' in channel.modes and not override:
+                        client.sendraw(404, '{} :No external messages'.format(channel.name))
                         continue
 
-                    if 'C' in channel.modes and (msg[0] == '' and msg[-1] == '') and msg.split()[0] != 'ACTION' and self.chlevel(channel) < 5 and not override:
-                        self.sendraw(404, '{} :CTCPs are not permitted in this channel'.format(channel.name))
+                    if 'C' in channel.modes and (msg[0] == '' and msg[-1] == '') and msg.split()[0] != 'ACTION' and client.chlevel(channel) < 5 and not override:
+                        client.sendraw(404, '{} :CTCPs are not permitted in this channel'.format(channel.name))
                         continue
 
-                    if 'm' in channel.modes and self.chlevel(channel) == 0 and not override:
-                        self.sendraw(404, '{} :Cannot send to channel (+m)'.format(channel.name))
+                    if 'm' in channel.modes and client.chlevel(channel) == 0 and not override:
+                        client.sendraw(404, '{} :Cannot send to channel (+m)'.format(channel.name))
                         continue
 
-                if type(self).__name__ == 'User':
+                if type(client).__name__ == 'User':
                     block_msg = 0
-                    for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_chanmsg']:
+                    for callable in [callable for callable in self.ircd.hooks if callable[0].lower() == 'pre_chanmsg']:
                         try:
-                            mod_msg = callable[2](self, localServer, channel, msg)
+                            mod_msg = callable[2](client, self.ircd, channel, msg)
                             if mod_msg:
                                 msg = mod_msg
                             elif not mod_msg and mod_msg is not None:
@@ -131,29 +138,38 @@ def privmsg(self, localServer, recv, override=False):
                     if block_msg:
                         continue
 
-                users = [user for user in channel.users if user != self and 'd' not in user.modes]
-                self.broadcast(users, 'PRIVMSG {} :{}'.format(channel.name, msg))
-                if type(self).__name__ == 'User' and 'echo-message' in self.caplist and 'd' not in self.modes:
-                    self._send(':{} PRIVMSG {} :{}'.format(self.fullmask(), channel.name, msg))
+                users = [user for user in channel.users if user != client and 'd' not in user.modes]
+                client.broadcast(users, 'PRIVMSG {} :{}'.format(channel.name, msg))
+                if type(client).__name__ == 'User' and 'echo-message' in client.caplist and 'd' not in client.modes:
+                    client._send(':{} PRIVMSG {} :{}'.format(client.fullmask(), channel.name, msg))
 
-                self.idle = int(time.time())
-                localServer.new_sync(localServer, sourceServer, ':{} PRIVMSG {} :{}'.format(sourceID, target, msg))
+                client.idle = int(time.time())
+                self.ircd.new_sync(self.ircd, sourceServer, ':{} PRIVMSG {} :{}'.format(sourceID, target, msg))
 
                 ### Check for module hooks (channel messages).
-                if type(self).__name__ == 'User':
-                    for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'chanmsg']:
+                if type(client).__name__ == 'User':
+                    for callable in [callable for callable in self.ircd.hooks if callable[0].lower() == 'chanmsg']:
                         try:
-                            callable[2](self, localServer, channel, msg)
+                            callable[2](client, self.ircd, channel, msg)
                         except Exception as ex:
                             logging.exception(ex)
 
-    except Exception as ex:
-        logging.exception(ex)
 
 
-@ircd.Modules.commands('notice')
-def notice(self, localServer, recv, override=False, s_sync=True):
-    try:
+@ircd.Modules.command
+class Notice(ircd.Command):
+    """
+    Send a direct notice to a channel or user.
+    Syntax: NOTICE <target> <msg>
+    """
+
+    def __init__(self):
+        self.command = 'notice'
+
+
+    def execute(self, user, recv, override=False, s_sync=True):
+        localServer = self.ircd
+        self = user
         if type(self).__name__ == 'Server':
             sourceServer = self
             S = recv[0][1:]
@@ -240,7 +256,7 @@ def notice(self, localServer, recv, override=False, s_sync=True):
 
                 channel = channel[0]
 
-                if self not in channel.users and 'n' in channel.modes and not override:
+                if self not in channel.users and len(channel.users) > 0 and 'n' in channel.modes and not override:
                     self.sendraw(404, '{} :No external messages'.format(channel.name))
                     continue
 
@@ -280,6 +296,3 @@ def notice(self, localServer, recv, override=False, s_sync=True):
                             callable[2](self, localServer, channel, msg)
                         except Exception as ex:
                             logging.exception(ex)
-
-    except Exception as ex:
-        logging.exception(ex)

@@ -105,8 +105,21 @@ def mode_del(localServer, self, channel, mode):
     if mode == 'm':
         channel.messageQueue = {}
 
+
+
+@ircd.Modules.channel_mode
+class chmodef(ircd.ChannelMode):
+    def __init__(self):
+        self.mode = 'f'
+        self.desc = 'Set flood protection for your channel (/helpop chmodef for more info)'
+        self.type = 2
+
+        #self.register()
+
+
+
 ### Types: 0 = mask, 1 = require param, 2 = optional param, 3 = no param, 4 = special user channel-mode.
-@ircd.Modules.channel_modes(chmode, 2, 3, 'Set flood protection for your channel (/helpop chmodef for more info)', None, None, '[params]') ### ('mode', type, level, 'Mode description', class 'user' or None, prefix, 'param desc')
+#@ircd.Modules.channel_modes(chmode, 2, 3, 'Set flood protection for your channel (/helpop chmodef for more info)', None, None, '[params]') ### ('mode', type, level, 'Mode description', class 'user' or None, prefix, 'param desc')
 @ircd.Modules.hooks.pre_local_chanmode()
 @ircd.Modules.hooks.pre_remote_chanmode()
 def addmode_f(self, localServer, channel, modebuf, parambuf, action, m, param):
@@ -221,10 +234,11 @@ def addmode_f(self, localServer, channel, modebuf, parambuf, action, m, param):
     except Exception as ex:
         logging.exception(ex)
 
-def init(localServer, reload=False):
-    for chan in [chan for chan in localServer.channels if not hasattr(chan, 'chmodef')]:
+
+def init(ircd, reload=False):
+    for chan in [chan for chan in ircd.channels if not hasattr(chan, 'chmodef')]:
         chan.chmodef = {}
-    for chan in [chan for chan in localServer.channels if not hasattr(chan, 'messageQueue')]:
+    for chan in [chan for chan in ircd.channels if not hasattr(chan, 'messageQueue')]:
         chan.messageQueue = {}
-    for chan in [chan for chan in localServer.channels if not hasattr(chan, 'joinQueue')]:
+    for chan in [chan for chan in ircd.channels if not hasattr(chan, 'joinQueue')]:
         chan.joinQueue = {}

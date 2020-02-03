@@ -1,34 +1,34 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 /chghost command
 """
 
 import ircd
 
-from handle.functions import _print
-import os
-import sys
+@ircd.Modules.command
+class Chghost(ircd.Command):
+    """
+    Changes a users' cloak host.
+    Syntax: CHGHOST <user> <newhost>
+    """
+    def __init__(self):
+        self.command = 'chghost'
+        self.req_modes = 'o'
+        self.params = 2
 
-@ircd.Modules.params(2)
-@ircd.Modules.req_modes('o')
-@ircd.Modules.commands('chghost')
-def chghost(self, localServer, recv):
-    try:
-        if type(self).__name__ == 'Server':
-            source = self
-            self = list(filter(lambda u: u.uid == recv[0][1:] or u.nickname == recv[0][1:], localServer.users))
-            if not self:
+    def execute(self, client, recv):
+        if type(client).__name__ == 'Server':
+            source = client
+            client = list(filter(lambda u: u.uid == recv[0][1:] or u.nickname == recv[0][1:], self.ircd.users))
+            if not client:
                 return
-            self = self[0]
+            client = client[0]
             recv = recv[1:]
         else:
-            source = localServer
+            source = self.ircd
 
-        target = list(filter(lambda u: u.nickname == recv[1], localServer.users))
+        target = list(filter(lambda u: u.nickname == recv[1], self.ircd.users))
         if not target:
-            return self.sendraw(401, '{} :No such nick'.format(recv[1]))
+            return client.sendraw(self.ERR.NOSUCHNICK, '{} :No such nick'.format(recv[1]))
         target = target[0]
         host = str(recv[2][:64]).strip()
         valid = 'abcdefghijklmnopqrstuvwxyz0123456789.-'
@@ -38,10 +38,4 @@ def chghost(self, localServer, recv):
         if host == target.cloakhost or not host:
             return
         target.setinfo(host, t='host', source=source)
-        localServer.snotice('s', '*** {} ({}@{}) used CHGHOST to change the host of {} to "{}"'.format(self.nickname, self.ident, self.hostname, target.nickname, target.cloakhost))
-
-    except Exception as ex:
-        exc_type, exc_obj, exc_tb = sys.exc_info()
-        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        e = 'EXCEPTION: {} in file {} line {}: {}'.format(exc_type.__name__, fname, exc_tb.tb_lineno, exc_obj)
-        _print(e, server=localServer)
+        self.ircd.snotice('s', '*** {} ({}@{}) used CHGHOST to change the host of {} to "{}"'.format(client.nickname, client.ident, client.hostname, target.nickname, target.cloakhost))

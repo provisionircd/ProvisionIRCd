@@ -20,159 +20,176 @@ def makerMask(data):
     result = '{}@{}'.format(ident, host)
     return result
 
-@ircd.Modules.req_class('Server')
-@ircd.Modules.commands('tkl')
-def tkl(self, localServer, recv, expire=False):
-    if recv[2] == '+':
-        TKL.add(self, localServer, recv)
-        ### TKL add.
-    elif recv[2] == '-':
-        TKL.remove(self, localServer, recv, expire=expire)
+@ircd.Modules.command
+class Tkl(ircd.Command):
+    def __init__(self):
+        self.command = 'tkl'
+        self.req_class = 'Server'
 
-@ircd.Modules.params(1)
-@ircd.Modules.req_modes('o')
-@ircd.Modules.req_flags('zline|gzline')
-@ircd.Modules.commands('zline', 'gzline')
-def zline(self, localServer, recv):
-    ### /zline +0 nick/ip reason
-    """Bans a user from a server (zline) or network (gzline) by IP address.
--
-Syntax: /ZLINE <expire> <nick|host> <reason>
-Example: /ZLINE +1d Kevin Be gone.
-This will remove and ban user Kevin from the server. Ban will expire in 1 day. Banning on nickname only works when the user is currently online.
--
-Expire formats can be: m (minutes), h (hours), d (days), w (weeks), and M (months, 30 days).
-Stacking, like +1d12h is not yet supported.
--
-To remove a ban, use -host as the parameter.
-Example: /ZLINE -*@12.34.56.78"""
 
-    type = 'Z' if recv[0].lower() == 'gzline' else 'z'
-    if type == 'Z' and not self.ocheck('o', 'gzline'):
-        return self.sendraw(481, ':Permission denied - You do not have the correct IRC Operator privileges')
-    try:
+    def execute(self, client, recv, expire=False):
+        if recv[2] == '+':
+            TKL.add(client, self.ircd, recv)
+            ### TKL add.
+        elif recv[2] == '-':
+            TKL.remove(client, self.ircd, recv, expire=expire)
 
-        if recv[1][0] == '-':
-            try:
-                mask = recv[1][1:]
-            except:
-                return localServer.notice(self, '*** Notice -- Invalid IP'.format(self.nickname))
-            if not mask:
-                return localServer.notice(self, '*** Syntax: /{} -mask'.format(recv[0].upper()))
-            if type not in localServer.tkl or mask not in localServer.tkl[type]:
-                return localServer.notice(self, '*** Notice -- No such Z:Line: {}'.format(self.nickname, mask))
+
+@ircd.Modules.command
+class Zline(ircd.Command):
+    """
+    Bans a user from a server (zline) or entire network (gzline) by IP address.
+    -
+    Syntax: /ZLINE <expire> <nick|ip> <reason>
+    Example: /ZLINE +1d Kevin Be gone.
+    This will remove and ban user Kevin from the server. Ban will expire in 1 day.
+    Banning on nickname only works when the user is currently online.
+    -
+    Expire formats can be: m (minutes), h (hours), d (days), w (weeks), and M (months, 30 days).
+    Stacking, like +1d12h is not yet supported.
+    -
+    To remove a global Z:line, use -ip as the parameter.
+    Example: /GZLINE -*@12.34.56.78
+    """
+    def __init__(self):
+        self.command = ['zline', 'gzline']
+        self.req_flags = 'zline|gzline'
+        self.params = 1
+
+
+    def execute(self, client, recv):
+        ### /zline +0 nick/ip reason
+        type = 'Z' if recv[0].lower() == 'gzline' else 'z'
+        if type == 'Z' and not client.ocheck('o', 'gzline'):
+            return client.sendraw(481, ':Permission denied - You do not have the correct IRC Operator privileges')
+        try:
+
+            if recv[1][0] == '-':
+                try:
+                    mask = recv[1][1:]
+                except:
+                    return self.ircd.notice(client, '*** Notice -- Invalid IP'.format(client.nickname))
+                if not mask:
+                    return self.ircd.notice(client, '*** Syntax: /{} -mask'.format(recv[0].upper()))
+                if type not in self.ircd.tkl or mask not in self.ircd.tkl[type]:
+                    return self.ircd.notice(client, '*** Notice -- No such Z:Line: {}'.format(client.nickname, mask))
+                else:
+                    data = '- {} {} {}'.format(type, mask.split('@')[0], mask.split('@')[1])
+                    self.ircd.handle('tkl', data)
+                    return
             else:
-                data = '- {} {} {}'.format(type, mask.split('@')[0], mask.split('@')[1])
-                localServer.handle('tkl', data)
-                return
-        else:
-            if len(recv) < 3:
-                return self.sendraw(461, ':{} Not enough parameters.'.format(recv[0].upper()))
-        mask = None
-        if recv[1][0] != '+' or not valid_expire(recv[1].replace('+', '')):
-            return localServer.notice(self, '*** Notice -- Invalid expire'.format(self.nickname))
-        else:
-            if recv[1][1:] == '0':
-                expire = '0'
+                if len(recv) < 3:
+                    return client.sendraw(461, ':{} Not enough parameters.'.format(recv[0].upper()))
+            mask = None
+            if recv[1][0] != '+' or not valid_expire(recv[1].replace('+', '')):
+                return self.ircd.notice(client, '*** Notice -- Invalid expire'.format(client.nickname))
             else:
-                expire = int(time.time()) + valid_expire(recv[1].replace('+', ''))
+                if recv[1][1:] == '0':
+                    expire = '0'
+                else:
+                    expire = int(time.time()) + valid_expire(recv[1].replace('+', ''))
 
-        if len(recv[2].replace('*', '')) <= 5 and ('@' in recv[2] or '*' in recv[2]):
-            return localServer.notice(self, '*** Notice -- IP range is too small'.format(self.nickname))
+            if len(recv[2].replace('*', '')) <= 5 and ('@' in recv[2] or '*' in recv[2]):
+                return self.ircd.notice(client, '*** Notice -- IP range is too small'.format(client.nickname))
 
-        if len(recv) == 3:
-            reason = 'No reason'
-        else:
-            reason = ' '.join(recv[3:])
+            if len(recv) == 3:
+                reason = 'No reason'
+            else:
+                reason = ' '.join(recv[3:])
 
-        if '@' not in recv[2]:
-            target = list(filter(lambda c: c.nickname.lower() == recv[2].lower(), localServer.users))
-            if not target:
-                return self.sendraw(401, '{} :No such nick'.format(recv[2]))
-            mask = '*@{}'.format(target[0].ip)
-        elif '.' not in recv[2].split('@')[1] or not recv[2].split('@')[1].replace('.', '').isdigit():
-            return localServer.notice(self, '*** Notice -- Invalid IP: {}'.format(self.nickname, recv[2].split('@')[1]))
-        else:
-            mask = makerMask(recv[2])
-        if mask:
-            data = '+ {} {} {} {} {} {} :{}'.format(type, mask.split('@')[0], mask.split('@')[1], self.fullrealhost(), expire, int(time.time()), reason)
-            localServer.handle('tkl', data)
+            if '@' not in recv[2]:
+                target = list(filter(lambda c: c.nickname.lower() == recv[2].lower(), self.ircd.users))
+                if not target:
+                    return client.sendraw(401, '{} :No such nick'.format(recv[2]))
+                mask = '*@{}'.format(target[0].ip)
+            elif '.' not in recv[2].split('@')[1] or not recv[2].split('@')[1].replace('.', '').isdigit():
+                return self.ircd.notice(client, '*** Notice -- Invalid IP: {}'.format(client.nickname, recv[2].split('@')[1]))
+            else:
+                mask = makerMask(recv[2])
+            if mask:
+                data = '+ {} {} {} {} {} {} :{}'.format(type, mask.split('@')[0], mask.split('@')[1], client.fullrealhost(), expire, int(time.time()), reason)
+                self.ircd.handle('tkl', data)
 
-    except Exception as ex:
-        logging.exception(ex)
+        except Exception as ex:
+            logging.exception(ex)
 
 
-@ircd.Modules.params(1)
-@ircd.Modules.req_modes('o')
-@ircd.Modules.req_flags('kline|gline')
-@ircd.Modules.commands('kline', 'gline')
-def kline(self, localServer, recv):
-    ### /kline +0 nick/ip reason
-    """Bans a user from a server (kline) or network (gline) by IP hostname.
--
-Syntax: /KLINE <expire> <nick|host> <reason>
-Example: /KLINE +1d Kevin Be gone.
-This will remove and ban user Kevin from the server. Ban will expire in 1 day. Banning on nickname only works when the user is currently online.
--
-Expire formats can be: m (minutes), h (hours), d (days), w (weeks), and M (months, 30 days).
-Stacking, like +1d12h is not yet supported.
--
-To remove a ban, use -host as the parameter.
-Example: /ZLINE -*@12.34.56.78.prioritytelecom.net"""
-    type = 'G' if recv[0].lower() == 'gline' else 'g'
-    if type == 'G' and not self.ocheck('o', 'gline'):
-        return self.sendraw(481, ':Permission denied - You do not have the correct IRC Operator privileges')
-    try:
-        if recv[1][0] == '-':
-            try:
-                mask = recv[1][1:]
-            except:
-                self.server.broadcast([self], 'NOTICE {} :*** Notice -- Invalid hostname'.format(self.nickname))
-                return
-            if type not in localServer.tkl or mask not in localServer.tkl[type]:
-                self.server.notice(self, '*** Notice -- No such {}:line: {}'.format('G' if type == 'G' else 'K', mask))
+
+@ircd.Modules.command
+class Kline(ircd.Command):
+    """
+    Bans a user from a server (kline) or entire network (gline) by hostname.
+    -
+    Syntax: /KLINE <expire> <nick|host> <reason>
+    Example: /KLINE +1d Kevin Be gone.
+    This will remove and ban user Kevin from the server. Ban will expire in 1 day.
+    Banning on nickname only works when the user is currently online.
+    -
+    Expire formats can be: m (minutes), h (hours), d (days), w (weeks), and M (months, 30 days).
+    Stacking, like +1d12h is not yet supported.
+    -
+    To remove a global ban, use -host as the parameter.
+    Example: /GLINE -*@12.34.56.78.prioritytelecom.net
+    """
+    def __init__(self):
+        self.command = ['kline', 'gline']
+        self.req_flags = 'kline|gline'
+        self.params = 1
+
+
+    def execute(self, client, recv):
+        type = 'G' if recv[0].lower() == 'gline' else 'g'
+        if type == 'G' and not client.ocheck('o', 'gline'):
+            return client.sendraw(481, ':Permission denied - You do not have the correct IRC Operator privileges')
+        try:
+            if recv[1][0] == '-':
+                try:
+                    mask = recv[1][1:]
+                except:
+                    return client.server.broadcast([client], 'NOTICE {} :*** Notice -- Invalid hostname'.format(client.nickname))
+                if type not in self.ircd.tkl or mask not in self.ircd.tkl[type]:
+                    return client.server.notice(client, '*** Notice -- No such {}:line: {}'.format('G' if type == 'G' else 'K', mask))
+                else:
+                    data = '- {} {} {}'.format(type, mask.split('@')[0], mask.split('@')[1])
+                    #TKL.remove(self.ircd, data)
+                    self.ircd.handle('tkl', data)
+                    return
+            else:
+                if len(recv) < 3:
+                    return client.sendraw(461, ':{} Not enough parameters.'.format(recv[0].upper()))
+            mask = None
+            if recv[1][0] != '+' or not valid_expire(recv[1].replace('+', '')):
+                client.server.broadcast([client], 'NOTICE {} :*** Notice -- Invalid expire'.format(client.nickname))
                 return
             else:
-                data = '- {} {} {}'.format(type, mask.split('@')[0], mask.split('@')[1])
-                #TKL.remove(localServer, data)
-                localServer.handle('tkl', data)
+                if recv[1][1:] == '0':
+                    expire = '0'
+                else:
+                    expire = int(time.time()) + valid_expire(recv[1].replace('+',''))
+
+            if len(recv[2].replace('*','')) <= 5 and ('@' in recv[2] or '*' in recv[2]):
+                client.server.broadcast([client], 'NOTICE {} :*** Notice -- Host range is too small'.format(client.nickname))
                 return
-        else:
-            if len(recv) < 3:
-                return self.sendraw(461, ':{} Not enough parameters.'.format(recv[0].upper()))
-        mask = None
-        if recv[1][0] != '+' or not valid_expire(recv[1].replace('+', '')):
-            self.server.broadcast([self], 'NOTICE {} :*** Notice -- Invalid expire'.format(self.nickname))
-            return
-        else:
-            if recv[1][1:] == '0':
-                expire = '0'
+
+            if len(recv) == 3:
+                reason = 'No reason'
             else:
-                expire = int(time.time()) + valid_expire(recv[1].replace('+',''))
-
-        if len(recv[2].replace('*','')) <= 5 and ('@' in recv[2] or '*' in recv[2]):
-            self.server.broadcast([self], 'NOTICE {} :*** Notice -- Host range is too small'.format(self.nickname))
-            return
-
-        if len(recv) == 3:
-            reason = 'No reason'
-        else:
-            reason = ' '.join(recv[3:])
-        if '@' not in recv[2]:
-            target = list(filter(lambda c: c.nickname.lower() == recv[2].lower(), localServer.users))
-            if not target:
-                self.sendraw(401, '{} :No such nick'.format(recv[2]))
+                reason = ' '.join(recv[3:])
+            if '@' not in recv[2]:
+                target = list(filter(lambda c: c.nickname.lower() == recv[2].lower(), self.ircd.users))
+                if not target:
+                    client.sendraw(401, '{} :No such nick'.format(recv[2]))
+                    return
+                mask = '*@{}'.format(target[0].hostname)
+            elif '.' not in recv[2] and '@' not in recv[2]:
+                client.server.broadcast([client], 'NOTICE {} :*** Notice -- Invalid host'.format(client.nickname))
                 return
-            mask = '*@{}'.format(target[0].hostname)
-        elif '.' not in recv[2] and '@' not in recv[2]:
-            self.server.broadcast([self], 'NOTICE {} :*** Notice -- Invalid host'.format(self.nickname))
-            return
-        else:
-            mask = makerMask(recv[2])
-        if mask:
-            data = '+ {} {} {} {} {} {} :{}'.format(type, mask.split('@')[0], mask.split('@')[1], self.fullrealhost(), expire, int(time.time()),reason)
-            #TKL.add(localServer,data)
-            localServer.handle('tkl', data)
+            else:
+                mask = makerMask(recv[2])
+            if mask:
+                data = '+ {} {} {} {} {} {} :{}'.format(type, mask.split('@')[0], mask.split('@')[1], client.fullrealhost(), expire, int(time.time()),reason)
+                #TKL.add(self.ircd,data)
+                self.ircd.handle('tkl', data)
 
-    except Exception as ex:
-        logging.exception(ex)
+        except Exception as ex:
+            logging.exception(ex)

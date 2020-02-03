@@ -1,47 +1,53 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 /quit command
 """
 
 import ircd
 
-@ircd.Modules.commands('quit')
-def quit(self, localServer, recv, showPrefix=True):
-    source = None
-    if type(self).__name__ == 'Server':
-        source = self
-        showPrefix = False
-        if not self.eos:
-            return
-        self = list(filter(lambda u: u.uid == recv[0][1:], localServer.users))
-        if not self:
-            ### User is already disconnected.
-            return
+
+@ircd.Modules.command
+class Quit(ircd.Command):
+    """
+    Disconnect from the network.
+    Syntax: QUIT [reason]
+    """
+    def __init__(self):
+        self.command = 'quit'
+
+
+    def execute(self, client, recv, showPrefix=True):
+        source = None
+        if type(client).__name__ == 'Server':
+            source = client
+            showPrefix = False
+            if not client.eos:
+                return
+            client = list(filter(lambda u: u.uid == recv[0][1:], self.ircd.users))
+            if not client:
+                ### User is already disconnected.
+                return
+            else:
+                client = client[0]
+
+            recv = recv[1:]
+
+        if len(recv) > 1:
+            reason = ' '.join(recv[1:][:128])
+            if reason.startswith(':'):
+                reason = reason[1:]
         else:
-            self = self[0]
+            reason = client.nickname
 
-        recv = recv[1:]
+        try:
+            quitprefix = str(self.ircd.conf['settings']['quitprefix']).strip()
 
-    if len(recv) > 1:
-        reason = ' '.join(recv[1:][:128])
-        if reason.startswith(':'):
-            reason = reason[1:]
-    else:
-        reason = self.nickname
+            if quitprefix.endswith(':'):
+                quitprefix = quitprefix[:-1]
+        except:
+            quitprefix = 'Quit'
 
-    try:
-        quitprefix = str(localServer.conf['settings']['quitprefix']).strip()
+        if 'static-quit' in self.ircd.conf['settings'] and self.ircd.conf['settings']['static-quit']:
+            reason = self.ircd.conf['settings']['static-quit']
 
-        if quitprefix.endswith(':'):
-            quitprefix = quitprefix[:-1]
-    except:
-        quitprefix = 'Quit'
-
-    if 'static-quit' in localServer.conf['settings'] and localServer.conf['settings']['static-quit']:
-        reason = localServer.conf['settings']['static-quit']
-
-    reason = '{}{}'.format(quitprefix+': ' if self.server == localServer and showPrefix else '', reason)
-
-    self.quit(reason, error=False)
+        reason = '{}{}'.format(quitprefix+': ' if client.server == self.ircd and showPrefix else '', reason)
+        client.quit(reason, error=False)

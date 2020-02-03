@@ -1,11 +1,40 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 provides usermodes +R, +Z, and +D to block private messages
 """
 
 import ircd
+
+'''
+@ircd.Modules.umode_class
+class mode_R(ircd.UserMode):
+    def __init__(self, ircd):
+        self.ircd = ircd
+        self.mode = 'R'
+        self.req_flag = 0
+        self.desc = 'Only users with a registered nickname can private message you'
+        self.register_mode()
+
+
+@ircd.Modules.umode_class
+class mode_Z(ircd.UserMode):
+    def __init__(self, ircd):
+        self.ircd = ircd
+        self.mode = 'Z'
+        self.req_flag = 0
+        self.desc = 'Only users on a secure connection can private message you'
+        self.register_mode()
+
+
+@ircd.Modules.umode_class
+class mode_D(ircd.UserMode):
+    def __init__(self, ircd):
+        self.ircd = ircd
+        self.mode = 'D'
+        self.req_flag = 0
+        self.desc = 'No-one can private message you'
+        self.register_mode()
+'''
+
 
 @ircd.Modules.user_modes('R', 0, 'Only users with a registered nickname can private message you') ### ('mode', 0, 1 or 2 for normal user, oper or server, 'Mode description')
 @ircd.Modules.user_modes('Z', 0, 'Only users on a secure connection can private message you') ### ('mode', 0, 1 or 2 for normal user, oper or server, 'Mode description')

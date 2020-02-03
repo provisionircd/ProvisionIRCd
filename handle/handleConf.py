@@ -10,6 +10,10 @@ import gc
 import ircd
 gc.enable()
 
+# >>> from pathlib import Path
+# >>> Path('A').resolve()
+# PosixPath('/tmp/example/notexist')
+
 
 bc = 0
 try:
@@ -19,6 +23,7 @@ except ImportError:
     #print("Could not import 'bcrypt' module. You can install it with pip")
     #sys.exit()
     pass
+
 print('Bcrypt support: {}'.format(bc))
 
 import handle.handleModules as Modules
@@ -301,11 +306,16 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
                     if module:
                         module = module[0]
                     try:
-                        Modules.LoadModule(localServer, m, modules[m], reload=reload, module=module)
+                        result = Modules.LoadModule(localServer, m, modules[m], reload=reload, module=module)
+                        if result:
+                            raise Exception(result)
                     except Exception as ex:
-                        logging.error('Unable to load module \'{}\': {}'.format(m, ex))
+                        err = 'Unable to load module \'{}\': {}'.format(m, ex)
+                        logging.error(err)
                         if rehash:
-                            localServer.broadcast([user], 'NOTICE {} :*** [info] -- Unable to load module \'{}\': {}'.format(user.nickname, m, ex))
+                            localServer.broadcast([user], 'NOTICE {} :*** [info] -- {}'.format(user.nickname, err))
+                        else:
+                            conferr(err)
                         continue
                 except Exception as ex:
                     logging.exception(ex)
@@ -473,7 +483,12 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
                     tkl_data = f.read().split('\n')[0]
                     tkl_data = json.loads(tkl_data)
                     localServer.tkl = tkl_data
-                    logging.debug('Restored TKL: {}'.format(localServer.tkl))
+                    num = 0
+                    for key in localServer.tkl:
+                        for item in localServer.tkl[key]:
+                            num += 1
+
+                    logging.debug(f'Restored {(num)} TKL entr{"y" if num == 1 else "ies"}.')
             except Exception as ex:
                 logging.exception(ex)
 

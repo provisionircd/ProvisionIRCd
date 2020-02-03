@@ -5,22 +5,29 @@
 import ircd
 
 import gc
+gc.enable()
 from handle.handleConf import checkConf
 
-@ircd.Modules.req_modes('o')
-@ircd.Modules.req_flags('rehash')
-@ircd.Modules.commands('rehash')
-def rehash(self, localServer, recv):
-    msg = '*** {} ({}@{}) is rehashing the server configuration file...'.format(self.nickname, self.ident, self.hostname, local=True)
-    localServer.snotice('s', msg)
+@ircd.Modules.command
+class Rehash(ircd.Command):
+    """
+    Reloads the configuration files in memory.
+    """
+    def __init__(self):
+        self.command = 'rehash'
+        self.req_flags = 'rehash'
 
-    if True:
-        ### Need to add some param shit, now too lazy and hot.
-        localServer.dnsblCache = {}
-        localServer.throttle = {}
-        localServer.hostcache = {}
+    def execute(self, client, recv):
+        msg = '*** {} ({}@{}) is rehashing the server configuration file...'.format(client.nickname, client.ident, client.hostname, local=True)
+        self.ircd.snotice('s', msg)
 
-    checkConf(localServer, self, localServer.confdir, localServer.conffile, rehash=True)
+        if True:
+            ### Need to add some param shit, now too lazy and hot.
+            self.ircd.dnsblCache = {}
+            self.ircd.throttle = {}
+            self.ircd.hostcache = {}
 
-    gc.collect()
-    del gc.garbage[:]
+        checkConf(self.ircd, client, self.ircd.confdir, self.ircd.conffile, rehash=True)
+
+        gc.collect()
+        del gc.garbage[:]

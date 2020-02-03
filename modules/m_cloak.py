@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 /cloak command
 """
@@ -9,8 +6,16 @@ import ircd
 
 from handle.functions import cloak
 
-@ircd.Modules.params(1)
-@ircd.Modules.req_modes('o')
-@ircd.Modules.commands('cloak')
-def cmdcloak(self, localServer, recv):
-    localServer.notice(self, '* Cloaked version is: {}'.format(cloak(localServer, recv[1])))
+@ircd.Modules.command
+class Cloak(ircd.Command):
+    """
+    Converts a host or IP to a cloaked version.
+    Syntax: CLOAK <host/IP>
+    """
+    def __init__(self):
+        self.command = 'cloak'
+        self.req_modes = 'o'
+        self.params = 1
+
+    def execute(self, client, recv):
+        self.ircd.notice(client, '* Cloaked version is: {}'.format(cloak(self.ircd, recv[1])))

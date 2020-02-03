@@ -3,10 +3,18 @@ provides chmode +D (delay join)
 """
 
 import ircd
+from handle.functions import logging
 
 chmode = 'D'
 
-from handle.functions import logging
+
+@ircd.Modules.channel_mode
+class chmode_D(ircd.ChannelMode):
+    def __init__(self):
+        self.mode = chmode
+        self.desc = 'Delay join message until the user speaks or receives channel status'
+        self.req_flag = 4
+
 
 can_see = {}
 
@@ -23,7 +31,7 @@ def debug(self, localServer, recv):
     localServer.notice(self, can_see[chan_class])
 
 ### Types: 0 = mask, 1 = require param, 2 = optional param, 3 = no param, 4 = special user channel-mode.
-@ircd.Modules.channel_modes(chmode, 3, 4, 'Delay join message until the user speaks or receives channel status') ### ('mode', type, level, 'Mode description', class 'user' or None, prefix, 'param desc')
+#@ircd.Modules.channel_modes(chmode, 3, 4, 'Delay join message until the user speaks or receives channel status') ### ('mode', type, level, 'Mode description', class 'user' or None, prefix, 'param desc')
 @ircd.Modules.hooks.pre_chanmsg()
 def showjoin(self, localServer, channel, msg):
     if chmode in channel.modes:
@@ -97,7 +105,7 @@ def hidequit(self, localServer):
             can_see[channel][user].remove(self)
         #logging.debug('/QUIT: current state for {}: {}'.format(channel.name, can_see[channel]))
 
-@ircd.Modules.hooks.modechar_add()
+#@ircd.Modules.hooks.modechar_add()
 def set_D(localServer, self, channel, mode):
     if mode == chmode:
         if 'u' in channel.modes:
@@ -122,9 +130,12 @@ def unset_D(localServer, self, channel, mode):
 
 @ircd.Modules.hooks.pre_local_chanmode()
 @ircd.Modules.hooks.pre_remote_chanmode()
-def chmode_D(self, localServer, channel, modebuf, parambuf, action, m, param):
+def chmode_D2(self, localServer, channel, modebuf, parambuf, action, m, param):
     global can_see
     if m == chmode:
+        if 'u' in channel.modes:
+            localServer.notice(self, 'Mode +D cannot be set: channel has +u')
+            return 0
         if not hasattr(channel, 'delayjoins') or not channel.delayjoins:
             channel.delayjoins = []
         if action == '-':

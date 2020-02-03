@@ -21,11 +21,6 @@ import sys
 import os
 import hashlib
 import time
-#rom OpenSSL import SSL
-
-if sys.version_info[0] < 3:
-    print('Python 2 is not supported.')
-    sys.exit()
 
 W = '\033[0m'  # white (normal)
 R = '\033[31m' # red
@@ -56,18 +51,8 @@ def sock_accept(localServer, s):
             if is_ssl and not localServer.pre_wrap:
                 is_ssl = 0
                 version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
-                if int(version) >= 36:
-                    conn = localServer.sslctx.wrap_socket(conn, server_side=True)
-                    is_ssl = 1
-                else:
-                    conn = ssl.wrap_socket(conn,
-                                            #server_side=True,
-                                            certfile=localServer.server_cert, keyfile=localServer.server_key, ca_certs=localServer.ca_certs,
-                                            suppress_ragged_eofs=True,
-                                            cert_reqs=ssl.CERT_NONE,
-                                            ciphers='HIGH'
-                                            )
-                    is_ssl = 1
+                conn = localServer.sslctx.wrap_socket(conn, server_side=True)
+                is_ssl = 1
                 logging.info('Wrapped incoming user socket {} in SSL'.format(conn))
                 try:
                     fp = conn.getpeercert(True)
@@ -118,19 +103,10 @@ def sock_accept(localServer, s):
             is_ssl = is_sslport(localServer, port)
 
             if is_ssl and not localServer.pre_wrap:
+                is_ssl = 0
                 version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
-                if int(version) >= 36:
-                    conn = localServer.sslctx.wrap_socket(conn, server_side=True)
-                else:
-                    conn = ssl.wrap_socket(conn,
-                                            server_side=True,
-                                            certfile=localServer.server_cert, keyfile=localServer.server_key, ca_certs=localServer.ca_certs,
-                                            suppress_ragged_eofs=True,
-                                            do_handshake_on_connect=False,
-                                            #cert_reqs=ssl.CERT_OPTIONAL,
-                                            ciphers='HIGH'
-                                            )
-                    conn.do_handshake()
+                conn = localServer.sslctx.wrap_socket(conn, server_side=True)
+                is_ssl = 1
                 logging.info('Wrapped incoming server socket {} in SSL'.format(conn))
 
             s = Server(origin=localServer, serverLink=True, sock=conn, is_ssl=is_ssl)
@@ -146,7 +122,6 @@ class data_handler: #(threading.Thread):
     def __init__(self, server):
         #threading.Thread.__init__(self)
         self.server = server
-        self.running = True
         self.listen_socks = self.server.listen_socks
 
     def run(self):
@@ -263,12 +238,7 @@ def check_loops(localServer):
     users = (user for user in localServer.users if user.socket and time.time() - user.ping > 180.0)
     for user in users:
         user.quit('Ping timeout: {} seconds'.format(int(time.time() - user.ping)))
-        ### Expire all invites after 6 hours.
-        channels = (channel for channel in localServer.channels if len(channel.invites) > 0)
-        for chan in channels:
-            for invite in (chan.invites):
-                if time.time() - chan.invites[invite]['ctime'] > 3600.0*6:
-                    del chan.invites[invite]
+
 
     for t in (localServer.tkl):
         for mask in dict(localServer.tkl[t]):
@@ -333,11 +303,6 @@ def check_loops(localServer):
     for throttle in (throttle for throttle in dict(localServer.throttle) if int(time.time()) - localServer.throttle[throttle]['ctime'] > int(localServer.conf['settings']['throttle'].split(':')[1])):
         del localServer.throttle[throttle]
         continue
-
-    for user in (user for user in localServer.users if user in localServer.nickflood):
-        for nickchg in (nickchg for nickchg in dict(localServer.nickflood[user]) if int(time.time()) - int(nickchg) > int(localServer.conf['settings']['nickflood'].split(':')[1])):
-            del localServer.nickflood[user][nickchg]
-            continue
 
     ### Check for timed channels status.
     modify_status = {}

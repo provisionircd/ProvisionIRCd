@@ -113,6 +113,7 @@ def checkExpiredBans(localServer):
         tmodes = 'b'*len(remove_bans[chan])
         localServer.handle('MODE', '{} -{} {} 0'.format(chan.name, tmodes, bans))
 
+
 @ircd.Modules.support(('EXTBAN='+prefix+','+str(''.join(ext_bans)), True)) ### (support string, boolean if support must be sent to other servers)
 @ircd.Modules.hooks.pre_local_chanmode()
 @ircd.Modules.hooks.pre_remote_chanmode()

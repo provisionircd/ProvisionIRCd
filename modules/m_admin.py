@@ -1,15 +1,17 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 /admin command
 """
 
 import ircd
 
-@ircd.Modules.commands('admin')
-def admin(self, localServer, recv):
-    localServer.conf['admin']
-    self.sendraw(256, ':Administrative info about {}'.format(localServer.hostname))
-    for line in localServer.conf['admin']:
-        self.sendraw(257, ':{}'.format(line))
+
+@ircd.Modules.command
+class Admin(ircd.Command):
+    def __init__(self):
+        self.command = 'admin'
+
+
+    def execute(self, client, recv):
+        client.sendraw(256, ':Administrative info about {}'.format(self.ircd.hostname))
+        for line in self.ircd.conf['admin']:
+            client.sendraw(257, ':{}'.format(line))

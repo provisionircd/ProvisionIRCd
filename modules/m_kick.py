@@ -15,10 +15,11 @@ def kick(self, localServer, recv, override=False, sync=True):
     """Syntax: KICK <channel> <user> [reason]
 -
 As a channel operator, you kick users from your channel."""
+
     try:
         oper_override = False
         if type(self).__name__ == 'Server':
-            hook = 'remote_kick'
+            hook = 'remote_kick' if self != localServer else 'local_kick'
             override = True
             sourceServer = self
             S = recv[0][1:]

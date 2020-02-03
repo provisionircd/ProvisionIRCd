@@ -7,6 +7,7 @@ import base64
 import logging
 import logging.handlers
 import json
+from classes.rpl import RPL, ERR
 
 W = '\033[0m'  # white (normal)
 R = '\033[31m' # red
@@ -173,6 +174,7 @@ def initlogging(localServer):
         print('Pausing for 5 seconds for visibility...')
         time.sleep(5)
 
+
 class TKL:
     def check(self, localServer, user, type):
         try:
@@ -279,6 +281,7 @@ class TKL:
         except Exception as ex:
             logging.exception(ex)
 
+
 def write(line, server=None):
     line = line.replace('[0m', '')
     line = line.replace('[32m', '')
@@ -286,6 +289,7 @@ def write(line, server=None):
     line = line.replace('[34m', '')
     line = line.replace('[35m', '')
     logging.debug(line)
+
 
 def match(first, second):
     if not first and not second:
@@ -313,6 +317,7 @@ def valid_expire(s):
     if s[-1] not in spu:
         return False
     return int(s[:-1]) * spu[s[-1]]
+
 
 def checkSpamfilter(self, localServer, target, filterTarget, msg):
     try:
@@ -344,15 +349,73 @@ def checkSpamfilter(self, localServer, target, filterTarget, msg):
     except Exception as ex:
         logging.exception(ex)
 
-def update_support(localServer):
-    if not hasattr(localServer, 'name'):
+
+def update_support(ircd):
+    ircd.server_support = {}
+
+    if hasattr(ircd, 'channel_modes'):
+        chmodes_string = ''
+        for t in ircd.channel_modes:
+            for m in ircd.channel_modes[t]:
+                chmodes_string += m
+            chmodes_string += ','
+        ircd.chmodes_string = chmodes_string[:-1]
+
+
+    if hasattr(ircd, 'chprefix'):
+        chprefix_string = ''
+        first = '('
+        second = ''
+        for key in ircd.chprefix:
+            first += key
+            second += ircd.chprefix[key]
+        first += ')'
+        chprefix_string = '{}{}'.format(first, second)
+        ircd.chprefix_string = chprefix_string
+
+    if not hasattr(ircd, 'name'):
         return
-    localServer.support = {}
-    localServer.server_support = {}
-    localServer.support['NETWORK'] = localServer.name
+    ircd.support = {}
+    ircd.server_support = {}
+    ircd.support['NETWORK'] = ircd.name
     ext_ban = []
-    for module in localServer.modules:
-        for function in [function for function in localServer.modules[module][9] if hasattr(function, 'support')]:
+
+    core_classes = ircd.command_class + ircd.user_mode_class + ircd.channel_mode_class
+    for mod in [mod for mod in core_classes if hasattr(mod, 'support') and mod.support]: # if hasattr(mod, 'support') and mod.support]:
+        # This is a list containing tuples.
+        # Each list entry contains support info as a tuple.
+        # If a tuple consists of 2 items, it has a param.
+        for entry in mod.support:
+            # entry is a tuple.
+            support = entry[0]
+            if support[-1] == '=':
+                support = support[:-1]
+            param = None
+            if len(entry) == 2:
+                param = str(entry[1])
+
+            if support == 'CHANMODES':
+                param = ircd.chmodes_string
+            if support == 'PREFIX':
+                param = ircd.chprefix_string
+            if support == 'MAXLIST':
+                param = ircd.maxlist_string
+            if support == 'EXTBAN':
+                if not ext_ban:
+                    ext_ban = param
+                else:
+                    ext_ban += param[2:]
+                    param = ext_ban
+
+            if support not in ircd.support or support == 'EXTBAN':
+                ircd.support[support] = param
+
+            if hasattr(mod, 'server_support') and mod.server_support:
+                ircd.server_support[support] = param
+
+    # Decorate method, EXTBAN does not hook a command or mode so we have to check it this way.
+    for module in ircd.modules:
+        for function in [function for function in ircd.modules[module][5] if hasattr(function, 'support')]:
             for r in [r for r in function.support]:
                 server_support = False
                 if type(r) == tuple and len(r) > 1 and r[1]:
@@ -361,13 +424,13 @@ def update_support(localServer):
                 param = None
                 support = r.split('=')[0]
                 if '=' in r:
-                    param = r.split('=')[1]
+                    param = str(r.split('=')[1])
                 if support == 'CHANMODES':
-                    param = localServer.chmodes_string
+                    param = ircd.chmodes_string
                 if support == 'PREFIX':
-                    param = localServer.chprefix_string
+                    param = ircd.chprefix_string
                 if support == 'MAXLIST':
-                    param = localServer.maxlist_string
+                    param = ircd.maxlist_string
                 if support == 'EXTBAN':
                     if not ext_ban:
                         ext_ban = param
@@ -375,42 +438,24 @@ def update_support(localServer):
                         ext_ban += param[2:]
                         param = ext_ban
 
-                if support not in localServer.support or support == 'EXTBAN':
-                    localServer.support[support] = param
+                if support not in ircd.support or support == 'EXTBAN':
+                    ircd.support[support] = param
                     #logging.info('Adding support for: {}{}'.format(support, '={}'.format(param) if param else ''))
                 if server_support:
-                    localServer.server_support[support] = param
+                    ircd.server_support[support] = param
 
-    if hasattr(localServer, 'chprefix'):
-        chprefix_string = ''
-        first = '('
-        second = ''
-        for key in localServer.chprefix:
-            first += key
-            second += localServer.chprefix[key]
-        first += ')'
-        chprefix_string = '{}{}'.format(first, second)
-        localServer.chprefix_string = chprefix_string
 
-    if hasattr(localServer, 'channel_modes'):
-        chmodes_string = ''
-        for t in localServer.channel_modes:
-            for m in localServer.channel_modes[t]:
-                chmodes_string += m
-            chmodes_string += ','
-        localServer.chmodes_string = chmodes_string[:-1]
-
-def show_support(self, localServer):
+def show_support(client, ircd):
     line = []
-    for row in localServer.support:
-        row = row
-        value = localServer.support[row]
+    for row in ircd.support:
+        value = ircd.support[row]
         line.append('{}{}'.format(row, '={}'.format(value) if value else ''))
         if len(line) == 15:
-            self.sendraw('005', '{} :are supported by this server'.format(' '.join(line)))
+            client.sendraw(RPL.ISUPPORT, '{} :are supported by this server'.format(' '.join(line)))
             line = []
             continue
-    self.sendraw('005', '{} :are supported by this server'.format(' '.join(line)))
+    client.sendraw(RPL.ISUPPORT, '{} :are supported by this server'.format(' '.join(line)))
+
 
 def cloak(localServer, host):
     static = ['static.kpn.net']
@@ -435,6 +480,7 @@ def cloak(localServer, host):
     cloakhost = cloak1+'.'+cloak2+'.'+host
     return cloakhost
 
+
 def IPtoBase64(ip):
     if ip == '*':
         return
@@ -453,6 +499,7 @@ def IPtoBase64(ip):
     except Exception as ex:
         logging.exception(ex)
 
+
 def Base64toIP(base):
     try:
         ip = []
@@ -466,6 +513,7 @@ def Base64toIP(base):
         return ip
     except Exception as ex:
         logging.exception(ex)
+
 
 def check_flood(localServer, target):
     try:
@@ -534,6 +582,7 @@ def check_flood(localServer, target):
                 return
     except Exception as ex:
         logging.exception(ex)
+
 
 def save_db(localServer):
     perm_chans = {}

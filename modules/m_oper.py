@@ -11,117 +11,123 @@ except ImportError:
     pass
 from handle.functions import match, logging
 
-@ircd.Modules.params(2)
-@ircd.Modules.commands('oper')
-def oper(self, localServer, recv):
+
+@ircd.Modules.command
+class Oper(ircd.Command):
     """Enable IRC operator access.
 
-Syntax: OPER <username> <password>
-"""
-    if 'o' in self.modes:
-        return
+    Syntax: OPER <username> <password>
+    """
+    def __init__(self):
+        self.command = 'oper'
+        self.params = 2
 
-    if 'opers' not in localServer.conf:
-        self.flood_penalty += 350000
-        return self.sendraw(491, ':No O:lines for your host')
 
-    if recv[1] not in localServer.conf['opers']:
-        self.flood_penalty += 350000
-        self.sendraw(491, ':No O:lines for your host')
-        msg = '*** Failed oper attempt by {} [{}] ({}@{}): username not found'.format(self.nickname, recv[1], self.ident, self.hostname)
-        return localServer.snotice('o', msg)
+    def execute(self, client, recv):
+        if 'o' in client.modes:
+            return
 
-    if localServer.conf['opers'][recv[1]]['password'].startswith('$2b$') and len(localServer.conf['opers'][recv[1]]['password']) > 58:
-        logging.debug('Detected bcrypt for /oper')
-        password = recv[2].encode('utf-8') ### Bytes password, plain.
-        hashed = localServer.conf['opers'][recv[1]]['password'].encode('utf-8') ### Bytes password, hashed.
-        if not bcrypt.checkpw(password, hashed):
-            self.flood_penalty += 350000
-            self.sendraw(491, ':No O:lines for your host')
-            msg = '*** Failed oper attempt by {} [{}] ({}@{}): incorrect password'.format(self.nickname, recv[1], self.ident, self.hostname)
-            return localServer.snotice('o', msg)
+        if 'opers' not in self.ircd.conf:
+            client.flood_penalty += 350000
+            return client.sendraw(491, ':No O:lines for your host')
 
-    elif recv[2] != localServer.conf['opers'][recv[1]]['password']:
-        self.flood_penalty += 350000
-        self.sendraw(491, ':No O:lines for your host')
-        msg = '*** Failed oper attempt by {} [{}] ({}@{}): incorrect password'.format(self.nickname, recv[1], self.ident, self.hostname)
-        return localServer.snotice('o', msg)
+        if recv[1] not in self.ircd.conf['opers']:
+            client.flood_penalty += 350000
+            client.sendraw(491, ':No O:lines for your host')
+            msg = '*** Failed oper attempt by {} [{}] ({}@{}): username not found'.format(client.nickname, recv[1], client.ident, client.hostname)
+            return self.ircd.snotice('o', msg)
 
-    if 'requiremodes' in localServer.conf['opers'][recv[1]]:
-        for m in str(localServer.conf['opers'][recv[1]]['requiremodes']):
-            if m not in self.modes and m not in '+-':
-                self.flood_penalty += 350000
-                self.sendraw(491, ':No O:lines for your host')
-                msg = '*** Failed oper attempt by {} [{}] ({}@{}): mode requirement not met'.format(self.nickname, recv[1], self.ident, self.hostname)
-                return localServer.snotice('o', msg)
+        if self.ircd.conf['opers'][recv[1]]['password'].startswith('$2b$') and len(self.ircd.conf['opers'][recv[1]]['password']) > 58:
+            logging.debug('Detected bcrypt for /oper')
+            password = recv[2].encode('utf-8') ### Bytes password, plain.
+            hashed = self.ircd.conf['opers'][recv[1]]['password'].encode('utf-8') ### Bytes password, hashed.
+            if not bcrypt.checkpw(password, hashed):
+                client.flood_penalty += 350000
+                client.sendraw(491, ':No O:lines for your host')
+                msg = '*** Failed oper attempt by {} [{}] ({}@{}): incorrect password'.format(client.nickname, recv[1], client.ident, client.hostname)
+                return self.ircd.snotice('o', msg)
 
-    selfhost = self.fullrealhost().split('!')[1]
-    operhost = localServer.conf['opers'][recv[1]]['host']
-    hostMatch = False
-    for host in localServer.conf['opers'][recv[1]]['host']:
-        if match(host, selfhost):
-            hostMatch = True
-            break
+        elif recv[2] != self.ircd.conf['opers'][recv[1]]['password']:
+            client.flood_penalty += 350000
+            client.sendraw(491, ':No O:lines for your host')
+            msg = '*** Failed oper attempt by {} [{}] ({}@{}): incorrect password'.format(client.nickname, recv[1], client.ident, client.hostname)
+            return self.ircd.snotice('o', msg)
 
-    if not hostMatch:
-        self.flood_penalty += 350000
-        self.sendraw(491,':No O:lines for your host')
-        msg = '*** Failed oper attempt by {} [{}] ({}@{}): host does not match'.format(self.nickname, recv[1], self.ident,self.hostname)
-        return localServer.snotice('o', msg)
+        if 'requiremodes' in self.ircd.conf['opers'][recv[1]]:
+            for m in str(self.ircd.conf['opers'][recv[1]]['requiremodes']):
+                if m not in client.modes and m not in '+-':
+                    client.flood_penalty += 350000
+                    client.sendraw(491, ':No O:lines for your host')
+                    msg = '*** Failed oper attempt by {} [{}] ({}@{}): mode requirement not met'.format(client.nickname, recv[1], client.ident, client.hostname)
+                    return self.ircd.snotice('o', msg)
 
-    operClass = localServer.conf['opers'][recv[1]]['class']
-    totalClasses = list(filter(lambda u: u.server == self.server and u.cls == operClass, self.server.users))
-    if len(totalClasses) >= int(self.server.conf['class'][operClass]['max']):
-        self.flood_penalty += 350000
-        self.sendraw(491, ':No O:lines for your host')
-        msg = '*** Failed oper attempt by {} [{}] ({}@{}): limit reached for their oper class'.format(self.nickname, recv[1], self.ident, self.hostname)
-        return localServer.snotice('o', msg)
-    else:
-        self.cls = operClass
-        operclass = localServer.conf['opers'][recv[1]]['operclass']
-        parent = None if 'parent' not in localServer.conf['operclass'][operclass] else localServer.conf['operclass'][operclass]['parent']
-        self.operflags = []
-        all_flags = [flag for flag in localServer.conf['operclass'][operclass]['flags'] if '|' not in flag]
-        if parent:
-            all_flags += [flag for flag in localServer.conf['operclass'][parent]['flags'] if '|' not in flag]
+        selfhost = client.fullrealhost().split('!')[1]
+        operhost = self.ircd.conf['opers'][recv[1]]['host']
+        hostMatch = False
+        for host in self.ircd.conf['opers'][recv[1]]['host']:
+            if match(host, selfhost):
+                hostMatch = True
+                break
 
-        for flag in [flag for flag in all_flags if flag.lower() not in self.operflags]:
-            self.operflags.append(flag.lower())
+        if not hostMatch:
+            client.flood_penalty += 350000
+            client.sendraw(491,':No O:lines for your host')
+            msg = '*** Failed oper attempt by {} [{}] ({}@{}): host does not match'.format(client.nickname, recv[1], client.ident,client.hostname)
+            return self.ircd.snotice('o', msg)
 
-        ### Do not automatically set following modes: gqrzH
-        modes = 'o'+re.sub('[ogqrzH]', '', localServer.conf['opers'][recv[1]]['modes'])
-        self.opermodes = ''
-        for m in [m for m in modes if m in localServer.user_modes]:
-            self.opermodes += m
+        operClass = self.ircd.conf['opers'][recv[1]]['class']
+        totalClasses = list(filter(lambda u: u.server == client.server and u.cls == operClass, client.server.users))
+        if len(totalClasses) >= int(client.server.conf['class'][operClass]['max']):
+            client.flood_penalty += 350000
+            client.sendraw(491, ':No O:lines for your host')
+            msg = '*** Failed oper attempt by {} [{}] ({}@{}): limit reached for their oper class'.format(client.nickname, recv[1], client.ident, client.hostname)
+            return self.ircd.snotice('o', msg)
+        else:
+            client.cls = operClass
+            operclass = self.ircd.conf['opers'][recv[1]]['operclass']
+            parent = None if 'parent' not in self.ircd.conf['operclass'][operclass] else self.ircd.conf['operclass'][operclass]['parent']
+            client.operflags = []
+            all_flags = [flag for flag in self.ircd.conf['operclass'][operclass]['flags'] if '|' not in flag]
+            if parent:
+                all_flags += [flag for flag in self.ircd.conf['operclass'][parent]['flags'] if '|' not in flag]
 
-        self.operaccount = recv[1]
-        self.operclass = operclass
+            for flag in [flag for flag in all_flags if flag.lower() not in client.operflags]:
+                client.operflags.append(flag.lower())
 
-        if 'swhois' in localServer.conf['opers'][recv[1]]:
-            self.swhois = []
-            self.operswhois = localServer.conf['opers'][recv[1]]['swhois']
-            if self.operswhois not in self.swhois:
-                self.swhois.append(self.operswhois[:128])
+            ### Do not automatically set following modes: gqrzH
+            modes = 'o'+re.sub('[ogqrzH]', '', self.ircd.conf['opers'][recv[1]]['modes'])
+            client.opermodes = ''
+            for m in [m for m in modes if m in self.ircd.user_modes]:
+                client.opermodes += m
 
-        if 's' in modes:
-            snomasks = ''
-            self.snomasks = ''
-            for snomask in localServer.conf['opers'][recv[1]]['snomasks']:
-                if snomask in localServer.snomasks and snomask not in self.snomasks:
-                    snomasks += snomask
-        if 'operhost' in localServer.conf['opers'][recv[1]] and '@' not in localServer.conf['opers'][recv[1]]['operhost'] and '!' not in localServer.conf['opers'][recv[1]]['operhost']:
-            self.setinfo(localServer.conf['opers'][recv[1]]['operhost'], t='host', source=localServer)
+            client.operaccount = recv[1]
+            client.operclass = operclass
 
-        p = {'override': True}
-        self.handle('MODE', '{} +{} {}'.format(self.nickname, self.opermodes, '+'+snomasks if snomasks else ''), params=p)
-        self.sendraw(381, ':You are now an IRC Operator.')
-        self.flood_penalty = 0
-        msg = '*** {} ({}@{}) [{}] is now an IRC Operator (+{})'.format(self.nickname, self.ident, self.hostname, self.operaccount, self.opermodes)
-        localServer.snotice('o', msg)
+            if 'swhois' in self.ircd.conf['opers'][recv[1]]:
+                client.swhois = []
+                client.operswhois = self.ircd.conf['opers'][recv[1]]['swhois']
+                if client.operswhois not in client.swhois:
+                    client.swhois.append(client.operswhois[:128])
 
-        data = ':{} MD client {} operaccount :{}'.format(localServer.sid, self.uid, self.operaccount)
-        localServer.new_sync(localServer, self.server, data)
+            if 's' in modes:
+                snomasks = ''
+                client.snomasks = ''
+                for snomask in self.ircd.conf['opers'][recv[1]]['snomasks']:
+                    if snomask in self.ircd.snomasks and snomask not in client.snomasks:
+                        snomasks += snomask
+            if 'operhost' in self.ircd.conf['opers'][recv[1]] and '@' not in self.ircd.conf['opers'][recv[1]]['operhost'] and '!' not in self.ircd.conf['opers'][recv[1]]['operhost']:
+                client.setinfo(self.ircd.conf['opers'][recv[1]]['operhost'], t='host', source=self.ircd)
 
-        for line in self.swhois:
-            data = ':{} SWHOIS {} :{}'.format(localServer.sid, self.uid, line)
-            localServer.new_sync(localServer, self.server, data)
+            p = {'override': True}
+            client.handle('MODE', '{} +{} {}'.format(client.nickname, client.opermodes, '+'+snomasks if snomasks else ''), params=p)
+            client.sendraw(381, ':You are now an IRC Operator.')
+            client.flood_penalty = 0
+            msg = '*** {} ({}@{}) [{}] is now an IRC Operator (+{})'.format(client.nickname, client.ident, client.hostname, client.operaccount, client.opermodes)
+            self.ircd.snotice('o', msg)
+
+            data = ':{} MD client {} operaccount :{}'.format(self.ircd.sid, client.uid, client.operaccount)
+            self.ircd.new_sync(self.ircd, client.server, data)
+
+            for line in client.swhois:
+                data = ':{} SWHOIS {} :{}'.format(self.ircd.sid, client.uid, line)
+                self.ircd.new_sync(self.ircd, client.server, data)

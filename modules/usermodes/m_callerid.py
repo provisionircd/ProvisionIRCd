@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 provides usermodes +g and /accept command (callerid)
 """
@@ -10,8 +7,15 @@ import time
 
 from handle.functions import logging
 
-@ircd.Modules.user_modes('g', 0, 'Only users in your accept-list can message you') ### ('mode', 0, 1 or 2 for normal user, oper or server, 'Mode description')
-@ircd.Modules.support('CALLERID')
+
+@ircd.Modules.user_mode
+class usermode_g(ircd.UserMode):
+    def __init__(self):
+        self.mode = 'g'
+        self.desc = "Only users in your accept-list can message you'"
+        self.support = [('CALLERID',)]
+
+
 @ircd.Modules.hooks.pre_usermsg()
 def umode_g(self, localServer, user, msg):
     if not hasattr(user, 'caller_id_accept'):
@@ -101,17 +105,17 @@ def callerid(self, localServer, recv):
     except Exception as ex:
         logging.exception(ex)
 
-@ircd.Modules.req_class('Server')
-@ircd.Modules.commands('eos')
-def callerid_eos(self, localServer, recv):
-    if not self.socket:
+
+@ircd.Modules.hooks.server_link()
+def callerid_eos(client, localServer, remote_server):
+    if not client.socket:
         return
     for user in [user for user in localServer.users if hasattr(user, 'caller_id_accept')]:
         data = []
         for accept in user.caller_id_accept:
             data.append(accept)
         if data:
-            self._send(':{} ACCEPT {}'.format(user.uid, ','.join(data)))
+            remote_server._send(':{} ACCEPT {}'.format(user.uid, ','.join(data)))
 
 def unload(localServer):
     for user in [user for user in localServer.users if hasattr(user, 'caller_id_queue')]:

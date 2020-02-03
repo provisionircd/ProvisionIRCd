@@ -10,11 +10,13 @@ if sys.version_info[0] < 3:
     print('Python 2 is not supported.')
     sys.exit()
 
-try:
-    import faulthandler
-    faulthandler.enable()
-except:
-    pass
+
+version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
+if int(version) < 36:
+    print('Python version 3.6 or higher is required.')
+    sys.exit()
+
+
 import gc
 gc.enable()
 import socket
@@ -27,7 +29,10 @@ from handle.handleLink import Link as link
 import handle.handleModules as Modules
 from collections import OrderedDict
 import select
-import objgraph
+try:
+    import objgraph
+except:
+    pass
 
 path = os.path.abspath(__file__)
 dir_path = os.path.dirname(path)
@@ -37,6 +42,11 @@ pidfile = dir_path+'/process.pid'
 ### Import classes.
 from classes import user
 User = user.User
+
+
+from classes.modes import UserMode, ChannelMode
+from classes.commands import Command
+
 
 from handle.functions import _print, match, is_sslport, update_support, logging
 
@@ -90,31 +100,37 @@ class Server:
         self.hopcount = 0
         if not serverLink:
             try:
+                #global server
+                #server = self
                 self.forked = forked
                 self.hostname = '*'
                 from handle.functions import initlogging
                 initlogging(self)
-                self.running = 0
                 self.listen_socks = {}
-                self.bannedList = []
                 self.rootdir = dir_path
                 self.confdir = dir_path+'/conf/'
                 self.modules_dir = dir_path+'/modules/'
                 self.conffile = conffile
-                self.commands = []
-                self.api = []
+
                 self.modules = {}
-                self.events = []
-                self.hooks = []
+                self.commands = []
                 self.user_modes = {}
                 self.channel_modes = {}
+                self.hooks = []
+                self.api = []
+                self.support = {}
+
+                self.command_class = []
+                self.user_mode_class = []
+                self.channel_mode_class = []
+
                 self.localServer = self
                 self.linkRequests = {}
                 self.sync_queue = {}
-                self.creationtime = int(time.time())
 
-                self.versionnumber = '1.4'
-                self.version = 'ProvisionIRCd-{}'.format(self.versionnumber)
+                self.creationtime = int(time.time())
+                self.versionnumber = '2.0'
+                self.version = 'ProvisionIRCd-{} beta'.format(self.versionnumber)
                 self.hostinfo = 'Python {}'.format(sys.version.split('\n')[0].strip())
 
                 ### Polling does not work.
@@ -128,13 +144,17 @@ class Server:
                 self.socket = None
                 self.introducedBy = None
                 self.uplink = None
+
                 self.users = []
                 self.channels = []
+
                 self.dnsblCache = {}
                 self.hostcache = {}
                 self.deny_cache = {}
                 self.throttle = {}
                 self.tkl = {}
+                self.bannedList = []
+
                 self.user_modes = {
                     "i": (0, "User does not show up in outside /who"),
                     "o": (2, "IRC Operator"),
@@ -147,6 +167,7 @@ class Server:
                     "H": (1, "Hide IRCop status"),
                     "S": (2, "Marks the client as a network service"),
                 }
+
                 self.channel_modes = {
                 ### +v = 1
                 ### +h = 2
@@ -186,6 +207,7 @@ class Server:
                                 "V": (3, "Invite is not permitted on the channel"),
                                 },
                         }
+
                 self.core_chmodes = 'vhoaq'
                 chmodes_string = ''
                 for t in self.channel_modes:
@@ -250,16 +272,14 @@ class Server:
                 self.maxlist['b'] = 500
                 self.maxlist['e'] = 500
                 self.maxlist['I'] = 500
-                self.maxlist_string = 'b:{},e:{},I:{}'.format(self.maxlist['b'], self.maxlist['e'], self.maxlist['I'])
+                self.maxlist_string = "b:{s[b]},e:{s[e]},I:{s[I]}".format(s=self.maxlist)
                 self.servers = []
-
+                self.running = 0
                 validconf = handle.handleConf.checkConf(self, None, self.confdir, self.conffile)
 
                 if not validconf:
                     exit()
                     return
-
-                self.running = 1
 
             except Exception as ex:
                 logging.exception(ex)
@@ -329,7 +349,7 @@ class Server:
                 #if direct.socket:
                     #logging.info('Directly linked to us, no more hops needed.')
                 if not direct.socket:
-                    logging.info('Server has hopcount of {}, sending to {} first.'.format(direct.hopcount, direct.uplink))
+                    logging.info('Server has hopcount of {d.hopcount}, sending to {d.uplink} first.'.format(d=direct))
                 dest._send(data)
                 return
 
@@ -466,6 +486,16 @@ class Server:
                             source[0].sendraw(8, 'Server notice mask (+{})'.format(source[0].snomasks))
                         localServer.new_sync(localServer, self, raw)
 
+                    c = next((x for x in localServer.command_class if command.upper() in list(x.command)), None)
+                    if c:
+                        false_cmd = False
+                        if c.check(self, recvNoStrip):
+                            try:
+                                c.execute(self, recvNoStrip)
+                            except Exception as ex:
+                                logging.exception(ex)
+
+
                     for callable in [callable for callable in localServer.commands if callable[0].lower() == command.lower()]:
                         try:
                             callable[1](self, localServer, recvNoStrip)
@@ -475,10 +505,14 @@ class Server:
                     continue
 
                 else:
-                    for callable in [callable for callable in localServer.commands if callable[0].lower() == command.lower()]:
-                        ### (command, function, params, req_modes, req_flags, req_class, module)
-                        ### Do not add a return here, it will stop the recvbuffer read.
-                        callable[1](self, localServer, recvNoStrip)
+                    c = next((x for x in localServer.command_class if command.upper() in list(x.command)), None)
+                    if c:
+                        false_cmd = False
+                        if c.check(self, recvNoStrip):
+                            try:
+                                c.execute(self, recvNoStrip)
+                            except Exception as ex:
+                                logging.exception(ex)
 
             except Exception as ex:
                 logging.exception(ex)
@@ -621,14 +655,26 @@ class Server:
         from handle.handleSockets import data_handler
         self.datahandler = data_handler(self)
         self.datahandler.run()
+        self.running = 1
         return
 
-    def handle(self, cmd, data, params=None):
+    def handle(self, cmd, data, kwargs=None):
         p = ' '.join([':'+self.sid, cmd.upper(), data]).split()
         try:
+            c = next((x for x in self.localServer.command_class if cmd.upper() in list(x.command)), None)
+            if c:
+                if c.check(self, p):
+                    if kwargs:
+                        c.execute(self, p, **kwargs)
+                    else:
+                        c.execute(self, p)
+        except Exception as ex:
+           logging.exception(ex)
+
+        try:
             for callable in [callable for callable in self.localServer.commands if callable[0].lower() == cmd.lower()]:
-                if params:
-                    callable[1](self, self.localServer, p, **params)
+                if kwargs:
+                    callable[1](self, self.localServer, p, **kwargs)
                 else:
                     callable[1](self, self.localServer, p)
         except Exception as ex:
@@ -708,7 +754,6 @@ class Server:
             print('Another instance running?')
             sys.exit()
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='IRCd.')
     parser.add_argument('-c', '--conf', help='Conf file.')
@@ -745,8 +790,8 @@ if __name__ == "__main__":
     fork = not args.nofork
     version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
     if int(version) < 36:
-        print('Python version 3.6 or higher is recommended for better performance and stability.')
-        time.sleep(3)
+        print('Python version 3.6 or higher is required.')
+        sys.exit()
     try:
         S = Server(conffile=conffile, forked=fork)
         S.run()

@@ -1,12 +1,10 @@
-import imp
 import os
 import sys
 import importlib
 
-import gc
-gc.enable()
-
-from handle.functions import _print, update_support, logging
+from classes.modes import UserMode, ChannelMode
+from classes.commands import Command
+from handle.functions import update_support, logging
 
 def ListModules(self):
     modules = {}
@@ -31,45 +29,35 @@ def ListModules(self):
             folder = ''
     return modules
 
+
 def LoadModules(self):
     mods = ListModules(self)
     for m in [m for m in self.conf['modules'] if m in mods]:
         LoadModule(self, m, mods[m])
     update_support(self)
 
+
 def HookToCore(self, callables, reload=False):
     try:
-        ### Tuple: callables, channel_modes, user_modes, events, req_modes, req_flags, req_class, commands, params, support, hooks, module
+        ### Tuple: callables, commands, user_modes, channel_modes, hooks, support, api, module
         hooks = []
-        channel_modes = callables[1]
-        user_modes = callables[2]
-        events = callables[3]
-        commands = callables[7]
-        module_hooks = callables[10]
-        api = callables[11]
-        #print('HOOKS: {}'.format(hooks))
-        module = callables[12]
-        for callable in [callable for callable in commands if callable not in hooks]:
-            hooks.append(callable)
-            for cmd in [cmd for cmd in callable.commands if cmd not in self.commands]:
-                params = 0
-                req_modes = None
-                req_flags = None
-                req_modes = None
-                req_class = 'User'
-                if hasattr(callable, "params"):
-                    params = callable.params
-                if hasattr(callable, "req_modes"):
-                    req_modes = callable.req_modes
-                if hasattr(callable, "req_flags"):
-                    req_flags = callable.req_flags
-                if hasattr(callable, "req_class"):
-                    req_class = callable.req_class
-                info = (cmd, callable, params, req_modes, req_flags, req_class, module)
-                self.commands.append(info) ### (cmd, callable, params, req_modes, req_flags, req_class, module)
-                logging.info('Hooked command "{}" (params: {}, req_modes: {}, req_flags: {}, req_class: {}) to function {}'.format(cmd, params, req_modes, req_flags, req_class, callable))
+        commands = callables[0]
+        user_modes = callables[1]
+        channel_modes = callables[2]
+        module_hooks = callables[3]
+        support = callables[4]
+        api = callables[5]
+        module = callables[6]
 
-        hooks = []
+        for c in commands+user_modes+channel_modes:
+            m = c()
+            m.module = module
+            m.ircd = self
+            m.register()
+
+        if hasattr(module, 'init'):
+            module.init(self)
+
         for callable in [callable for callable in api if callable not in hooks]:
             hooks.append(callable)
             for a in [a for a in callable.api if a not in self.api]:
@@ -78,125 +66,7 @@ def HookToCore(self, callables, reload=False):
                 api_password = None if len(a) < 3 else a[2]
                 info = (api_cmd, callable, api_host, api_password, module)
                 self.api.append(info) ### (cmd, callable, params, req_modes, req_flags, req_class, module)
-                logging.info('Hooked API "{}" (host: {}, password: {}) to function {}'.format(api_cmd, api_host, api_password, callable))
-
-        hooks = []
-        for callable in [callable for callable in channel_modes if callable not in hooks]:
-            hooks.append(callable)
-            update_support(self)
-            ### Tuple: ('mode', type, level, 'Mode description', class 'user' or None, prefix, 'param desc')
-            for chmode in [chmode for chmode in callable.channel_modes if chmode[0] not in self.chmodes_string]:
-                mode = chmode[0]
-                type = chmode[1]
-                level = chmode[2]
-                desc = chmode[3]
-                cls = None
-                if len(chmode) > 4:
-                    cls = chmode[4]
-                prefix = None
-                if len(chmode) > 5:
-                    prefix = chmode[5]
-                param_desc = None
-                if len(chmode) > 6:
-                    param_desc = chmode[6]
-                if not str(level).isdigit():
-                    logging.warning('Invalid mode-level for {} -- skipping'.format(chmode))
-                    continue
-                level = int(level)
-                for m in mode:
-                    if m in self.chstatus or m in self.chmodes_string:
-                        ### Found conflicting channel mode. Skipping.
-                        logging.error('Channel mode {} already exists.'.format(m))
-                        continue
-                    if cls and cls.lower() == 'user':
-                        self.chstatus += m[0]
-                        ### Adding prefix to core.
-                        found_prefix = [p for p in self.chprefix if self.chprefix[p] == prefix]
-                        if found_prefix:
-                            continue
-                        self.chprefix[m[0]] = prefix
-                    ### Add mode to self.channel_modes
-                    ### Index 0 beI, index 1 kLf, index 2 l, index 3 imnjprstzCNOQRTV
-                    if str(type) == '0':
-                        if not hasattr(module, 'list_name') or not module.list_name or not module.list_name.isalpha():
-                            error = 'Invalid list mode in {}: missing or invalid "list_name"'.format(module)
-                            logging.error(error)
-                            if not reload and not self.running:
-                                sys.exit()
-                                return
-                            return error
-                        if not hasattr(module, 'mode_prefix') or not module.mode_prefix:
-                            error = 'Invalid list mode in {}: missing "mode_prefix"'.format(module)
-                            logging.error(error)
-                            if not reload and not self.running:
-                                sys.exit()
-                                return
-                            return error
-                        if module.mode_prefix.isalpha() or module.mode_prefix.isdigit() or len(module.mode_prefix) > 1:
-                            error = 'Invalid list mode in {}: invalid "mode_prefix", must be a special char'.format(module)
-                            logging.error(error)
-                            if not reload and not self.running:
-                                sys.exit()
-                                return
-                            return error
-                        if module.mode_prefix in ":&\"'*~@%+#":
-                            error = 'Invalid list mode in {}: invalid "mode_prefix", reserved for core'.format(module)
-                            logging.error(error)
-                            if not reload and not self.running:
-                                sys.exit()
-                                return
-                            return error
-                        if [m for m in self.modules if hasattr(m, 'mode_prefix') and module.mode_prefix == m.mode_prefix]:
-                            error = 'Invalid list mode in {}: invalid "mode_prefix", already in use'.format(module)
-                            logging.error(error)
-                            if not reload and not self.running:
-                                sys.exit()
-                                return
-                            return error
-                    if str(type) in '0123':
-                        self.channel_modes[type][m] = (level, desc) if not param_desc else (level, desc, param_desc)
-                    if prefix:
-                        current_prefix = ''
-                        for entry in [entry for entry in self.support if len(entry.split('=')) > 1 and entry.split('=')[0] == 'PREFIX']:
-                            current_prefix = entry
-                            break
-                        #print('New prefix found. Current prefix support: {}'.format(current_prefix))
-                        ### Append new prefix at the end. ok back to watching HIMYM, again.
-
-                    chmodes_string = ''
-                    for t in self.channel_modes:
-                        for n in self.channel_modes[t]:
-                            chmodes_string += n
-                        chmodes_string += ','
-                    self.chmodes_string = chmodes_string[:-1]
-
-                    logging.info('Hooked channel mode {} (type: {}, prefix: {}) to core'.format(m, type, prefix))
-                    logging.info('Mode level: {}'.format(level))
-                    logging.info('Mode desc: {}'.format(desc))
-
-        ### callables, channel_modes, user_modes, events, req_modes, req_flags, req_class, commands, params, module
-        hooks = []
-        for callable in [callable for callable in user_modes if callable not in hooks]:
-            hooks.append(callable)
-            for umode in [umode for umode in callable.user_modes if umode[0] not in self.user_modes]:
-                ### ('mode', 0, 1 or 3 for normal user, oper or server, 'Mode description')
-                mode = umode[0]
-                level = umode[1]
-                desc = umode[2]
-                self.user_modes[mode] = (level, desc)
-                logging.info('Hooked user mode {} to core (level: {}, desc: {})'.format(mode, level, desc))
-
-        ### This does not really needed to be "hooked" here. Just loop over the callables to check if there's an event.
-        ### callables, channel_modes, user_modes, events, req_modes, req_flags, req_class, commands, params, module
-        hooks = []
-        for callable in [callable for callable in events if callable not in hooks]:
-            hooks.append(callable)
-            for event in [event for event in callable.events]:
-                #print('Event: {}'.format(event))
-                info = (event, callable, module)
-                if info not in self.events:
-                    self.events.append(info)
-                    #logging.info('Hooked event {} to core'.format(info))
+                #logging.info('Hooked API "{}" (host: {}, password: {}) to function {}'.format(api_cmd, api_host, api_password, callable))
 
         hooks = []
         for callable in [callable for callable in module_hooks if callable not in hooks]:
@@ -205,42 +75,35 @@ def HookToCore(self, callables, reload=False):
                 #print(callable)
                 info = (h[0], h[1], callable, module)
                 self.hooks.append(info)
-                logging.info('Hooked {}'.format(info))
+                #logging.info('Hooked {}'.format(info))
+
+        update_support(self)
 
     except Exception as ex:
         logging.exception(ex)
+        return ex
+
 
 def LoadModule(self, name, path, reload=False, module=None):
-    #logging.debug('Name: {}'.format(name))
-    #logging.debug('Path: {}'.format(path))
-    #logging.debug('Reload: {}'.format(reload))
-    #logging.debug('Module: {}'.format(module))
     package = name.replace('/', '.')
-    #logging.debug('Package: {}'.format(package))
     try:
         error = 0
         with open(path) as mod:
-            #module = imp.load_module(name, mod, path, ('.py', 'U', imp.PY_SOURCE))
             if reload:
-                importlib.reload(module)
+                module = importlib.reload(module)
                 logging.debug('Requesting reload from importlib')
             else:
                 module = importlib.import_module(package)
-            if hasattr(module, 'init'):
-                try:
-                    getattr(module, 'init')(self, reload=reload)
-                except Exception as ex:
-                    logging.exception(ex)
-                    if not self.running:
-                        print('Server could not be started due to an error in {}: {}'.format(name, ex))
-                        sys.exit()
+                importlib.reload(module)
             if not module.__doc__:
                 logging.info('Invalid module.')
                 return 'Invalid module'
-            callables = FindCallables(module)
+            callables = FindCallables(self, module)
             hook_fail = HookToCore(self, callables, reload=reload) ### If None is returned, assume success.
             if hook_fail:
+                logging.debug('Hook failed: {}'.format(hook_fail))
                 UnloadModule(self, name)
+
                 return hook_fail
             self.modules[module] = callables
             name = module.__name__
@@ -258,38 +121,57 @@ def LoadModule(self, name, path, reload=False, module=None):
         raise
         return ex
 
+
 def UnloadModule(self, name):
     try:
         for module in [module for module in list(self.modules) if module.__name__ == name]:
+            ### Tuple: commands, user_modes, channel_modes, hooks, support, api, module
             m = module.__name__
             if m == name:
+                '''
+                logging.debug('Module info:')
+                info = ''
+                for count,mod in enumerate(self.modules[module]):
+                    logging.debug(count)
+                    if count == 0:
+                        info = 'commands'
+                    if count == 1:
+                        info = 'user_modes'
+                    if count == 2:
+                        info = 'channel_modes'
+                    if count == 3:
+                        info = 'hooks'
+                    if count == 4:
+                        info = 'support'
+                    if count == 5:
+                        info = 'api'
+                    if count == 6:
+                        info = 'module'
+                    print(info)
+                    logging.debug(self.modules[module][count])
+                    logging.debug('-')
+                '''
+                core_classes = self.user_mode_class + self.channel_mode_class + self.command_class
+                for m in [m for m in core_classes if m.module == module]:
+                    m.unload()
+
                 if hasattr(module, 'unload'):
                     try:
-                        getattr(module, 'unload')(self)
+                        module.unload(self)
                     except Excption as ex:
                         logging.exception(ex)
-                for function in [function for function in self.modules[module][0] if hasattr(function, 'commands')]:
-                    for cmd in list(function.commands):
-                        function.commands.remove(cmd)
-                        params = 0
-                        req_modes = None
-                        req_flags = None
-                        req_class = 'User'
-                        if hasattr(function, "params"):
-                            params = function.params
-                        if hasattr(function, "req_modes"):
-                            req_modes = function.req_modes
-                        if hasattr(function, "req_flags"):
-                            req_flags = function.req_flags
-                        if hasattr(function, "req_class"):
-                            req_class = function.req_class
-                        info = (cmd, function, params, req_modes, req_flags, req_class, module)
-                        try:
-                            self.commands.remove(info)
-                        except ValueError:
-                            logging.error('Callable {} not found in commands list.'.format(cmd))
 
-                for function in [function for function in self.modules[module][0] if hasattr(function, 'api')]:
+                for function in [function for function in self.modules[module][3] if hasattr(function, 'hooks')]:
+                    for h in list(function.hooks):
+                        info = (h[0], h[1], function, module)
+                        function.hooks.remove(h)
+                        if info in self.hooks:
+                            self.hooks.remove(info)
+                            #logging.info('Unhooked {}'.format(info))
+                        else:
+                            logging.error('Unable to remove hook {}: not found in hooks list'.format(info))
+
+                for function in [function for function in self.modules[module][5] if hasattr(function, 'api')]:
                     for a in list(function.api):
                         function.api.remove(a)
                         api_cmd = a[0]
@@ -301,149 +183,76 @@ def UnloadModule(self, name):
                         except ValueError:
                             logging.error('Callable {} not found in API list.'.format(a))
 
-                ### info = (api_cmd, callable, api_host, api_password, module)
-
-                for function in [function for function in self.modules[module][0] if hasattr(function, 'api')]:
-                    for cmd in list(function.api):
-                        function.api.remove(cmd)
-                        host = None
-                        password = None
-                        if hasattr(function, "host"):
-                            host = function.host
-                        if hasattr(function, "password"):
-                            password = function.password
-                        info = (cmd, function, host, password)
-                        try:
-                            self.api.remove(info)
-                        except ValueError:
-                            logging.error('Callable {} not found in api list.'.format(cmd))
-
-                for function in [function for function in self.modules[module][1] if hasattr(function, 'channel_modes')]:
-                    for chmode in [m for m in list(function.channel_modes) if m[0] in self.chmodes_string]:
-                        ### ('mode', type, level, 'Mode description', class 'user' or None, prefix, 'param desc')
-                        #self.channel_modes[3][m] = (level, desc)
-                        mode = chmode[0]
-                        type = chmode[1]
-                        level = chmode[2]
-                        desc = chmode[3]
-                        cls = None
-                        if len(chmode) > 4:
-                            cls = chmode[4]
-                        prefix = None
-                        if len(chmode) > 5:
-                            prefix = chmode[5]
-                        if str(cls).lower() == 'user':
-                            self.chstatus = self.chstatus.replace(mode, '')
-                            if prefix:
-                                ### Remove prefix from core.
-                                del self.chprefix[mode]
-                        else:
-                            if mode in self.channel_modes[type]:
-                                del self.channel_modes[type][mode]
-                            else:
-                                ### This happens because Python "remembers" the modules' global variables on reload (including functions):
-                                ### https://docs.python.org/3/library/importlib.html#importlib.reload
-                                ### So FindCallables() will append new functions if the name differs.
-                                logging.error('Mode {} from type {} not found in server channel_modes list: {} ({})'.format(mode, type, self.channel_modes[type], m))
-                        update_support(self)
-                for function in [function for function in self.modules[module][2] if hasattr(function, 'user_modes')]:
-                    for umode in list(function.user_modes):
-                        mode = umode[0]
-                        del self.user_modes[mode]
-                for function in [function for function in self.modules[module][3] if hasattr(function, 'events')]:
-                    for event in list(function.events):
-                        info = (event, function, module)
-                        function.events.remove(event)
-                        if info in self.events:
-                            #logging.info('Removed event {}'.format(info))
-                            self.events.remove(info)
-                        else:
-                            logging.error('Unable to remove event {}: not found in events list'.format(info))
-                for function in [function for function in self.modules[module][10] if hasattr(function, 'hooks')]:
-                    for h in list(function.hooks):
-                        info = (h[0], h[1], function, module)
-                        function.hooks.remove(h)
-                        if info in self.hooks:
-                            logging.info('Removed {}'.format(info))
-                            self.hooks.remove(info)
-                        else:
-                            logging.error('Unable to remove hook {}: not found in events list'.format(info))
-
-                ### Leftover events.
-                for e in [e for e in list(self.events) if e[2] == module]:
-                   logging.error('Event {} was not properly removed (or added double). Removing now.'.format(e))
-                   self.events.remove(e)
-
                 ### Leftover hooks.
                 for h in [h for h in list(self.hooks) if h[2] == module]:
                    logging.error('Hook {} was not properly removed (or added double). Removing now.'.format(h))
                    self.hooks.remove(h)
 
-                for function in [function for function in self.modules[module][4] if hasattr(function, 'req_modes')]:
-                    for a in list(function.req_modes):
-                        function.req_modes.remove(a)
-
-                for function in [function for function in self.modules[module][4] if hasattr(function, 'req_flags')]:
-                    for a in list(function.req_flags):
-                        function.req_flags.remove(a)
                 del self.modules[module]
+
                 logging.info('Unloaded: {}'.format(m))
+                update_support(self)
                 return 1
 
     except Exception as ex:
         logging.exception(ex)
         return str(ex)
 
-def FindCallables(module):
+def FindCallables(self, module):
     itervalues = dict.values
-    callables = []
-    channel_modes = []
-    user_modes = []
-    events = []
-    req_modes = []
-    req_flags = []
-    req_class = [] # Defaults to User class.
     commands = []
-    api = []
-    params = [] # For commands.
-    support = []
+    user_modes = []
+    channel_modes = []
     hooks = []
+    api = []
+    support = []
+
     for i in itervalues(vars(module)):
         if callable(i):
-            callables.append(i)
-            if hasattr(i, 'channel_modes'):
-                channel_modes.append(i)
-            if hasattr(i, 'user_modes'):
-                user_modes.append(i)
-            if hasattr(i, 'events'):
-                events.append(i)
-            if hasattr(i, 'req_modes'):
-                req_modes.append(i)
-            if hasattr(i, 'req_flags'):
-                req_flags.append(i)
-            if hasattr(i, 'req_class'):
-                req_class.append(i)
-            if hasattr(i, 'commands'):
+            if hasattr(i, 'mro') and i.mro()[1].__name__ == "Command":
                 commands.append(i)
-            if hasattr(i, 'params'):
-                params.append(i)
-            if hasattr(i, 'support'):
-                support.append(i)
+
+            if hasattr(i, 'mro') and i.mro()[1].__name__ == "UserMode":
+                user_modes.append(i)
+
+            if hasattr(i, 'mro') and i.mro()[1].__name__ == "ChannelMode":
+                channel_modes.append(i)
+
             if hasattr(i, 'hooks'):
                 hooks.append(i)
+
+            if hasattr(i, 'support'):
+                support.append(i)
+
             if hasattr(i, 'api'):
                 api.append(i)
-    info = callables, channel_modes, user_modes, events, req_modes, req_flags, req_class, commands, params, support, hooks, api, module
+
+    info = commands, user_modes, channel_modes, hooks, support, api, module
     return info
 
-def commands(*command_list):
+
+def support(*support):
     def add_attribute(function):
-        if not hasattr(function, "commands"):
-            function.commands = []
-        function.commands.extend(command_list)
+        if not hasattr(function, "support"):
+            function.support = []
+        function.support.extend(support)
         return function
     return add_attribute
 
+def user_mode(cls):
+    class umode(UserMode):
+        pass
+    return cls
+
+def channel_mode(cls):
+    class umode(ChannelMode):
+        pass
+    return cls
+
+def command(cls):
+    class umode(Command):
+        pass
+    return cls
 
 def api(*args):
     ### ('command', host=None, password=None)
@@ -454,20 +263,33 @@ def api(*args):
         return function
     return add_attribute
 
-def channel_modes(*args):
-    ### ('mode', type, level, 'Mode description', class 'user' or None, prefix, 'param desc')
+
+
+
+
+
+
+def params(num):
     def add_attribute(function):
-        if not hasattr(function, "channel_modes"):
-            function.channel_modes = []
-        function.channel_modes.append(args)
+        if not hasattr(function, "params"):
+            function.params = 0
+        function.params = num
         return function
     return add_attribute
 
-def user_modes(*args):
+def commands(*command_list):
     def add_attribute(function):
-        if not hasattr(function, "user_modes"):
-            function.user_modes = []
-        function.user_modes.append(args)
+        if not hasattr(function, "commands"):
+            function.commands = []
+        function.commands.extend(command_list)
+        return function
+    return add_attribute
+
+def req_class(req_class):
+    def add_attribute(function):
+        if not hasattr(function, "req_class"):
+            function.req_class = 'User' # Defaults to User class.
+        function.req_class = req_class
         return function
     return add_attribute
 
@@ -489,27 +311,20 @@ def req_flags(*req_flags):
         return function
     return add_attribute
 
-def req_class(req_class):
+def channel_modes(*args):
+    ### ('mode', type, level, 'Mode description', class 'user' or None, prefix, 'param desc')
     def add_attribute(function):
-        if not hasattr(function, "req_class"):
-            function.req_class = 'User' # Defaults to User class.
-        function.req_class = req_class
+        if not hasattr(function, "channel_modes"):
+            function.channel_modes = []
+        function.channel_modes.append(args)
         return function
     return add_attribute
 
-def params(num):
+def user_modes(*args):
     def add_attribute(function):
-        if not hasattr(function, "params"):
-            function.params = 0
-        function.params = num
-        return function
-    return add_attribute
-
-def support(*support):
-    def add_attribute(function):
-        if not hasattr(function, "support"):
-            function.support = []
-        function.support.extend(support)
+        if not hasattr(function, "user_modes"):
+            function.user_modes = []
+        function.user_modes.append(args)
         return function
     return add_attribute
 
@@ -520,6 +335,11 @@ def events(*command_list):
         function.events.extend(command_list)
         return function
     return add_attribute
+
+
+
+
+
 
 
 import inspect
@@ -564,6 +384,8 @@ all_hooks = [
             'channel_lists_sync',
             'welcome',
             'new_connection',
+            'server_link',
+            'rpl',
             'loop',
             ]
 
@@ -576,15 +398,7 @@ class hooks:
             function.hooks.extend((d, h))
             return function
         return add
-    '''
-    def pre_chanmode(*h):
-        d = inspect.stack()[0][3]
-        def add(function):
-            info = (function, d, *h)
-            function.hooks = info
-            return function
-        return add
-    '''
+
     for hook in all_hooks:
         exec("""def {}(*h):
             d = inspect.stack()[0][3]

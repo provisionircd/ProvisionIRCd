@@ -159,6 +159,7 @@ def got_kicked(self, localServer, user, channel, reason):
     user.kicktime = int(time.time())
     logging.debug('{} kicktime set: {}'.format(user.nickname, user.kicktime))
 
+
 @ircd.Modules.hooks.pre_local_join()
 def user_wants_join(self, localServer, channel, **kwargs):
     if 'rejoindelay' not in channel.properties or 'override' in kwargs or 'o' in self.modes:

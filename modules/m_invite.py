@@ -1,78 +1,87 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 /invite command
 """
 
 import ircd
-from handle.functions import _print
+
 from modules.m_joinpart import checkMatch
 import time
 
-@ircd.Modules.params(2)
-### Types: 0 = mask, 1 = require param, 2 = optional param, 3 = no param, 4 = special user channel-mode.
-@ircd.Modules.channel_modes('i', 3, 2, 'You need to be invited to join the channel', None, None) ### ('mode', type, level, 'Mode description', class 'user' or None, prefix, 'param desc')
-@ircd.Modules.support(('INVEX', 1))
-@ircd.Modules.commands('invite')
-def invite(self, localServer, recv, override=False):
-    try:
-        if type(self).__name__ == 'Server':
-            override = True
-            sourceServer = self
+@ircd.Modules.channel_mode
+class chmode_i(ircd.ChannelMode):
+    def __init__(self):
+        self.mode = 'i'
+        self.desc = 'You need to be invited to join the channel'
+        self.type = 3
 
-            self = list(filter(lambda u: u.uid == recv[0][1:], localServer.users))[0]
+
+@ircd.Modules.command
+class Invite(ircd.Command):
+    """
+    Invites a user to a channel.
+    Syntax: /INVITE <user> <channel>
+    """
+    def __init__(self):
+        self.command = 'invite'
+        self.params = 2
+        self.support = [('INVEX',)]
+        self.server_support = 1
+
+    def execute(self, client, recv, override=False):
+        if type(client).__name__ == 'Server':
+            override = True
+            sourceServer = client
+            client = [u for u in self.ircd.users if u.uid == recv[0][1:]][0]
             recv = recv[1:]
         else:
-            sourceServer = self.server
+            sourceServer = client.server
 
         oper_override = False
 
-        user = list(filter(lambda u: u.nickname.lower() == recv[1].lower() or u.uid.lower() == recv[1].lower(), localServer.users))
+        invite_user = [u for u in self.ircd.users if u.nickname.lower() == recv[1].lower() or u.uid.lower() == recv[1].lower()]
 
-        if not user:
-            return self.sendraw(401, '{} :No such nick'.format(recv[1]))
+        if not invite_user:
+            return client.sendraw(self.ERR.NOSUCHNICK, '{} :No such nick'.format(recv[1]))
 
-        user = user[0]
+        invite_user = invite_user[0]
 
-        channel = list(filter(lambda c: c.name.lower() == recv[2].lower(), localServer.channels))
+        channel = [c for c in self.ircd.channels if c.name.lower() == recv[2].lower()]
 
         if not channel:
-            return self.sendraw(401, '{} :No such channel'.format(recv[2]))
+            return client.sendraw(self.ERR.NOSUCHCHANNEL, '{} :No such channel'.format(recv[2]))
 
         channel = channel[0]
 
-        if self not in channel.users:
-            if not override and not self.ocheck('o', 'override'):
-                return self.sendraw(401, '{} :You are not on that channel'.format(channel.name))
+        if client not in channel.users:
+            if not override and not client.ocheck('o', 'override'):
+                return client.sendraw(self.ERR.NOTONCHANNEL, '{} :You are not on that channel'.format(channel.name))
             else:
                 oper_override = True
 
-        if self.chlevel(channel) < 3:
-            if not self.ocheck('o', 'override'):
-                return self.sendraw(482, '{} :You are not a channel half-operator'.format(channel.name))
+        if client.chlevel(channel) < 3:
+            if not client.ocheck('o', 'override'):
+                return client.sendraw(self.ERR.CHANOPRIVSNEEDED, '{} :You are not a channel half-operator'.format(channel.name))
             else:
                 oper_override = True
 
         if 'V' in channel.modes:
-            if not self.ocheck('o', 'override'):
-                return self.sendraw(518, ':Invite is disabled on channel {} (+V)'.format(channel.name))
+            if not client.ocheck('o', 'override'):
+                return client.sendraw(self.ERR.NOINVITE, ':Invite is disabled on channel {} (+V)'.format(channel.name))
             else:
                 oper_override = True
 
-        if user in channel.users:
-            return self.sendraw(443, '{} :is already on channel {}'.format(user.nickname, channel.name))
+        if invite_user in channel.users:
+            return client.sendraw(self.ERR.USERONCHANNEL, '{} :is already on channel {}'.format(invite_user.nickname, channel.name))
 
-        if user in channel.invites and not self.ocheck('o', 'override'):
-            return self.sendraw(342, '{} :has already been invited to {}'.format(user.nickname, channel.name))
+        if invite_user in channel.invites and not client.ocheck('o', 'override'):
+            return client.sendraw(342, '{} :has already been invited to {}'.format(invite_user.nickname, channel.name))
 
-        channel.invites[user] = {}
-        ### All invites expire after 1 day.
-        channel.invites[user]['ctime'] = int(time.time())
-        channel.invites[user]['override'] = True if (self.ocheck('o', 'override') or self.chlevel(channel) >= 3) else False
+        channel.invites[invite_user] = {}
+        channel.invites[invite_user]['ctime'] = int(time.time())
+        channel.invites[invite_user]['override'] = True if (client.ocheck('o', 'override') or client.chlevel(channel) >= 3) else False
         if oper_override:
             s = ''
-            if checkMatch(user, localServer, 'b', channel):
+            if checkMatch(invite_user, self.ircd, 'b', channel):
                 s = ' [Overriding +b]'
             elif 'i' in channel.modes:
                 s = ' [Overriding +i]'
@@ -80,21 +89,25 @@ def invite(self, localServer, recv, override=False):
                 s = ' [Overriding +l]'
             elif 'k' in channel.modes:
                 s = ' [Overriding +k]'
-            elif 'R' in channel.modes and 'r' not in user.modes:
+            elif 'R' in channel.modes and 'r' not in invite_user.modes:
                 s = ' [Overriding +R]'
-            elif 'z' in channel.modes and 'z' not in user.modes:
+            elif 'z' in channel.modes and 'z' not in invite_user.modes:
                 s = ' [Overriding +z]'
-            localServer.snotice('s', '*** OperOverride by {} ({}@{}) with INVITE {} {}{}'.format(self.nickname, self.ident, self.hostname, user.nickname, channel.name, s))
+            self.ircd.snotice('s', '*** OperOverride by {} ({}@{}) with INVITE {} {}{}'.format(client.nickname, client.ident, client.hostname, invite_user.nickname, channel.name, s))
 
-        self.broadcast([user], 'INVITE {} {}'.format(user.nickname, channel.name))
-
-        self.sendraw(341, '{} {}'.format(user.nickname, channel.name))
-
-        data = ':{} INVITE {} {}'.format(self.uid, user.nickname, channel.name)
-
+        client.broadcast([invite_user], 'INVITE {} {}'.format(invite_user.nickname, channel.name))
+        client.sendraw(self.RPL.INVITING, '{} {}'.format(invite_user.nickname, channel.name))
+        data = ':{} INVITE {} {}'.format(client.uid, invite_user.nickname, channel.name)
         p = {'s_sync': False}
-        localServer.handle('NOTICE', '{} :{} ({}@{}) invited {} to join the channel'.format(channel.name, self.nickname, self.ident, self.hostname, user.nickname), params=p)
+        self.ircd.handle('NOTICE', '{} :{} ({}@{}) invited {} to join the channel'.format(channel.name, user.nickname, user.ident, user.hostname, invite_user.nickname), params=p)
+        self.ircd.new_sync(self.ircd, sourceServer, data)
 
-        localServer.new_sync(localServer, sourceServer, data)
-    except Exception as ex:
-        _print(ex, server=localServer)
+
+
+@ircd.Modules.hooks.loop()
+def expired_invites(ircd):
+    ### Expire all invites after 6 hours.
+    for chan in [channel for channel in ircd.channels if len(channel.invites) > 0]:
+        for invite in dict(chan.invites):
+            if time.time() - chan.invites[invite]['ctime'] > 3600.0*6:
+                del chan.invites[invite]

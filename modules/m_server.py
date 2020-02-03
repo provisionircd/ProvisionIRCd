@@ -15,140 +15,147 @@ Y = '\033[33m' # yellow
 B = '\033[34m' # blue
 P = '\033[35m' # purple
 
-@ircd.Modules.params(5)
-@ircd.Modules.req_class('Server')
-@ircd.Modules.commands('server')
-def server(self, localServer, recv):
-    try:
-        exists = [s for s in localServer.servers+[localServer] if s.hostname.lower() == recv[2].lower()]
-        if exists and self != exists[0]:
+@ircd.Modules.command
+class Server(ircd.Command):
+    def __init__(self):
+        self.command = 'server'
+        self.req_class = 'Server'
+        self.params = 5
+
+
+    def execute(self, client, recv):
+        exists = [s for s in self.ircd.servers+[self.ircd] if s.hostname.lower() == recv[2].lower()]
+        if exists and client != exists[0]:
             logging.error('Server {} already exists on this network2'.format(recv[2]))
-            self.quit('Server already exists on this network')
+            client.quit('Server already exists on this network')
             return
-        if not self.sid:
+        if not client.sid:
             logging.error('Direct link with {} denied because their SID is unknown to me'.format(recv[2]))
-            self.quit('No SID received')
+            client.quit('No SID received')
             return
 
         # SERVER irc.example.com 1 :versionstring Server name goes here.
-        if not self.linkAccept and not self.eos:
+        if not client.linkAccept and not client.eos:
             # Information is gathered backwards from recv.
-            self.linkAccept = True
+            client.linkAccept = True
             tempName = ' '.join(recv).split(':')[-2]
-            self.hostname = tempName.split()[-2].strip()
-            self.hopcount = int(tempName.split()[-1])
-            self.name = ' '.join(recv[1:]).split(':')[1] # ' '.join(recv[4:])
-            self.rawname = ' '.join(recv[3:])
-            if self.name.startswith(':'):
-                self.name = self.name[1:]
+            client.hostname = tempName.split()[-2].strip()
+            client.hopcount = int(tempName.split()[-1])
+            client.name = ' '.join(recv[1:]).split(':')[1] # ' '.join(recv[4:])
+            client.rawname = ' '.join(recv[3:])
+            if client.name.startswith(':'):
+                client.name = client.name[1:]
 
-            logging.info('{}Hostname for {} set: {}{}'.format(G, self, self.hostname, W))
-            if [s for s in localServer.servers+[localServer] if s.hostname.lower() == self.hostname.lower() and s != self]:
-                logging.error('Server {} already exists on this network'.format(self.hostname))
-                error = 'Error connecting to server {}[{}:{}]: server {} already exists on remote network'.format(self.hostname, ip, port, self.hostname)
-                self._send(':{} ERROR :{}'.format(localServer.sid, error))
-                self.quit('server {} already exists on this network'.format(self.hostname))
+            logging.info('{}Hostname for {} set: {}{}'.format(G, client, client.hostname, W))
+            if [s for s in self.ircd.servers+[self.ircd] if s.hostname.lower() == client.hostname.lower() and s != client]:
+                logging.error('Server {} already exists on this network'.format(client.hostname))
+                error = 'Error connecting to server {}[{}:{}]: server {} already exists on remote network'.format(client.hostname, ip, port, client.hostname)
+                client._send(':{} ERROR :{}'.format(self.ircd.sid, error))
+                client.quit('server {} already exists on this network'.format(client.hostname))
                 return
 
-            logging.info('{}Server name for {} set: {}{}'.format(G, self, self.name, W))
-            logging.info('{}Hopcount for {} set: {}{}'.format(G, self, self.hopcount, W))
-            logging.info('{}SID for {} set: {}{}'.format(G, self, self.sid, W))
+            logging.info('{}Server name for {} set: {}{}'.format(G, client, client.name, W))
+            logging.info('{}Hopcount for {} set: {}{}'.format(G, client, client.hopcount, W))
+            logging.info('{}SID for {} set: {}{}'.format(G, client, client.sid, W))
 
-            ip, port = self.socket.getpeername()
-            ip2, port2 = self.socket.getsockname()
-            if self.hostname not in localServer.conf['link']:
-                error = 'Error connecting to server {}[{}:{}]: no matching link configuration'.format(localServer.hostname, ip2, port2)
-                self._send(':{} ERROR :{}'.format(localServer.sid, error))
-                self.quit('no matching link configuration')
+            ip, port = client.socket.getpeername()
+            ip2, port2 = client.socket.getsockname()
+            if client.hostname not in self.ircd.conf['link']:
+                error = 'Error connecting to server {}[{}:{}]: no matching link configuration'.format(self.ircd.hostname, ip2, port2)
+                client._send(':{} ERROR :{}'.format(self.ircd.sid, error))
+                client.quit('no matching link configuration')
                 return
 
-            self.cls = localServer.conf['link'][self.hostname]['class']
-            logging.info('{}Class: {}{}'.format(G, self.cls, W))
-            if not self.cls:
-                error = 'Error connecting to server {}[{}:{}]: no matching link configuration'.format(localServer.hostname, ip2, port2)
-                self._send(':{} ERROR :{}'.format(localServer.sid, error))
-                self.quit('no matching link configuration')
+            client.cls = self.ircd.conf['link'][client.hostname]['class']
+            logging.info('{}Class: {}{}'.format(G, client.cls, W))
+            if not client.cls:
+                error = 'Error connecting to server {}[{}:{}]: no matching link configuration'.format(self.ircd.hostname, ip2, port2)
+                client._send(':{} ERROR :{}'.format(self.ircd.sid, error))
+                client.quit('no matching link configuration')
                 return
-            totalClasses = list(filter(lambda s: s.cls == self.cls, localServer.servers))
-            if len(totalClasses) > int(localServer.conf['class'][self.cls]['max']):
-                self.quit('Maximum server connections for this class reached')
+            totalClasses = list(filter(lambda s: s.cls == client.cls, self.ircd.servers))
+            if len(totalClasses) > int(self.ircd.conf['class'][client.cls]['max']):
+                client.quit('Maximum server connections for this class reached')
                 return
 
-            if self.linkpass:
-                if self.linkpass != localServer.conf['link'][self.hostname]['pass']:
-                    error = 'Error connecting to server {}[{}:{}]: no matching link configuration'.format(localServer.hostname, ip2, port2)
-                    self._send(':{} ERROR :{}'.format(localServer.sid, error))
-                    self.quit('no matching link configuration')
+            if client.linkpass:
+                if client.linkpass != self.ircd.conf['link'][client.hostname]['pass']:
+                    error = 'Error connecting to server {}[{}:{}]: no matching link configuration'.format(self.ircd.hostname, ip2, port2)
+                    client._send(':{} ERROR :{}'.format(self.ircd.sid, error))
+                    client.quit('no matching link configuration')
                     return
 
-            if not match(localServer.conf['link'][self.hostname]['incoming']['host'], ip):
-                error = 'Error connecting to server {}[{}:{}]: no matching link configuration'.format(localServer.hostname, ip2, port2)
-                self._send(':{} ERROR :{}'.format(localServer.sid, error))
-                self.quit('no matching link configuration')
+            if not match(self.ircd.conf['link'][client.hostname]['incoming']['host'], ip):
+                error = 'Error connecting to server {}[{}:{}]: no matching link configuration'.format(self.ircd.hostname, ip2, port2)
+                client._send(':{} ERROR :{}'.format(self.ircd.sid, error))
+                client.quit('no matching link configuration')
                 return
 
-            if self.hostname not in localServer.conf['settings']['ulines']:
-                for cap in [cap.split('=')[0] for cap in localServer.server_support]:
-                    if cap in self.protoctl:
+            if client.hostname not in self.ircd.conf['settings']['ulines']:
+                for cap in [cap.split('=')[0] for cap in self.ircd.server_support]:
+                    if cap in client.protoctl:
                         logging.info('Cap {} is supported by both parties'.format(cap))
                     else:
-                        self._send(':{} ERROR :Server {} is missing support for {}'.format(self.sid, self.hostname, cap))
-                        self.quit('Server {} is missing support for {}'.format(self.hostname, cap))
+                        client._send(':{} ERROR :Server {} is missing support for {}'.format(client.sid, client.hostname, cap))
+                        client.quit('Server {} is missing support for {}'.format(client.hostname, cap))
                         return
 
-            selfIntroduction(localServer, self)
-            data = ':{} SID {} 1 {} :{}'.format(localServer.sid, self.hostname, self.sid, self.name)
-            localServer.new_sync(localServer, self, data)
-            for server in [server for server in localServer.servers if server.sid and server != self and server.eos]:
-                logging.info('Introducing {} to {}'.format(server.hostname, self.hostname))
-                sid = localServer.sid if server.socket else server.uplink.sid
+            selfIntroduction(self.ircd, client)
+            data = ':{} SID {} 1 {} :{}'.format(self.ircd.sid, client.hostname, client.sid, client.name)
+            self.ircd.new_sync(self.ircd, client, data)
+            for server in [server for server in self.ircd.servers if server.sid and server != client and server.eos]:
+                logging.info('Introducing {} to {}'.format(server.hostname, client.hostname))
+                sid = self.ircd.sid if server.socket else server.uplink.sid
                 data = ':{} SID {} {} {} :{}'.format(sid, server.hostname, int(server.hopcount) + 1, server.sid, server.name)
-                self._send(data)
+                client._send(data)
 
-            if hasattr(self, 'outgoing') and self.outgoing:
-                syncData(localServer, self)
+            if hasattr(client, 'outgoing') and client.outgoing:
+                syncData(self.ircd, client)
             return
 
-    except Exception as ex:
-        logging.exception(ex)
 
-@ircd.Modules.params(4)
-@ircd.Modules.req_class('Server')
-@ircd.Modules.commands('sid')
-def sid(self, localServer, recv):
-    try:
-        uplink = [s for s in localServer.servers if s.sid == recv[0][1:]]
+
+@ircd.Modules.command
+class Sid(ircd.Command):
+    def __init__(self):
+        self.command = 'sid'
+        self.params = 4
+        self.req_class = 'Server'
+
+
+    def execute(self, client, recv):
+        uplink = [s for s in self.ircd.servers if s.sid == recv[0][1:]]
         if not uplink:
-            self._send(':{} ERROR :Could not find uplink for {}'.format(localServer.sid, recv[0][1:]))
-            self.quit()
+            client._send(':{} ERROR :Could not find uplink for {}'.format(self.ircd.sid, recv[0][1:]))
+            client.quit()
             return
         uplink = uplink[0]
         sid = recv[4]
         hostname = recv[2]
-        for server in [server for server in localServer.servers if server.sid == sid and server != self]:
-            self._send(':{} ERROR :SID {} is already in use on that network'.format(localServer.sid, sid))
-            self.quit('SID {} is already in use on that network'.format(sid))
+        for server in [server for server in self.ircd.servers if server.sid == sid and server != client]:
+            client._send(':{} ERROR :SID {} is already in use on that network'.format(self.ircd.sid, sid))
+            client.quit('SID {} is already in use on that network'.format(sid))
             return
-        for server in [server for server in localServer.servers if server.hostname.lower() == hostname.lower() and server != self]:
-            self._send(':{} ERROR :Hostname {} is already in use on that network'.format(localServer.sid, hostname))
-            self.quit('Server {} is already in use on that network'.format(hostname))
+        for server in [server for server in self.ircd.servers if server.hostname.lower() == hostname.lower() and server != client]:
+            client._send(':{} ERROR :Hostname {} is already in use on that network'.format(self.ircd.sid, hostname))
+            client.quit('Server {} is already in use on that network'.format(hostname))
             return
 
         hopcount = int(recv[3])
 
-        if hostname == self.hostname:
+        if hostname == client.hostname:
             ### Own server?
             return
 
         from ircd import Server
-        newServer = Server(origin=localServer, serverLink=True)
+        newServer = Server(origin=self.ircd, serverLink=True)
 
         newServer.hostname = hostname
 
         newServer.hopcount = hopcount
         newServer.name = ' '.join(recv[5:])[1:]
 
-        newServer.introducedBy = self
+        newServer.introducedBy = client
         newServer.uplink = uplink
         newServer.sid = sid
         logging.info('{}New server added to the network: {}{}'.format(G, newServer.hostname, W))
@@ -157,7 +164,4 @@ def sid(self, localServer, recv):
         logging.info('{}Uplinked to: {} ({}) {}'.format(G, newServer.uplink.hostname, newServer.uplink.sid, W))
         logging.info('{}Hopcount: {}{}'.format(G, newServer.hopcount, W))
 
-        localServer.new_sync(localServer, self, ' '.join(recv))
-
-    except Exception as ex:
-        logging.exception(ex)
+        self.ircd.new_sync(self.ircd, client, ' '.join(recv))

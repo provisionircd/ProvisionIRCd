@@ -1,17 +1,23 @@
-try:
-    import faulthandler
-    faulthandler.enable()
-except:
-    pass
+#try:
+#    import faulthandler
+#    faulthandler.enable()
+#except:
+#    pass
 import gc
 gc.enable()
 
-from handle.functions import match, TKL, cloak, IPtoBase64, Base64toIP, show_support, check_flood, logging
-
+from handle.functions import (match,
+                            TKL,
+                            cloak,
+                            IPtoBase64,
+                            Base64toIP,
+                            show_support,
+                            check_flood,
+                            logging)
+from classes.rpl import RPL, ERR
 import random
 import time
 import string
-import sys
 import socket
 import importlib
 import datetime
@@ -19,11 +25,11 @@ import threading
 import hashlib
 import select
 import ipaddress
-import objgraph
+try:
+    import objgraph
+except:
+    pass
 
-if sys.version_info[0] < 3:
-    print('Python 2 is not supported.')
-    sys.exit()
 
 def RevIP(ip):
     x = 3
@@ -37,6 +43,7 @@ def RevIP(ip):
             break
         x -= 1
     return revip
+
 
 class blacklist_check(threading.Thread):
     def __init__(self, user, blacklist):
@@ -69,25 +76,26 @@ class blacklist_check(threading.Thread):
         except Exception as ex:
             logging.exception(ex)
 
+
 def DNSBLCheck(self):
     user = self
-    localServer = user.server
-    if user.ip in localServer.dnsblCache:
-        reason = 'Your IP is blacklisted by {}'.format(localServer.dnsblCache[user.ip]['bl']+' [cached]')
-        for u in [u for u in list(localServer.users) if u.ip == user.ip]:
-            u._send(':{} 304 * :{}'.format(localServer.hostname, reason))
+    ircd = user.server
+    if user.ip in ircd.dnsblCache:
+        reason = 'Your IP is blacklisted by {}'.format(ircd.dnsblCache[user.ip]['bl']+' [cached]')
+        for u in [u for u in list(ircd.users) if u.ip == user.ip]:
+            u.sendraw(f':{ircd.hostname} {RPL.TEXT} * :{reason}')
             u.sendbuffer = ''
             u.recvbuffer = ''
             u.quit(reason)
         return
-    if user.ip in localServer.bannedList:
-        user._send(':{} 304 * :Your IP has been banned (listed locally).'.format(localServer.hostname))
+    if user.ip in ircd.bannedList:
+        user._send(f':{ircd.hostname} {RPL.TEXT} * :Your IP has been banned (listed locally).')
         user.sendbuffer = ''
         user.recvbuffer = ''
         user.quit('Your IP has been banned (listed locally)')
         return
 
-    for x in [x for x in localServer.conf['dnsbl']['list'] if '.' in x]:
+    for x in [x for x in ircd.conf['dnsbl']['list'] if '.' in x]:
         if user in user.server.users:
             b = blacklist_check(user, x)
             b.start()
@@ -99,6 +107,7 @@ READ_ONLY = (
     select.POLLERR
 )
 READ_WRITE = READ_ONLY | select.POLLOUT
+
 
 def resolve_ip(self):
     ip = self.ip if self.ip.replace('.', '').isdigit() else self.ip[7:]
@@ -126,8 +135,9 @@ def resolve_ip(self):
                     self.server.notice(self, '* Connection denied: {}'.format(self.server.deny_cache[ip]['reason']))
                 return self.quit('Your host matches a deny block, and is therefore not allowed.')
 
+
 class User:
-    def __init__(self, server, sock=None, address=None, is_ssl=None, serverClass=None, params=None):
+    def __init__(self, server, sock=None, address=None, is_ssl=None, server_class=None, params=None):
         try:
             self.socket = sock
             self.server = None
@@ -235,7 +245,7 @@ class User:
                 self.idle = int(time.time())
                 if self.ip in self.server.hostcache:
                     self.hostname = self.server.hostcache[self.ip]['host']
-                    self._send(':{} NOTICE AUTH :*** Found your hostname ({}) [cached]'.format(self.server.hostname, self.hostname))
+                    self._send(':{u.server.hostname} NOTICE AUTH :*** Found your hostname ({u.hostname}) [cached]'.format(u=self))
                 elif 'dontresolve' not in self.server.conf['settings'] or ('dontresolve' in self.server.conf['settings'] and not self.server.conf['settings']['dontresolve']):
                     try:
                         self.hostname = socket.gethostbyaddr(self.ip)[0]
@@ -244,12 +254,13 @@ class User:
                         self.server.hostcache[self.ip] = {}
                         self.server.hostcache[self.ip]['host'] = self.hostname
                         self.server.hostcache[self.ip]['ctime'] = int(time.time())
-                        self._send(':{} NOTICE AUTH :*** Found your hostname ({})'.format(self.server.hostname, self.hostname))
+                        self._send(':{u.server.hostname} NOTICE AUTH :*** Found your hostname ({u.hostname})'.format(u=self))
                     except Exception as ex:
                         self.hostname = self.ip
-                        self._send(':{} NOTICE AUTH :*** Couldn\'t resolve your hostname; using IP address instead ({})'.format(self.server.hostname, self.hostname))
+                        #self._send(':{} NOTICE AUTH :*** Couldn\'t resolve your hostname; using IP address instead ({})'.format(self.server.hostname, self.hostname))
+                        self._send(':{u.server.hostname} NOTICE AUTH :*** Couldn\'t resolve your hostname; using IP address instead ({u.hostname})'.format(u=self))
                 else:
-                    self._send(':{} NOTICE AUTH :*** Host resolution is disabled, using IP ({})'.format(self.server.hostname, self.ip))
+                    self._send(':{u.server.hostname} NOTICE AUTH :*** Host resolution is disabled, using IP ({u.ip})'.format(u=self))
 
                 TKL.check(self, self.server, self, 'g')
                 TKL.check(self, self.server, self, 'G')
@@ -258,8 +269,8 @@ class User:
 
             else:
                 try:
-                    self.origin = serverClass
-                    self.localServer = serverClass
+                    self.origin = server_class
+                    self.localServer = server_class
                     self.origin.users.append(self)
                     self.cls = 0
                     self.nickname = params[2]
@@ -292,7 +303,7 @@ class User:
 
                     watch_notify = [user for user in self.origin.users if self.nickname.lower() in [x.lower() for x in user.watchlist]]
                     for user in watch_notify:
-                        user.sendraw(600, '{} {} {} {} :logged online'.format(self.nickname, self.ident, self.cloakhost, self.signon))
+                        user.sendraw(RPL.LOGON, '{} {} {} {} :logged online'.format(self.nickname, self.ident, self.cloakhost, self.signon))
 
                     #msg = '*** Remote client connecting: {} ({}@{}) {{{}}} [{}{}]'.format(self.nickname, self.ident, self.hostname, str(self.cls), 'secure' if 'z' in self.modes else 'plain', ' '+self.socket.cipher()[0] if self.ssl else '')
                     #self.server.snotice('C', msg)
@@ -340,6 +351,7 @@ class User:
                 if not self.registered and self.cls and not self.server_pass_accepted and 'password' in localServer.conf['allow'][self.cls] and command not in ['pass', 'cap']:
                     return self.quit('Password required')
 
+
                 ignore = ['ping', 'pong', 'ison', 'watch', 'who', 'privmsg', 'notice', 'ns', 'cs', 'nickserv', 'chanserv', 'id', 'identify', 'login', 'auth']
                 #ignore = []
                 if command not in ignore:
@@ -364,7 +376,7 @@ class User:
 
                 #print('ik ga zo slaaaaaapen maar jij bent ernie?')
                 if type(self).__name__ == 'User' and command not in pre_reg_cmds and not self.registered:
-                    return self.sendraw(451, 'You have not registered')
+                    return self.sendraw(ERR.NOTREGISTERED, 'You have not registered')
                 if command == 'pong':
                     if self in self.server.pings:
                         ping = recv.split()[1]
@@ -388,13 +400,12 @@ class User:
                         if alias[command.lower()]['type'] == 'services':
                             service = list(filter(lambda u: u.nickname == alias[command.lower()]['target'] and 'services' in localServer.conf['settings'] and u.server.hostname == localServer.conf['settings']['services'], localServer.users))
                             if not service:
-                                return self.sendraw(440, ':Services are currently down. Please try again later.')
+                                return self.sendraw(ERR.SERVICESDOWN, ':Services are currently down. Please try again later.')
                         data = '{} :{}'.format(alias[command.lower()]['target'], ' '.join(recv.split()[1:]))
                         self.handle('PRIVMSG', data)
                         continue
                     except KeyError:
                         pass
-                false_cmd = True
 
                 ### pre_command hook.
                 allow = 1
@@ -406,51 +417,19 @@ class User:
                 if not allow and allow is not None:
                     continue
 
-                for callable in [callable for callable in localServer.commands if callable[0].lower() == command.lower()]:
-                    try:
-                        got_params = len(parsed) - 1
-                        req_params = callable[2]
-                        req_modes = callable[3]
-                        req_flags = callable[4]
-                        req_class = callable[5]
-                        module = callable[6]
-                        if type(self).__name__ != req_class:
-                            if req_class == 'Server':
-                                return self.sendraw(487, ':{} is a server only command'.format(command.upper()))
-                        if got_params < req_params:
-                            return self.sendraw(461, ':{} Not enough parameters. Required: {}'.format(command.upper(), req_params))
-                    except Exception as ex:
-                        logging.exception(ex)
+                false_cmd = True
+                c = next((x for x in localServer.command_class if command.upper() in list(x.command)), None)
+                if c:
+                    false_cmd = False
+                    if c.check(self, parsed):
+                        c.execute(self, parsed)
 
-                    if req_modes:
-                        req_modes = ' '.join(req_modes)
-                        if 'o' in req_modes and 'o' not in self.modes:
-                            return self.sendraw(481, ':Permission denied - You are not an IRC Operator')
-                        forbid = set(req_modes).difference(set(self.modes))
-                        if forbid:
-                            return self.sendraw(481, ':Permission denied - Required mode not set')
-                    forbid = True
-                    if req_flags:
-                        for flag in req_flags:
-                            if '|' in flag:
-                                if list(filter(lambda f: f in self.operflags, flag.split('|'))):
-                                    forbid = False
-                                    break
-                            else:
-                                forbid = set(req_flags).difference(set(self.operflags))
-                                break
-                        if forbid:
-                            return self.sendraw(481, ':Permission denied - You do not have the correct IRC Operator privileges')
-                    try:
-                        false_cmd = False
-                        callable[1](self, localServer, parsed)
-                    except Exception as ex:
-                        logging.exception(ex)
                 if false_cmd:
-                    self.sendraw(421, '{} :Unknown command'.format(command.upper()))
+                    self.sendraw(ERR.UNKNOWNCOMMAND, '{} :Unknown command'.format(command.upper()))
 
         except Exception as ex:
             logging.exception(ex)
+
 
     def parse_command(self, data):
         xwords = data.split(' ')
@@ -480,6 +459,16 @@ class User:
         self._send(':{} {} {} {}'.format(self.server.hostname, command, self.nickname, data))
 
     def sendraw(self, numeric, data):
+        if type(numeric).__name__ in ['RPL', 'ERR']:
+            numeric = numeric.value
+        '''
+        for callable in [h for h in self.server.hooks if h[0].lower() == 'rpl' and int(h[1]) == int(numeric)]:
+            try:
+                reply = callable[2](self)
+                self.send(str(numeric).rjust(3, '0'), reply)
+            except Exception as ex:
+                logging.exception(ex)
+        '''
         self.send(str(numeric).rjust(3, '0'), data)
 
     def broadcast(self, users, data, source=None):
@@ -529,6 +518,7 @@ class User:
                 self.ident = info
         except Exception as ex:
             logging.exception(ex)
+
 
     def welcome(self):
         if not self.registered:
@@ -618,11 +608,11 @@ class User:
 
             if not hasattr(self, 'socket'):
                 return
-            self.sendraw('001', ':Welcome to the {} IRC Network {}!{}@{}'.format(self.server.name, self.nickname, self.ident, self.hostname))
-            self.sendraw('002', ':Your host is {}, running version {}'.format(self.server.hostname, self.server.version))
+            self.sendraw(RPL.WELCOME, ':Welcome to the {} IRC Network {}!{}@{}'.format(self.server.name, self.nickname, self.ident, self.hostname))
+            self.sendraw(RPL.YOURHOST, ':Your host is {}, running version {}'.format(self.server.hostname, self.server.version))
             d = datetime.datetime.fromtimestamp(self.server.creationtime).strftime('%a %b %d %Y')
             t = datetime.datetime.fromtimestamp(self.server.creationtime).strftime('%H:%M:%S %Z')
-            self.sendraw('003', ':This server was created {} at {}'.format(d, t))
+            self.sendraw(RPL.CREATED, ':This server was created {} at {}'.format(d, t))
 
             umodes, chmodes = '', ''
             for m in [m for m in self.server.user_modes if m.isalpha() and m not in umodes]:
@@ -633,18 +623,18 @@ class User:
             umodes = ''.join(sorted(set(umodes)))
             chmodes = ''.join(sorted(set(chmodes)))
 
-            self.sendraw('004', '{} {} {} {}'.format(self.server.hostname, self.server.version, umodes, chmodes))
+            self.sendraw(RPL.MYINFO, '{} {} {} {}'.format(self.server.hostname, self.server.version, umodes, chmodes))
             show_support(self, self.server)
             cipher = None
             if self.ssl and hasattr(self.socket, 'cipher') and self.socket.cipher:
                 if self.socket.cipher():
                     cipher = self.socket.cipher()[0]
                     self.send('NOTICE', ':*** You are connected to {} with {}-{}'.format(self.server.hostname, self.socket.version(), cipher))
-            msg = '*** Client connecting: {} ({}@{}) {{{}}} [{}{}]'.format(self.nickname, self.ident, self.hostname, self.cls, 'secure' if self.ssl else 'plain', '' if not cipher else ' '+cipher)
+            msg = '*** Client connecting: {u.nickname} ({u.ident}@{u.hostname}) {{{u.cls}}} [{0}{1}]'.format('secure' if self.ssl else 'plain', '' if not cipher else ' '+cipher, u=self)
             self.server.snotice('c', msg)
 
             binip = IPtoBase64(self.ip) if self.ip.replace('.', '').isdigit() else self.ip
-            data = '{} {} {} {} {} {} 0 +{} {} {} {} :{}'.format(self.nickname, self.server.hopcount, self.signon, self.ident, self.hostname, self.uid, self.modes, self.cloakhost, self.cloakhost, binip, self.realname)
+            data = '{s.nickname} {s.server.hopcount} {s.signon} {s.ident} {s.hostname} {s.uid} 0 +{s.modes} {s.cloakhost} {s.cloakhost} {0} :{s.realname}'.format(binip, s=self)
             self.server.new_sync(self.server, self.server, ':{} UID {}'.format(self.server.sid, data))
 
             self.registered = True
@@ -672,7 +662,7 @@ class User:
 
             watch_notify = [user for user in self.server.users if self.nickname.lower() in [x.lower() for x in user.watchlist]]
             for user in watch_notify:
-                user.sendraw(600, '{} {} {} {} :logged online'.format(self.nickname, self.ident, self.cloakhost, self.signon))
+                user.sendraw(RPL.LOGON, '{} {} {} {} :logged online'.format(self.nickname, self.ident, self.cloakhost, self.signon))
 
             for callable in [callable for callable in self.server.hooks if callable[0].lower() == 'local_connect']:
                 try:
@@ -681,6 +671,7 @@ class User:
                     logging.exception(ex)
 
         gc.collect()
+
 
     def __repr__(self):
         return "<User '{}:{}'>".format(self.fullmask(), self.server.hostname)
@@ -816,7 +807,7 @@ class User:
 
             watch_notify_offline = [user for user in localServer.users if self.nickname.lower() in [x.lower() for x in user.watchlist]]
             for user in watch_notify_offline:
-                user.sendraw(601, '{} {} {} {} :logged offline'.format(self.nickname, self.ident, self.cloakhost, self.signon))
+                user.sendraw(RPL.LOGOFF, '{} {} {} {} :logged offline'.format(self.nickname, self.ident, self.cloakhost, self.signon))
 
             if self in localServer.users:
                 localServer.users.remove(self)
@@ -847,11 +838,6 @@ class User:
                 except: # Prevent weird spam shit.
                     pass
 
-            #objgraph.show_refs([self], filename='refs.png')
-
-            #for k, v in list(globals().items()):
-            #    print("{} -- {}".format(k, v))
-
             del self.socket
             del self
 
@@ -863,29 +849,11 @@ class User:
         parsed = self.parse_command(recv)
         command = command.split()[0].lower()
         localServer = self.server if self.socket else self.origin
-        for callable in [callable for callable in localServer.commands if callable[0].lower() == command]:
-            got_params = len(parsed) - 1
-            req_params = callable[2]
-            req_modes = callable[3]
-            req_flags = callable[4]
-            if got_params < req_params:
-                return self.sendraw(461, ':{} Not enough parameters. Required: {}'.format(command.upper(), req_params))
-            if req_modes:
-                if 'o' in req_modes and 'o' not in self.modes:
-                    return self.sendraw(481, ':Permission denied - You are not an IRC Operator')
-                forbid = set(req_modes).difference(set(self.modes))
-                if forbid:
-                    return self.sendraw(481, ':Permission denied - Required mode not set')
-            if req_flags:
-                if '|' in req_flags:
-                    req_flags = req_flags.split('|')
-                forbid = set(req_flags).difference(set(self.operflags))
-                if forbid:
-                    return self.sendraw(481, ':Permission denied - You do not have the correct IRC Operator privileges')
+
+        c = next((x for x in localServer.command_class if command.upper() in list(x.command)), None)
+        if c:
             try:
-                if params:
-                    callable[1](self, localServer, parsed, **params)
-                else:
-                    callable[1](self, localServer, parsed)
+                if c.check(self, parsed):
+                    c.execute(self, parsed)
             except Exception as ex:
                 logging.exception(ex)

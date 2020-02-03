@@ -57,6 +57,7 @@ def process_webstats(self, localServer, recv):
     calls = len(localServer.webstats_ip_requests[ip]['calls'])
     logging.debug("This IP made {} call{} this session, first call was {} second{} ago.".format(calls, '' if calls == 1 else 's', ago, '' if ago == 1 else 's'))
 
+
 @ircd.Modules.hooks.loop()
 def webstats_ratelimit(localServer):
     global allowed_ips
@@ -71,5 +72,7 @@ def webstats_ratelimit(localServer):
             del localServer.webstats_ip_requests[ip]
             logging.debug("API rate limit for {} reset.".format(ip))
 
-def init(localServer, reload=False):
-    localServer.webstats_ip_requests = {}
+
+def init(ircd, reload=False):
+    print('yo')
+    ircd.webstats_ip_requests = {}

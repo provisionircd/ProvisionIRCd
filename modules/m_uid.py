@@ -9,16 +9,20 @@ from handle.functions import logging
 W = '\033[0m'  # white (normal)
 R = '\033[31m' # red
 
-@ircd.Modules.req_class('Server')
-@ircd.Modules.commands('uid')
-def uid(self, localServer, recv):
-    try:
+@ircd.Modules.command
+class Uid(ircd.Command):
+    def __init__(self):
+        self.command = 'uid'
+        self.req_class = 'Server'
+
+
+    def execute(self, client, recv):
         nick = recv[2]
         params = []
         allow = 1
         for p in recv:
             params.append(p)
-        for user in [user for user in localServer.users if user.nickname.lower() == nick.lower()]:
+        for user in [user for user in self.ircd.users if user.nickname.lower() == nick.lower()]:
             logging.error('Found double user in UID: {}'.format(user))
             if not user.server:
                 logging.error('Quitting {} because their server could not be found (UID)'.format(user))
@@ -36,9 +40,6 @@ def uid(self, localServer, recv):
                 logging.debug('Disallowing remote user {}'.format(user))
                 return
         if allow:
-            u = ircd.User(self, serverClass=localServer, params=params)
+            u = ircd.User(client, server_class=self.ircd, params=params)
             cmd = ' '.join(recv)
-            localServer.new_sync(localServer, self, cmd)
-
-    except Exception as ex:
-        logging.exception(ex)
+            self.ircd.new_sync(self.ircd, client, cmd)
