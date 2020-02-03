@@ -1,4 +1,4 @@
-An IRCd written in Python 3.6.
+An IRCd written in Python 3.6. Support for lower versions has officially been dropped.
 
 Not to be confused with the deprecated mSL version I wrote years ago.
 
