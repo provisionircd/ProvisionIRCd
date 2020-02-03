@@ -66,10 +66,8 @@ class UserMode:
 
 
     def give_mode(self, user):
-        logging.debug('Requesting to add mode "{}" to {} already modes of: {}'.format(self.mode, user, user.modes))
-
         if self.mode in user.modes:
-            logging.error('Already have mode {} for {}'.format(self.mode, user))
+            logging.error(f'Usermode {self.mode} is already active on user {user.nickname}')
             return 0
 
         if self.req_flag == 1 and 'o' not in user.modes:
@@ -77,15 +75,17 @@ class UserMode:
             return 0
 
         user.modes += self.mode
-        logging.debug('Usermode of {} is now: {}'.format(user, user.modes))
+        self.modebuf.append(self.mode)
+        logging.debug('Usermode of {} is now: {}'.format(user.nickname, user.modes))
         return 1
 
 
     def take_mode(self, user):
         if self.mode not in user.modes:
-            logging.debug('Failed attempt at removing usermode "{}" from {}'.format(self.mode, user))
+            logging.debug('Failed attempt at removing non-active usermode "{}" from {}'.format(self.mode, user.nickname))
             return 0
         user.modes = user.modes.replace(self.mode, '')
+        self.modebuf.append(self.mode)
         logging.debug('Usermode "{}" removed from {} usermodes. Now: {}'.format(self.mode, user.nickname, user.modes))
         return 1
 
@@ -198,7 +198,7 @@ class ChannelMode:
                 return 0
 
             if len(have) != len(need):
-                logging.debug('Invalid param received for "{}": {} != {}'.format(self.mode, len(have), len(need)))
+                logging.debug('Invalid param count received for "{}": {} != {}'.format(self.mode, len(have), len(need)))
                 return 0
             for n,h in zip(need, have):
                 if n == "<int>" and not h.isdigit():
@@ -236,8 +236,8 @@ class ChannelMode:
 
     def set_mode(self, user, channel, param=None):
         param = self.fix_param(param)
-
-        if not self.pre_hook(user, channel, param, action='+'):
+        process = self.pre_hook(user, channel, param, action='+')
+        if not process and process is not None:
             # Assume the module handled everything correctly.
             logging.debug(f'Mode "{self.mode}" processing blocked by pre_hook(). We assume the module handled everything correctly.')
             return 0

@@ -90,10 +90,11 @@ def chmode_H2(self, localServer, channel, modebuf, parambuf, action, m, param):
                 channel.msg_backlog['limit'] = limit
                 channel.msg_backlog['expire'] = expire
                 channel.msg_backlog['lines'] = []
-                modebuf.append(m)
-                parambuf.append(param)
-                channel.modes += m
-                return 0
+                #modebuf.append(m)
+                #parambuf.append(param)
+                #channel.modes += m
+                # Actually we should also add the chan_param here. BUT MEH FUCK IT.
+                #return 0
             else:
                 channel.msg_backlog = {}
     except Exception as ex:

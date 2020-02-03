@@ -28,14 +28,14 @@ parambuf = []
 
 MAXMODES = 24
 
-def makeMask(localServer, data):
+def makeMask(ircd, data):
     if not data:
         return
     nick, ident, host = '', '', ''
     nick = data.split('!')[0]
     if nick == '' or '@' in nick or ('.' in nick and '@' not in data):
         nick = '*'
-    if len(nick) > localServer.nicklen:
+    if len(nick) > ircd.nicklen:
         nick = '*{}'.format(nick[-20:])
     try:
         if '@' in data:
@@ -67,10 +67,10 @@ def makeMask(localServer, data):
 
 
 oper_override = False
-def processModes(self, localServer, channel, recv, sync=True, sourceServer=None, sourceUser=None):
+def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, sourceUser=None):
     #logging.debug('processModes(): {}'.format(recv))
     try:
-        if sourceServer != localServer or (type(sourceUser).__name__ == 'User' and sourceUser.server != localServer):
+        if sourceServer != ircd or (type(sourceUser).__name__ == 'User' and sourceUser.server != ircd):
             hook = 'remote_chanmode'
         else:
             hook = 'local_chanmode'
@@ -81,7 +81,7 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
             displaySource = sourceUser.uid
         else:
             displaySource = sourceUser.sid
-            #if not sourceServer.eos and sourceServer != localServer:
+            #if not sourceServer.eos and sourceServer != ircd:
             #    sync = False
     except Exception as ex:
         logging.exception(ex)
@@ -91,18 +91,18 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
         action = ''
         prevaction = ''
         paramcount = -1
-        chmodes = localServer.chstatus
-        localServer.parammodes = localServer.chstatus
+        chmodes = ircd.chstatus
+        ircd.parammodes = ircd.chstatus
         for x in range(0, 4):
-            for m in [m for m in localServer.channel_modes[x] if m not in chmodes]:
+            for m in [m for m in ircd.channel_modes[x] if m not in chmodes]:
                 chmodes += m
-                if str(x) in '012' and m not in localServer.parammodes:
-                    localServer.parammodes += m
+                if str(x) in '012' and m not in ircd.parammodes:
+                    ircd.parammodes += m
 
         global oper_override
         extban_prefix = None
-        if 'EXTBAN' in localServer.support:
-            extban_prefix = localServer.support['EXTBAN'][0]
+        if 'EXTBAN' in ircd.support:
+            extban_prefix = ircd.support['EXTBAN'][0]
             #logging.info('Extban prefix set: {}'.format(extban_prefix))
 
         ### Setting some mode level shit.
@@ -121,20 +121,20 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
             'a': 4,
             'q': 5
         }
-        for t in localServer.channel_modes:
-            for m in localServer.channel_modes[t]:
-                level = localServer.channel_modes[t][m][0]
+        for t in ircd.channel_modes:
+            for m in ircd.channel_modes[t]:
+                level = ircd.channel_modes[t][m][0]
                 modeLevel[m] = level
         for m in [m for m in recv[1] if m in chmodes+'+-' or m in channel.modes]:
             param_mode = None
-            if m in localServer.parammodes:
-                if (action == '+') or (action == '-' and m not in list(localServer.channel_modes[2])+list(localServer.channel_modes[3])):
-                #if (action == '+') or (action == '-' and m in list(localServer.channel_modes[0])+list(localServer.channel_modes[1])):
+            if m in ircd.parammodes:
+                if (action == '+') or (action == '-' and m not in list(ircd.channel_modes[2])+list(ircd.channel_modes[3])):
+                #if (action == '+') or (action == '-' and m in list(ircd.channel_modes[0])+list(ircd.channel_modes[1])):
                     paramcount += 1
                     if len(recv[2:]) > paramcount:
                         param_mode = recv[2:][paramcount]
                         logging.info('Param for {}{}: {}'.format(action, m, param_mode))
-                    elif m not in localServer.channel_modes[0]:
+                    elif m not in ircd.channel_modes[0]:
                         logging.warning('Received param mode {}{} without param'.format(action, m))
                         continue
             if m in '+-' and action != m:
@@ -154,19 +154,18 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                 continue
             if m in modeLevel and modeLevel[m] == 7 and type(self).__name__ != 'Server':
                 continue
-            if m not in '+-' and action != prevaction and ( (m in chmodes or m in localServer.chstatus) or (action in '+-' and m in channel.modes) ):
+            if m not in '+-' and action != prevaction and ( (m in chmodes or m in ircd.chstatus) or (action in '+-' and m in channel.modes) ):
                 modebuf.append(action)
                 prevaction = action
-            if m not in localServer.chstatus and m not in '+-':
+            if m not in ircd.chstatus and m not in '+-':
                 if m in modeLevel and self.chlevel(channel) < modeLevel[m] and not self.ocheck('o', 'override'):
                     continue
                 elif m in modeLevel and self.chlevel(channel) < modeLevel[m] and modeLevel[m] != 6:
                     oper_override = True
 
 
-
-            if m not in localServer.core_chmodes:
-                c = next((x for x in localServer.channel_mode_class if x.mode == m), None)
+            if m not in ircd.core_chmodes:
+                c = next((x for x in ircd.channel_mode_class if x.mode == m), None)
                 if c:
                     if not c.check(channel, action, param_mode):
                         continue
@@ -174,6 +173,13 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                     c.parambuf = parambuf
                     if (action == '+' and c.set_mode(self, channel, param_mode)) or (action == '-' and c.remove_mode(self, channel, param_mode)):
                         pass
+                else:
+                    # Modules like extbans do not have a mode, so we will check for hooks manually.
+                    for callable in [callable for callable in ircd.hooks if callable[0].lower() == 'pre_'+hook]:
+                        try:
+                            callable[2](self, ircd, channel, modebuf, parambuf, action, m, param_mode)
+                        except Exception as ex:
+                            logging.exception(ex)
 
 
             if action == '+' and (m in chmodes or type(self).__name__ == 'Server'):
@@ -185,7 +191,7 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         continue
                     if int(param_mode) <= 0:
                         continue
-                    if m in localServer.chan_params[channel] and int(localServer.chan_params[channel][m]) == int(param_mode):
+                    if m in ircd.chan_params[channel] and int(ircd.chan_params[channel][m]) == int(param_mode):
                         continue
                     else:
                         if m not in channel.modes:
@@ -193,7 +199,7 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         modebuf.append(m)
                         parambuf.append(param_mode)
 
-                elif m == 'k' and m not in localServer.chan_params[channel]:
+                elif m == 'k' and m not in ircd.chan_params[channel]:
                     if m not in channel.modes:
                         channel.modes += m
                     modebuf.append(m)
@@ -202,12 +208,12 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
 
                 elif m == 'L':
                     param_mode = param_mode.split(',')[0]
-                    if param_mode[0] not in localServer.chantypes:
+                    if param_mode[0] not in ircd.chantypes:
                         continue
-                    redirect = None if 'L' not in channel.modes else localServer.chan_params[channel]['L']
+                    redirect = None if 'L' not in channel.modes else ircd.chan_params[channel]['L']
                     if redirect == param_mode or param_mode.lower() == channel.name.lower():
                         continue
-                    chan_exists = [chan for chan in localServer.channels if chan.name.lower() == param_mode.lower()]
+                    chan_exists = [chan for chan in ircd.channels if chan.name.lower() == param_mode.lower()]
                     if not chan_exists:
                         self.sendraw(690, ':Target channel {} does not exist.'.format(param_mode))
                         continue
@@ -226,9 +232,9 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
 
 
                 elif m in 'beI':
-                    if param_mode.startswith(extban_prefix):
+                    if extban_prefix and param_mode.startswith(extban_prefix):
                         continue
-                    mask = makeMask(localServer, param_mode)
+                    mask = makeMask(ircd, param_mode)
                     if m == 'b':
                         data = channel.bans
                         s = 'ban'
@@ -239,7 +245,7 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         data = channel.invex
                         s = 'invex'
                     if mask not in data:
-                        if len(data) >= localServer.maxlist[m] and type(self).__name__ == 'User':
+                        if len(data) >= ircd.maxlist[m] and type(self).__name__ == 'User':
                             self.sendraw(478, '{} {} :Channel {} list is full'.format(channel.name, mask, s))
                             continue
                         try:
@@ -253,7 +259,7 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         data[mask]['ctime'] = int(time.time())
                         continue
 
-                elif m in localServer.chstatus:
+                elif m in ircd.chstatus:
                     timed = False
                     # + status
                     temp_user = param_mode
@@ -291,9 +297,9 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         channel.temp_status[user][m]['ctime'] = int(time.time()) + timed
                         channel.temp_status[user][m]['action'] = '-'
 
-                if m not in channel.modes and (m in list(localServer.channel_modes[3])+list(localServer.channel_modes[2])):
+                if m not in channel.modes and (m in list(ircd.channel_modes[3])+list(ircd.channel_modes[2])):
                     ### If the mode is not handled by modules, do it here.
-                    if not next((x for x in localServer.channel_mode_class if x.mode == m), None):
+                    if not next((x for x in ircd.channel_mode_class if x.mode == m), None):
                         modebuf.append(m)
                         channel.modes += m
                         #logging.debug('Non-modulair mode "{}" has been handled by m_mode'.format(m))
@@ -313,40 +319,40 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         if 'L' in channel.modes: # Also unset -L because we do not need it anymore.
                             channel.modes = channel.modes.replace('L', '')
                             modebuf.append('L')
-                            parambuf.append(localServer.chan_params[channel]['L'])
+                            parambuf.append(ircd.chan_params[channel]['L'])
 
                     elif m == 'k':
-                        if param_mode != localServer.chan_params[channel]['k']:
+                        if param_mode != ircd.chan_params[channel]['k']:
                             continue
-                        parambuf.append(localServer.chan_params[channel][m])
+                        parambuf.append(ircd.chan_params[channel][m])
 
                     elif m  == 'L':
-                        parambuf.append(localServer.chan_params[channel]['L'])
+                        parambuf.append(ircd.chan_params[channel]['L'])
                         #channel.redirect = None
 
                     elif m == 'P':
                         if len(channel.users) == 0:
-                            localServer.channels.remove(channel)
+                            ircd.channels.remove(channel)
 
                         try:
-                            with open(localServer.rootdir+'/db/chans.db') as f:
+                            with open(ircd.rootdir+'/db/chans.db') as f:
                                 current_perm = f.read().split('\n')[0]
                                 current_perm = json.loads(current_perm)
                                 del current_perm[channel.name]
-                            with open(localServer.rootdir+'/db/chans.db', 'w+') as f:
+                            with open(ircd.rootdir+'/db/chans.db', 'w+') as f:
                                 json.dump(current_perm, f)
                         except Exception as ex:
                             logging.debug(ex)
 
                     if m in channel.modes:
                         # Only remove mode if it's a core mode. ChannelMode class handles the rest.
-                        if m in localServer.core_chmodes:
+                        if m in ircd.core_chmodes:
                             channel.modes = channel.modes.replace(m, '')
 
                         modebuf.append(m)
 
                 elif m in 'beI':
-                    mask = makeMask(localServer, param_mode)
+                    mask = makeMask(ircd, param_mode)
                     if m == 'b':
                         data = channel.bans
                     elif m == 'e':
@@ -362,7 +368,7 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         parambuf.append(param_mode)
                         modebuf.append(m)
                     #continue
-                elif m in localServer.chstatus:
+                elif m in ircd.chstatus:
                     timed = False
                     # -qaohv
                     temp_user = param_mode
@@ -384,7 +390,7 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         user = user[0]
                     if m not in channel.usermodes[user]:
                         continue
-                    if 'S' in user.modes and user.server.hostname in localServer.conf['settings']['ulines'] and not self.ocheck('o', 'override'):
+                    if 'S' in user.modes and user.server.hostname in ircd.conf['settings']['ulines'] and not self.ocheck('o', 'override'):
                         self.sendraw(974, '{} :{} is a protected service bot'.format(m, user.nickname))
                         continue
                     elif 'S' in user.modes:
@@ -404,11 +410,11 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                         channel.temp_status[user][m]['ctime'] = int(time.time()) + timed
                         channel.temp_status[user][m]['action'] = '+'
 
-            if m in localServer.core_chmodes:
+            if m in ircd.core_chmodes:
                 ### Finally, call modules for core modes.
-                for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_'+hook]:
+                for callable in [callable for callable in ircd.hooks if callable[0].lower() == 'pre_'+hook]:
                     try:
-                        callable[2](self, localServer, channel, modebuf, parambuf, action, m, param_mode)
+                        callable[2](self, ircd, channel, modebuf, parambuf, action, m, param_mode)
                     except Exception as ex:
                         logging.exception(ex)
             continue
@@ -437,28 +443,28 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                     continue
 
                 total_modes.append(m)
-                if m in list(localServer.channel_modes[1])+list(localServer.channel_modes[2]):
+                if m in list(ircd.channel_modes[1])+list(ircd.channel_modes[2]):
                     # If a module handles a channel mode with a param, but for some reason forgets to add it to the chan_params dict,
                     # we will add it here. It is really important that param-modes have their params saved.
                     if action == '+':
-                        if m in localServer.core_chmodes:
+                        if m in ircd.core_chmodes:
                             logging.debug('[core] Storing param of {}: {}'.format(m, parambuf[paramcount]))
-                            localServer.chan_params[channel][m] = parambuf[paramcount]
-                        elif m not in localServer.chan_params[channel]:
+                            ircd.chan_params[channel][m] = parambuf[paramcount]
+                        elif m not in ircd.chan_params[channel]:
                             logging.debug('[fallback] Storing param of {}: {}'.format(m, parambuf[paramcount]))
-                            localServer.chan_params[channel][m] = parambuf[paramcount]
+                            ircd.chan_params[channel][m] = parambuf[paramcount]
 
-                    elif action == '-' and m in localServer.chan_params[channel]:
-                        logging.debug('[fallback] Forgetting param of {}: {}'.format(m, localServer.chan_params[channel][m]))
-                        del localServer.chan_params[channel][m]
+                    elif action == '-' and m in ircd.chan_params[channel]:
+                        logging.debug('[fallback] Forgetting param of {}: {}'.format(m, ircd.chan_params[channel][m]))
+                        del ircd.chan_params[channel][m]
 
-                for callable in [callable for callable in localServer.hooks if callable[0].lower() == hook]:
+                for callable in [callable for callable in ircd.hooks if callable[0].lower() == hook]:
                     try:
-                        callable[2](self, localServer, channel, modes, parambuf)
+                        callable[2](self, ircd, channel, modes, parambuf)
                     except Exception as ex:
                         logging.exception(ex)
 
-                if m in localServer.parammodes and (m not in localServer.channel_modes[2] or action == '+'):
+                if m in ircd.parammodes and (m not in ircd.channel_modes[2] or action == '+'):
                     total_params.append(parambuf[paramcount])
                     paramcount += 1
                 totalLength = len(''.join(total_modes)+' '+' '.join(total_params))
@@ -468,7 +474,7 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                     if oper_override and type(self).__name__ != 'Server':
                         sourceServer.snotice('s', '*** OperOverride by {} ({}@{}) with MODE {} {}'.format(sourceUser.nickname, sourceUser.ident, sourceUser.hostname, channel.name, all_modes))
                     if sync:
-                        localServer.new_sync(localServer, sourceServer, ':{} MODE {} :{}'.format(displaySource, channel.name, all_modes if type(self).__name__ == 'User' else rawModes))
+                        ircd.new_sync(ircd, sourceServer, ':{} MODE {} :{}'.format(displaySource, channel.name, all_modes if type(self).__name__ == 'User' else rawModes))
                     sourceUser.broadcast(channel.users, 'MODE {} {}'.format(channel.name, all_modes), source=sourceUser)
                     total_modes, total_params = [action], []
                     continue
@@ -477,13 +483,13 @@ def processModes(self, localServer, channel, recv, sync=True, sourceServer=None,
                 if oper_override and type(self).__name__ != 'Server':
                     sourceServer.snotice('s', '*** OperOverride by {} ({}@{}) with MODE {} {}'.format(sourceUser.nickname, sourceUser.ident, sourceUser.hostname, channel.name, all_modes))
                 if sync:
-                    localServer.new_sync(localServer, sourceServer, ':{} MODE {} :{}'.format(displaySource, channel.name, all_modes if type(self).__name__ == 'User' else rawModes))
+                    ircd.new_sync(ircd, sourceServer, ':{} MODE {} :{}'.format(displaySource, channel.name, all_modes if type(self).__name__ == 'User' else rawModes))
                 sourceUser.broadcast(channel.users, 'MODE {} {}'.format(channel.name, all_modes), source=sourceUser)
 
             for cmd, data in commandQueue:
-                localServer.handle(cmd, data)
+                ircd.handle(cmd, data)
 
-            save_db(localServer)
+            save_db(ircd)
 
     except Exception as ex:
         logging.exception(ex)
@@ -621,79 +627,77 @@ class Mode(ircd.Command):
             logging.exception(ex)
 
 
-def chgumode(self, localServer, recv, override, sourceServer=None, sourceUser=None):
+def chgumode(client, ircd, recv, override, sourceServer=None, sourceUser=None):
     try:
-
-        modes = []
+        modebuf = []
         action = ''
-        target = list(filter(lambda u: u.nickname.lower() == recv[1].lower(), localServer.users))
+        target = list(filter(lambda u: u.nickname.lower() == recv[1].lower(), ircd.users))
         if not target:
             return
 
         target = target[0]
 
-        if type(self).__name__ == 'Server':
+        if type(client).__name__ == 'Server':
             override = True
-            displaySource = self.hostname
-            if self != localServer:
+            displaySource = client.hostname
+            if client != ircd:
                 displaySource = sourceUser.nickname
         else:
-            if self.server != localServer:
+            if client.server != ircd:
                 override = True
-            displaySource = self.nickname
-        self = sourceUser
+            displaySource = client.nickname
+        client = sourceUser
         warn = []
         unknown = []
         showsno = False
         for m in str(recv[2]):
-            if 'modelock' in localServer.conf['settings'] and m in localServer.conf['settings']['modelock'] and not self.ocheck('o', 'override') and not override:
+            if 'modelock' in ircd.conf['settings'] and m in ircd.conf['settings']['modelock'] and not client.ocheck('o', 'override') and not override:
                 if 'lock' not in warn:
                     warn.append('lock')
-                    localServer.broadcast([self], 'NOTICE {} :The following modes cannot be changed: \'{}\''.format(self.nickname, localServer.conf['settings']['modelock']))
+                    ircd.broadcast([client], 'NOTICE {} :The following modes cannot be changed: \'{}\''.format(client.nickname, ircd.conf['settings']['modelock']))
                     warn = []
                 continue
 
 
-
-            if m == 'r' and type(self).__name__ != 'Server':
-                if self.server.hostname not in localServer.conf['settings']['ulines']:
+            if m == 'r' and type(client).__name__ != 'Server':
+                if client.server.hostname not in ircd.conf['settings']['ulines']:
                     continue
             if m in '+-' and action != m:
                 action = m
                 try:
-                    if modes[-1] in '+-':
-                        del modes[-1]
+                    if modebuf[-1] in '+-':
+                        del modebuf[-1]
                 except:
                     pass
-                modes.append(action)
+                modebuf.append(action)
             else:
 
-                for umode in [umode for umode in localServer.user_mode_class if umode.mode == m]:
-                    logging.debug('/MODE: Found a UserMode class: {}'.format(umode))
-                    if (action == '+' and umode.give_mode(self)) or (action == '-' and umode.take_mode(self)):
-                            modes.append(m)
+                for umode in [umode for umode in ircd.user_mode_class if umode.mode == m]:
+                    #logging.debug('/MODE: Found a UserMode class: {}'.format(umode))
+                    umode.modebuf = modebuf
+                    if (action == '+' and umode.give_mode(client)) or (action == '-' and umode.take_mode(client)):
+                            #modebuf.append(m)
                             continue
 
-
-                if m not in '+-' and m not in localServer.user_modes and type(self).__name__ != 'Server':
+                if m not in '+-' and m not in ircd.user_modes and type(client).__name__ != 'Server':
                     if m not in unknown and not override:
                         unknown.append(m)
                     continue
                 if m in 'z' and not override:
                     if m not in warn:
-                        self.sendraw(501, 'Mode +{} may only be set by servers'.format(m))
+                        client.sendraw(ircd.ERR.UMODEUNKNOWNFLAG, 'Mode +{} may only be set by servers'.format(m))
                         warn.append(m)
                     continue
                     warn = []
-                if m in 'ohsqHW' and (not self.operaccount or m not in localServer.conf['opers'][self.operaccount]['modes']) and not override:
+                if m in 'ohsqHW' and (not client.operaccount or m not in ircd.conf['opers'][client.operaccount]['modes']) and not override:
                     continue
                 if action == '+':
                     if m == 'x':
-                        cloaked = cloak(localServer, self.hostname)
-                        self.setinfo(cloaked, t='host', source=sourceServer)
-                        self.cloakhost = cloaked
-                    elif m == 'S' and self.server.hostname not in localServer.conf['settings']['ulines']:
-                        self.sendraw(501, 'Mode +{} may only be set by servers'.format(m))
+                        cloaked = cloak(ircd, client.hostname)
+                        client.setinfo(cloaked, t='host', source=sourceServer)
+                        client.cloakhost = cloaked
+                    elif m == 'S' and client.server.hostname not in ircd.conf['settings']['ulines']:
+                        client.sendraw(ircd.ERR.UMODEUNKNOWNFLAG, 'Mode +{} may only be set by servers'.format(m))
                         continue
                     elif m == 's':
                         if len(recv) > 3:
@@ -705,35 +709,36 @@ def chgumode(self, localServer, recv, override, sourceServer=None, sourceUser=No
                                     showsno = True
                                     target.snomasks = target.snomasks.replace(s, '')
                                     continue
-                                if saction == '+' and s in localServer.snomasks and (self.operaccount and s in localServer.conf['opers'][self.operaccount]['snomasks']) and s not in target.snomasks:
+                                if saction == '+' and s in ircd.snomasks and (client.operaccount and s in ircd.conf['opers'][client.operaccount]['snomasks']) and s not in target.snomasks:
                                     showsno = True
                                     target.snomasks += s
                                     continue
 
                     elif m == 'o':
                         updated = []
-                        for user in self.localServer.users:
-                            for user in [user for user in self.localServer.users if 'operwatch' in user.caplist and user not in updated and user.socket]:
-                                common_chan = list(filter(lambda c: user in c.users and self in c.users, self.localServer.channels))
+                        for user in ircd.users:
+                            for user in [user for user in ircd.users if 'operwatch' in user.caplist and user not in updated and user.socket]:
+                                common_chan = list(filter(lambda c: user in c.users and client in c.users, ircd.channels))
                                 if not common_chan:
                                     continue
-                                user._send(':{} UMODE {}{}'.format(self.fullmask(), action, m))
+                                user._send(':{} UMODE {}{}'.format(client.fullmask(), action, m))
                                 updated.append(user)
 
+                    # Handle core modes. These aren't handled by UserMode class.
                     if m not in target.modes:
                         if m in 'sqHSW' and (not hasattr(target, 'opermodes') or m not in target.opermodes):
                             if not hasattr(target, 'opermodes'):
                                 target.opermodes = ''
                             target.opermodes += m
                         target.modes += m
-                        modes.append(m)
+                        modebuf.append(m)
 
 
                 if action == '-' and m in target.modes:
                     if m == 'x':
-                        self.setinfo(self.hostname, t='host', source=sourceServer)
-                    elif m == 'S' and self.server.hostname not in localServer.conf['settings']['ulines']:
-                        self.sendraw(501, 'Mode +{} may only be set by servers'.format(m))
+                        client.setinfo(client.hostname, t='host', source=sourceServer)
+                    elif m == 'S' and client.server.hostname not in ircd.conf['settings']['ulines']:
+                        client.sendraw(ircd.ERR.UMODEUNKNOWNFLAG, 'Mode +{} may only be set by servers'.format(m))
                         continue
                     elif m == 'r':
                         target.svid = '*'
@@ -742,17 +747,17 @@ def chgumode(self, localServer, recv, override, sourceServer=None, sourceUser=No
                     elif m == 'o':
                         target.operflags = []
                         ### Assign a class.
-                        for cls in localServer.conf['allow']:
+                        for cls in ircd.conf['allow']:
                             clientmaskhost = '{}@{}'.format(target.ident, target.ip)
-                            if 'ip' in localServer.conf['allow'][cls]:
+                            if 'ip' in ircd.conf['allow'][cls]:
                                 clientmask = '{}@{}'.format(target.ident, target.ip)
-                                isMatch = match(localServer.conf['allow'][cls]['ip'], clientmask)
-                            if 'hostname' in localServer.conf['allow'][cls]:
+                                isMatch = match(ircd.conf['allow'][cls]['ip'], clientmask)
+                            if 'hostname' in ircd.conf['allow'][cls]:
                                 clientmask = '{}@{}'.format(target.ident, target.hostname)
-                                isMatch = match(localServer.conf['allow'][cls]['hostname'], clientmask)
+                                isMatch = match(ircd.conf['allow'][cls]['hostname'], clientmask)
                             if isMatch:
-                                if 'options' in localServer.conf['allow'][cls]:
-                                    if 'ssl' in localServer.conf['allow'][cls]['options'] and not target.ssl:
+                                if 'options' in ircd.conf['allow'][cls]:
+                                    if 'ssl' in ircd.conf['allow'][cls]['options'] and not target.ssl:
                                         continue
                                 target.cls = cls
 
@@ -763,56 +768,58 @@ def chgumode(self, localServer, recv, override, sourceServer=None, sourceUser=No
                                     target.snomasks = ''
                         if target.swhois:
                             operSwhois = ''
-                            if 'swhois' in localServer.conf['opers'][target.operaccount]:
-                                operSwhois = localServer.conf['opers'][target.operaccount]['swhois']
+                            if 'swhois' in ircd.conf['opers'][target.operaccount]:
+                                operSwhois = ircd.conf['opers'][target.operaccount]['swhois']
                             if operSwhois in target.swhois:
                                 target.swhois.remove(operSwhois)
                             if target.operswhois in target.swhois:
                                 target.swhois.remove(target.operswhois)
-                            data = ':{} SWHOIS {} :'.format(localServer.sid, target.uid)
-                            localServer.new_sync(localServer, sourceServer, data)
+                            data = ':{} SWHOIS {} :'.format(ircd.sid, target.uid)
+                            ircd.new_sync(ircd, sourceServer, data)
                             for line in target.swhois:
-                                data = ':{} SWHOIS {} :{}'.format(localServer.sid, target.uid, line)
-                                localServer.new_sync(localServer, sourceServer, data)
+                                data = ':{} SWHOIS {} :{}'.format(ircd.sid, target.uid, line)
+                                ircd.new_sync(ircd, sourceServer, data)
 
                         target.opermodes = ''
-                        self.operaccount = None
+                        client.operaccount = None
 
                         updated = []
-                        for user in self.localServer.users:
-                            for user in [user for user in self.localServer.users if 'operwatch' in user.caplist and user not in updated and user.socket]:
-                                common_chan = list(filter(lambda c: user in c.users and self in c.users, self.localServer.channels))
+                        for user in ircd.users:
+                            for user in [user for user in ircd.users if 'operwatch' in user.caplist and user not in updated and user.socket]:
+                                common_chan = list(filter(lambda c: user in c.users and client in c.users, ircd.channels))
                                 if not common_chan:
                                     continue
-                                user._send(':{} UMODE {}{}'.format(self.fullmask(), action, m))
+                                user._send(':{} UMODE {}{}'.format(client.fullmask(), action, m))
                                 updated.append(user)
 
-                    if m not in modes:
-                        modes.append(m)
+                    # Handle core modes. These aren't handled by UserMode class.
+                    if m not in modebuf:
+                        modebuf.append(m)
                     # Removing modes from user class.
-                    for mode in modes:
+                    for mode in modebuf:
                         target.modes = target.modes.replace(mode, '')
+
         if 'o' in target.modes:
             target.modes = 'o'+target.modes.replace('o', '')
-        if len(modes) > 1 and ' '.join(modes)[-1] in '+-':
-            del modes[-1]
-        modes = ''.join(modes)
+        if len(modebuf) > 1 and ' '.join(modebuf)[-1] in '+-':
+            del modebuf[-1]
+        modes = ''.join(modebuf)
         if len(modes) > 1:
             target._send(':{} MODE {} :{}'.format(displaySource, target.nickname, modes))
-            if self != target:
-                self.sendraw(501, 'UMODE {} :{}'.format(target.nickname, modes))
+            if client != target:
+                client.sendraw(ircd.ERR.UMODEUNKNOWNFLAG, 'UMODE {} :{}'.format(target.nickname, modes))
 
-            if target.server != localServer:
-                localServer.new_sync(localServer, sourceServer, ':{} MODE {} {}'.format(displaySource, target.nickname, modes))
+            if target.server != ircd:
+                ircd.new_sync(ircd, sourceServer, ':{} MODE {} {}'.format(displaySource, target.nickname, modes))
             else:
-                localServer.new_sync(localServer, sourceServer, ':{} UMODE2 {}'.format(target.uid, modes))
+                ircd.new_sync(ircd, sourceServer, ':{} UMODE2 {}'.format(target.uid, modes))
 
         if 's' in modes or showsno:
-            localServer.new_sync(localServer, sourceServer, ':{} BV +{}'.format(target.uid, target.snomasks))
+            ircd.new_sync(ircd, sourceServer, ':{} BV +{}'.format(target.uid, target.snomasks))
             target.sendraw(8, 'Server notice mask (+{})'.format(target.snomasks))
 
         if unknown:
-            self.sendraw(501, 'Mode{} \'{}\' not found'.format('s' if len(unknown) > 1 else '', ''.join(unknown)))
+            client.sendraw(ircd.ERR.UMODEUNKNOWNFLAG, 'Mode{} \'{}\' not found'.format('s' if len(unknown) > 1 else '', ''.join(unknown)))
 
     except Exception as ex:
         logging.exception(ex)

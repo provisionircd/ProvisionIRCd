@@ -45,7 +45,7 @@ User = user.User
 
 from classes.modes import UserMode, ChannelMode
 from classes.commands import Command
-
+from classes.rpl import ERR, RPL
 
 from handle.functions import _print, match, is_sslport, update_support, logging
 
@@ -110,6 +110,8 @@ class Server:
                 self.confdir = dir_path+'/conf/'
                 self.modules_dir = dir_path+'/modules/'
                 self.conffile = conffile
+                self.ERR = ERR
+                self.RPL = RPL
 
                 self.modules = {}
                 self.commands = []

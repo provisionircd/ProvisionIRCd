@@ -415,7 +415,7 @@ def update_support(ircd):
 
     # Decorate method, EXTBAN does not hook a command or mode so we have to check it this way.
     for module in ircd.modules:
-        for function in [function for function in ircd.modules[module][5] if hasattr(function, 'support')]:
+        for function in [function for function in ircd.modules[module][4] if hasattr(function, 'support')]:
             for r in [r for r in function.support]:
                 server_support = False
                 if type(r) == tuple and len(r) > 1 and r[1]:

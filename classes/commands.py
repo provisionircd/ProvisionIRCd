@@ -39,11 +39,9 @@ class Command:
         exists = 0
         for c in self.ircd.command_class:
             if [m for m in list(c.command) if m in self.command]:
-                exists = 1
+                logging.debug('Apparently, {} is equal to {}'.format(c.command, self.command))
+                self.error("Command {} already exists".format(m))
                 break
-        if exists:
-            logging.debug('Apparently, {} is equal to {}'.format(c.command, self.command))
-            self.error("Command {} already exists".format(c))
 
         if self.support:
             if self.support[0] in self.ircd.support:
@@ -72,7 +70,7 @@ class Command:
         if type(user).__name__ != self.req_class:
             if self.req_class == 'Server':
                 user.sendraw(ERR.SERVERONLY, ':{} is a server only command'.format(cmd))
-                return 0
+            return 0
 
         received_params = len(recv) - 1
         if received_params < self.params:
