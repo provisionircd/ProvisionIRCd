@@ -90,18 +90,17 @@ class Command:
                 user.sendraw(ERR.NOPRIVILEGES, ':Permission denied - Required mode not set')
                 return 0
 
-            forbid = 1
             if self.req_flags:
+                forbid = 1
                 if '|' in self.req_flags:
                     if list(filter(lambda f: f in user.operflags, self.req_flags.split('|'))):
                         forbid = False
                         logging.debug('You have one of the required flags. Allowing command.')
                 else:
                     forbid = set([self.req_flags]).difference(set(user.operflags))
-            if forbid:
-                user.sendraw(ERR.NOPRIVILEGES, ':Permission denied - You do not have the correct IRC Operator privileges')
-                return 0
-
+                if forbid:
+                    user.sendraw(ERR.NOPRIVILEGES, ':Permission denied - You do not have the correct IRC Operator privileges')
+                    return 0
         return 1
 
 

@@ -25,6 +25,7 @@ class RPL(Enum):
     MOTD = 372
     MOTDSTART = 375
     ENDOFMOTD = 376
+    YOUREOPER = 381
     IRCOPS = 386
     ENDOFIRCOPS = 387
 
@@ -45,5 +46,6 @@ class ERR(Enum):
     NOPRIVILEGES = 481
     CHANOPRIVSNEEDED = 482 # Channel op privileges needed.
     SERVERONLY = 487
+    NOOPERHOST = 491
 
     NOINVITE = 518

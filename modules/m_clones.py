@@ -1,29 +1,27 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 /clones command
 """
 
 import ircd
 
-@ircd.Modules.req_modes('o')
-@ircd.Modules.commands('clones')
-def clones(self, localServer, recv):
-    ### Deze is lastig.
-    clones, foundclones = [], False
-    for user in localServer.users:
-        if user.ip not in clones:
-            clones.append(user.ip)
-            logins = list(filter(lambda u: u.ip == user.ip and (u.server.hostname not in localServer.conf['settings']['ulines'] and 'S' not in u.modes) and user.registered, localServer.users))
-            if len(logins) > 1:
-                foundclones = True
-                nicks = []
-                for user in logins:
-                    nicks.append(user.nickname)
-                self.sendraw(501, ':User {} is logged in {} times: {}'.format(user.nickname, len(logins), ' '.join(nicks)))
+@ircd.Modules.command
+class Clones(ircd.Command):
+    def __init__(self):
+        self.command = 'clones'
+        self.req_modes = 'o'
 
-    if not foundclones:
-        self.sendraw(501, ':No clones found on this {}.'.format('server' if not localServer.servers else 'network'))
+    def execute(self, client, recv):
+        clones, foundclones = [], False
+        for user in self.ircd.users:
+            if user.ip not in clones:
+                clones.append(user.ip)
+                logins = list(filter(lambda u: u.ip == user.ip and (u.server.hostname not in self.ircd.conf['settings']['ulines'] and 'S' not in u.modes) and user.registered, self.ircd.users))
+                if len(logins) > 1:
+                    foundclones = True
+                    nicks = []
+                    for user in logins:
+                        nicks.append(user.nickname)
+                    client.sendraw('030', ':User {} is logged in {} times: {}'.format(user.nickname, len(logins), ' '.join(nicks)))
 
-            ### Ik moet nadenken :( kutleven.  sec, wat fix je dan ? simpele /clones cmd
+        if not foundclones:
+            client.sendraw('031', ':No clones found on this {}.'.format('server' if not self.ircd.servers else 'network'))

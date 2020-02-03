@@ -29,11 +29,11 @@ class Oper(ircd.Command):
 
         if 'opers' not in self.ircd.conf:
             client.flood_penalty += 350000
-            return client.sendraw(491, ':No O:lines for your host')
+            return client.sendraw(self.ERR.NOOPERHOST, ':No O:lines for your host')
 
         if recv[1] not in self.ircd.conf['opers']:
             client.flood_penalty += 350000
-            client.sendraw(491, ':No O:lines for your host')
+            client.sendraw(self.ERR.NOOPERHOST, ':No O:lines for your host')
             msg = '*** Failed oper attempt by {} [{}] ({}@{}): username not found'.format(client.nickname, recv[1], client.ident, client.hostname)
             return self.ircd.snotice('o', msg)
 
@@ -43,13 +43,13 @@ class Oper(ircd.Command):
             hashed = self.ircd.conf['opers'][recv[1]]['password'].encode('utf-8') ### Bytes password, hashed.
             if not bcrypt.checkpw(password, hashed):
                 client.flood_penalty += 350000
-                client.sendraw(491, ':No O:lines for your host')
+                client.sendraw(self.ERR.NOOPERHOST, ':No O:lines for your host')
                 msg = '*** Failed oper attempt by {} [{}] ({}@{}): incorrect password'.format(client.nickname, recv[1], client.ident, client.hostname)
                 return self.ircd.snotice('o', msg)
 
         elif recv[2] != self.ircd.conf['opers'][recv[1]]['password']:
             client.flood_penalty += 350000
-            client.sendraw(491, ':No O:lines for your host')
+            client.sendraw(self.ERR.NOOPERHOST, ':No O:lines for your host')
             msg = '*** Failed oper attempt by {} [{}] ({}@{}): incorrect password'.format(client.nickname, recv[1], client.ident, client.hostname)
             return self.ircd.snotice('o', msg)
 
@@ -57,7 +57,7 @@ class Oper(ircd.Command):
             for m in str(self.ircd.conf['opers'][recv[1]]['requiremodes']):
                 if m not in client.modes and m not in '+-':
                     client.flood_penalty += 350000
-                    client.sendraw(491, ':No O:lines for your host')
+                    client.sendraw(self.ERR.NOOPERHOST, ':No O:lines for your host')
                     msg = '*** Failed oper attempt by {} [{}] ({}@{}): mode requirement not met'.format(client.nickname, recv[1], client.ident, client.hostname)
                     return self.ircd.snotice('o', msg)
 
@@ -71,7 +71,7 @@ class Oper(ircd.Command):
 
         if not hostMatch:
             client.flood_penalty += 350000
-            client.sendraw(491,':No O:lines for your host')
+            client.sendraw(self.ERR.NOOPERHOST,':No O:lines for your host')
             msg = '*** Failed oper attempt by {} [{}] ({}@{}): host does not match'.format(client.nickname, recv[1], client.ident,client.hostname)
             return self.ircd.snotice('o', msg)
 
@@ -79,7 +79,7 @@ class Oper(ircd.Command):
         totalClasses = list(filter(lambda u: u.server == client.server and u.cls == operClass, client.server.users))
         if len(totalClasses) >= int(client.server.conf['class'][operClass]['max']):
             client.flood_penalty += 350000
-            client.sendraw(491, ':No O:lines for your host')
+            client.sendraw(self.ERR.NOOPERHOST, ':No O:lines for your host')
             msg = '*** Failed oper attempt by {} [{}] ({}@{}): limit reached for their oper class'.format(client.nickname, recv[1], client.ident, client.hostname)
             return self.ircd.snotice('o', msg)
         else:
@@ -120,7 +120,7 @@ class Oper(ircd.Command):
 
             p = {'override': True}
             client.handle('MODE', '{} +{} {}'.format(client.nickname, client.opermodes, '+'+snomasks if snomasks else ''), params=p)
-            client.sendraw(381, ':You are now an IRC Operator.')
+            client.sendraw(self.RPL.YOUREOPER, ':You are now an IRC Operator.')
             client.flood_penalty = 0
             msg = '*** {} ({}@{}) [{}] is now an IRC Operator (+{})'.format(client.nickname, client.ident, client.hostname, client.operaccount, client.opermodes)
             self.ircd.snotice('o', msg)
