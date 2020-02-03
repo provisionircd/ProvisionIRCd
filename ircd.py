@@ -21,7 +21,6 @@ import gc
 gc.enable()
 import socket
 import importlib
-import platform
 import argparse
 import atexit
 import handle.handleConf
