@@ -210,12 +210,13 @@ class ChannelMode:
         else:
             hook = 'local_chanmode' if user == self.ircd else 'remote_chanmode'
         #logging.debug('Looking for pre_* hooks for {}'.format(self))
-        for callable in [callable for callable in self.ircd.hooks if callable[0].lower() == 'pre_'+hook]:
+        for callable in [callable for callable in self.ircd.hooks if callable[0].lower() == 'pre_'+hook and self.mode in callable[1]]:
             try:
                 #logging.debug('Calling {} with action {}'.format(callable, action))
-                ok = callable[2](user, self.ircd, channel, self.modebuf, self.parambuf, action, self.mode, param)
+                ok = callable[2](user, self.ircd, channel, self.modebuf, self.parambuf, action, param)
                 if not ok and ok is not None:
                     logging.debug('Further processing halted for {}{}{}'.format(action, self.mode, ' '+param if param else ''))
+                    logging.debug('Blocked by: {}'.format(callable))
                     return 0
             except Exception as ex:
                 logging.exception(ex)
@@ -265,9 +266,10 @@ class ChannelMode:
                 logging.debug(f'Mode conflict: mode "{self.mode}"is already stored in the buffer.')
             logging.debug(f'A module probably already handled it. Not adding again.')
         else:
+            self.modebuf.append(self.mode)
+            logging.debug('modebuf appended from set_mode()')
             if param:
                 self.parambuf.append(param)
-            self.modebuf.append(self.mode)
 
         if self.mode not in channel.modes:
             channel.modes += self.mode
@@ -279,7 +281,9 @@ class ChannelMode:
 
     def remove_mode(self, user, channel, param=None):
         # Module hooks.
-        self.pre_hook(user, channel, param, action='-')
+        process = self.pre_hook(user, channel, param, action='-')
+        if not process and process is not None:
+            return 0
 
         # This should be handled by pre_* mode hooks
         for callable in [callable for callable in self.ircd.hooks if callable[0].lower() == 'modechar_del']:
@@ -299,9 +303,17 @@ class ChannelMode:
             return 0
 
         channel.modes = channel.modes.replace(self.mode, '')
-        self.modebuf.append(self.mode)
-        if param:
-            self.parambuf.append(param)
+
+        if ((param and param in self.parambuf) and self.mode in self.modebuf) or (not param and self.mode in self.modebuf):
+            if param:
+                logging.debug(f'Mode conflict: mode "{self.mode}" and param "{param}" are already stored in the buffer.')
+            else:
+                logging.debug(f'Mode conflict: mode "{self.mode}"is already stored in the buffer.')
+            logging.debug(f'A module probably already handled it. Not adding again.')
+        else:
+            self.modebuf.append(self.mode)
+            if param:
+                self.parambuf.append(param)
 
         logging.debug('Channel mode "{}" removed from {} (param: {})'.format(self.mode, channel, param))
         return 1

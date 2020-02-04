@@ -441,18 +441,7 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
                                 callable[2](localServer, localServer, c)
                             except Exception as ex:
                                 logging.exception(ex)
-                        '''
-                        for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'pre_local_join']:
-                            try:
-                                success, overrides = callable[2](localServer, localServer, c)
-                            except Exception as ex:
-                                logging.exception(ex)
-                        for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'local_join']:
-                            try:
-                                callable[2](localServer, localServer, c)
-                            except Exception as ex:
-                                logging.exception(ex)
-                        '''
+
                         if 'creation' in perm_data[chan]:
                             c.creation = perm_data[chan]['creation']
                         params = []

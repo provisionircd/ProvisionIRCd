@@ -32,8 +32,8 @@ def connect_hook(self, localServer):
             localServer.geodata[self.ip] = json_res
 
 @ircd.Modules.support(('EXTBAN='+prefix+','+trace_bans, True)) ### (support string, boolean if support must be sent to other servers)
-@ircd.Modules.hooks.pre_local_chanmode()
-@ircd.Modules.hooks.pre_remote_chanmode()
+@ircd.Modules.hooks.pre_local_chanmode('beI')
+@ircd.Modules.hooks.pre_remote_chanmode('beI')
 def tracebans(self, localServer, channel, modebuf, parambuf, action, m, param):
     try:
         if m not in 'beI' or action != '+':

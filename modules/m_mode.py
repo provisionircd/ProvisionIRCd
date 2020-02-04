@@ -68,7 +68,7 @@ def makeMask(ircd, data):
 
 oper_override = False
 def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, sourceUser=None):
-    #logging.debug('processModes(): {}'.format(recv))
+    logging.debug('processModes(): {} :: {}'.format(self, recv))
     try:
         if sourceServer != ircd or (type(sourceUser).__name__ == 'User' and sourceUser.server != ircd):
             hook = 'remote_chanmode'
@@ -175,12 +175,11 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
                         pass
                 else:
                     # Modules like extbans do not have a mode, so we will check for hooks manually.
-                    for callable in [callable for callable in ircd.hooks if callable[0].lower() == 'pre_'+hook]:
+                    for callable in [callable for callable in ircd.hooks if callable[0].lower() == 'pre_'+hook and m in callable[1]]:
                         try:
-                            callable[2](self, ircd, channel, modebuf, parambuf, action, m, param_mode)
+                            callable[2](self, ircd, channel, modebuf, parambuf, action, param_mode)
                         except Exception as ex:
                             logging.exception(ex)
-
 
             if action == '+' and (m in chmodes or type(self).__name__ == 'Server'):
                 ###
@@ -302,7 +301,7 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
                     if not next((x for x in ircd.channel_mode_class if x.mode == m), None):
                         modebuf.append(m)
                         channel.modes += m
-                        #logging.debug('Non-modulair mode "{}" has been handled by m_mode'.format(m))
+                        logging.debug('Non-modulair mode "{}" has been handled by m_mode'.format(m))
 
                     if m == 'O' and len(channel.users) > 2:
                         for user in [user for user in channel.users if 'o' not in user.modes]:
@@ -348,8 +347,7 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
                         # Only remove mode if it's a core mode. ChannelMode class handles the rest.
                         if m in ircd.core_chmodes:
                             channel.modes = channel.modes.replace(m, '')
-
-                        modebuf.append(m)
+                            modebuf.append(m)
 
                 elif m in 'beI':
                     mask = makeMask(ircd, param_mode)
@@ -412,9 +410,9 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
 
             if m in ircd.core_chmodes:
                 ### Finally, call modules for core modes.
-                for callable in [callable for callable in ircd.hooks if callable[0].lower() == 'pre_'+hook]:
+                for callable in [callable for callable in ircd.hooks if callable[0].lower() == 'pre_'+hook and m in callable[1]]:
                     try:
-                        callable[2](self, ircd, channel, modebuf, parambuf, action, m, param_mode)
+                        callable[2](self, ircd, channel, modebuf, parambuf, action, param_mode)
                     except Exception as ex:
                         logging.exception(ex)
             continue
@@ -490,6 +488,8 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
                 ircd.handle(cmd, data)
 
             save_db(ircd)
+            modebuf = []
+            parambuf = []
 
     except Exception as ex:
         logging.exception(ex)

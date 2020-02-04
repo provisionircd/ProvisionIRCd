@@ -39,7 +39,7 @@ class Command:
         exists = 0
         for c in self.ircd.command_class:
             if [m for m in list(c.command) if m in self.command]:
-                logging.debug('Apparently, {} is equal to {}'.format(c.command, self.command))
+                #logging.debug('Apparently, {} is equal to {}'.format(c.command, self.command))
                 self.error("Command {} already exists".format(m))
                 break
 

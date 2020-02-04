@@ -59,40 +59,40 @@ def history_msg(self, localServer, channel, msg):
                 localServer.m_history[channel][user]['last'] = None
                 localServer.m_history[channel][user]['replay_time'] = int(time.time())
             localServer.m_history[channel][user]['last'] = data
+
         for user in [user for user in list(localServer.m_history[channel]) if user not in channel.users]:
             del localServer.m_history[channel][user]
     except Exception as ex:
         logging.exception(ex)
 
 
-@ircd.Modules.hooks.pre_local_chanmode()
-@ircd.Modules.hooks.pre_remote_chanmode()
-def chmode_H2(self, localServer, channel, modebuf, parambuf, action, m, param):
+@ircd.Modules.hooks.pre_local_chanmode(chmode)
+@ircd.Modules.hooks.pre_remote_chanmode(chmode)
+def chmode_H2(self, localServer, channel, modebuf, parambuf, action, param):
     try:
-        if m == chmode:
-            if action == '+':
-                limit = int(param.split(':')[0])
-                if limit > 25:
-                    limit = 25
-                expire = int(param.split(':')[1])
-                if expire > 10080:
-                    expire = 10080
-                param = '{}:{}'.format(limit, expire)
-                if not hasattr(channel, 'msg_backlog'):
-                    channel.msg_backlog = {}
-                elif 'lines' in channel.msg_backlog:
-                    if limit == channel.msg_backlog['limit'] and expire == channel.msg_backlog['expire']:
-                        return
-                channel.msg_backlog['limit'] = limit
-                channel.msg_backlog['expire'] = expire
-                channel.msg_backlog['lines'] = []
-                #modebuf.append(m)
-                #parambuf.append(param)
-                #channel.modes += m
-                # Actually we should also add the chan_param here. BUT MEH FUCK IT.
-                #return 0
-            else:
+        if action == '+':
+            limit = int(param.split(':')[0])
+            if limit > 25:
+                limit = 25
+            expire = int(param.split(':')[1])
+            if expire > 10080:
+                expire = 10080
+            param = '{}:{}'.format(limit, expire)
+            if not hasattr(channel, 'msg_backlog'):
                 channel.msg_backlog = {}
+            elif 'lines' in channel.msg_backlog:
+                if limit == channel.msg_backlog['limit'] and expire == channel.msg_backlog['expire']:
+                    return
+            channel.msg_backlog['limit'] = limit
+            channel.msg_backlog['expire'] = expire
+            channel.msg_backlog['lines'] = []
+            #modebuf.append(m)
+            #parambuf.append(param)
+            #channel.modes += m
+            # Actually we should also add the chan_param here. BUT MEH FUCK IT.
+            #return 0
+        else:
+            channel.msg_backlog = {}
     except Exception as ex:
         logging.exception(ex)
 

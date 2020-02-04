@@ -30,6 +30,7 @@ def debug(self, localServer, recv):
     localServer.notice(self, '*** State of {}:'.format(chan_class.name))
     localServer.notice(self, can_see[chan_class])
 
+
 ### Types: 0 = mask, 1 = require param, 2 = optional param, 3 = no param, 4 = special user channel-mode.
 #@ircd.Modules.channel_modes(chmode, 3, 4, 'Delay join message until the user speaks or receives channel status') ### ('mode', type, level, 'Mode description', class 'user' or None, prefix, 'param desc')
 @ircd.Modules.hooks.pre_chanmsg()
@@ -42,6 +43,7 @@ def showjoin(self, localServer, channel, msg):
             user._send(data)
             can_see[channel][user].append(self)
     return msg
+
 
 @ircd.Modules.hooks.visible_in_channel() ### Returns True or False depending if <user> should be visible on <channel> for <self>
 def visible_in_chan(self, localServer, user, channel):
@@ -58,6 +60,7 @@ def visible_in_chan(self, localServer, user, channel):
         logging.debug('visible_in_chan() dict, returning 1')
         return 1
     return 0
+
 
 @ircd.Modules.hooks.pre_local_join()
 @ircd.Modules.hooks.pre_remote_join()
@@ -79,6 +82,7 @@ def hidejoin(self, localServer, channel, **kwargs):
         return (1, 0)
     except Exception as ex:
             logging.exception(ex)
+
 
 @ircd.Modules.hooks.local_part()
 @ircd.Modules.hooks.remote_part()
@@ -105,6 +109,7 @@ def hidequit(self, localServer):
             can_see[channel][user].remove(self)
         #logging.debug('/QUIT: current state for {}: {}'.format(channel.name, can_see[channel]))
 
+
 #@ircd.Modules.hooks.modechar_add()
 def set_D(localServer, self, channel, mode):
     if mode == chmode:
@@ -122,14 +127,18 @@ def set_D(localServer, self, channel, mode):
                 logging.debug('Mode set, so user {} is visible to {}'.format(user2.nickname, user1.nickname))
     return 1
 
+
 @ircd.Modules.hooks.modechar_del()
 def unset_D(localServer, self, channel, mode):
     if mode == chmode:
         global can_see
         can_see = {}
 
-@ircd.Modules.hooks.pre_local_chanmode()
-@ircd.Modules.hooks.pre_remote_chanmode()
+
+# Make new hook, CHSTATUS_ADD and CHSTATUS_DEL (mode, user)
+# That's basically all we need
+#@ircd.Modules.hooks.pre_local_chanmode()
+#@ircd.Modules.hooks.pre_remote_chanmode()
 def chmode_D2(self, localServer, channel, modebuf, parambuf, action, m, param):
     global can_see
     if m == chmode:
@@ -148,7 +157,7 @@ def chmode_D2(self, localServer, channel, modebuf, parambuf, action, m, param):
                     can_see[channel][user].append(user2)
             return
 
-    if m not in localServer.chstatus or chmode not in channel.modes:
+    if m not in localServer.chstatus:
         return
     user = [user for user in channel.users if user.nickname == param or user.uid == param]
     if not user:
