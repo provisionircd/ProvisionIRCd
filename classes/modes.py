@@ -1,8 +1,5 @@
-# User mode class.
-
-import re
-
 from handle.functions import logging
+
 
 class UserModeError(Exception):
     pass
@@ -17,9 +14,7 @@ class UserMode:
     req_flag = 0
     desc = ''
     support = ()
-    server_supprt = 0
     registered = 0
-
 
     def validate(self):
         # Remove duplicate instances of the same class.
@@ -102,7 +97,6 @@ class UserMode:
 
 
 
-
 class ChannelMode:
     ircd = None
     mode = ''
@@ -112,14 +106,18 @@ class ChannelMode:
     param_regex = None
     param_format = None
     param_help = None
-    type = 3
-    support = ()
-    server_supprt = ()
-    ### Types: 0 = mask, 1 = require param, 2 = optional param, 3 = no param, 4 = special user channel-mode, 5 = "list" mode
 
-    # Type 5 ("list modes, like +beI etc) requires some additional info.
-    list_name = '' # The internal "name" of the list, i.e. channel.whitelist. Used in SJOIN to check if there's a duplicate entry, or to remove all entries.
-    mode_prefix = '' # This is used in SJOIN to indicate that it is a list-entry.
+    # Types: 0 = mask, 1 = require param, 2 = optional param, 3 = no param, 4 = special user channel-mode, 5 = "list" mode (like +beI)
+    type = 3
+
+    support = ()
+
+    # Type 5 ("list modes, like +beI etc) require some additional info.
+    # The internal "name" of the list, i.e. channel.whitelist. Used in SJOIN to check if there's a duplicate entry, or to remove all entries.
+    list_name = ''
+
+    # This is used in SJOIN to indicate that it is a list-entry.
+    mode_prefix = ''
 
     registered = 0
 
@@ -226,6 +224,7 @@ class ChannelMode:
 
 
     def fix_param(self, param):
+        # Fuck regex.
         #if self.param_regex and param:
         #    r = re.findall(self.param_regex, param)
         #    if r:
@@ -260,17 +259,22 @@ class ChannelMode:
                 logging.debug('2 Storing param of {}: {}'.format(self.mode, param))
                 self.ircd.chan_params[channel][self.mode] = param
 
-        if param:
-            self.parambuf.append(param)
-
-        self.modebuf.append(self.mode)
+        if ((param and param in self.parambuf) and self.mode in self.modebuf) or (not param and self.mode in self.modebuf):
+            if param:
+                logging.debug(f'Mode conflict: mode "{self.mode}" and param "{param}" are already stored in the buffer.')
+            else:
+                logging.debug(f'Mode conflict: mode "{self.mode}"is already stored in the buffer.')
+            logging.debug(f'A module probably already handled it. Not adding again.')
+        else:
+            if param:
+                self.parambuf.append(param)
+            self.modebuf.append(self.mode)
 
         if self.mode not in channel.modes:
             channel.modes += self.mode
             logging.debug('Channel mode "{}" set on {} (param: {})'.format(self.mode, channel, self.ircd.chan_params[channel][self.mode]))
         else:
             logging.debug('Channel mode "{}" updated on {} (param: {})'.format(self.mode, channel, self.ircd.chan_params[channel][self.mode]))
-
         return 1
 
 
@@ -294,7 +298,6 @@ class ChannelMode:
 
         if self.mode not in channel.modes:
             return 0
-
 
         channel.modes = channel.modes.replace(self.mode, '')
         self.modebuf.append(self.mode)

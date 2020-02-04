@@ -33,25 +33,25 @@ READ_ONLY = (
 )
 READ_WRITE = READ_ONLY | select.POLLOUT
 
-def sock_accept(localServer, s):
-    if localServer.listen_socks[s] == 'clients':
+def sock_accept(ircd, s):
+    if ircd.listen_socks[s] == 'clients':
         try:
             conn, addr = s.accept()
-            if localServer.use_poll:
-                localServer.pollerObject.register(conn, READ_ONLY)
+            if ircd.use_poll:
+                ircd.pollerObject.register(conn, READ_ONLY)
             port = conn.getsockname()[1]
-            is_ssl = is_sslport(localServer, port)
-            conn_backlog = [user for user in localServer.users if user.socket and not user.registered]
+            is_ssl = is_sslport(ircd, port)
+            conn_backlog = [user for user in ircd.users if user.socket and not user.registered]
             logging.info('Accepting client on {} -- fd: {}, with IP {}'.format(s, conn.fileno(), addr[0]))
             if len(conn_backlog) > 500:
                 logging.warning('Current connection backlog is >{}, so not allowing any more connections for now. Bye.'.format(len(conn_backlog)))
                 conn.close()
                 return
             conn.settimeout(10)
-            if is_ssl and not localServer.pre_wrap:
+            if is_ssl and not ircd.pre_wrap:
                 is_ssl = 0
                 version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
-                conn = localServer.sslctx.wrap_socket(conn, server_side=True)
+                conn = ircd.sslctx.wrap_socket(conn, server_side=True)
                 is_ssl = 1
                 logging.info('Wrapped incoming user socket {} in SSL'.format(conn))
                 try:
@@ -61,9 +61,9 @@ def sock_accept(localServer, s):
                         logging.info('Fingerprint: {}'.format(ssl_fingerprint))
                 except Exception as ex:
                     logging.exception(ex)
-            u = User(localServer, conn, addr, is_ssl)
-            if localServer.use_poll:
-                localServer.fd_to_socket[u.fileno()] = (u.socket, u)
+            u = User(ircd, conn, addr, is_ssl)
+            if ircd.use_poll:
+                ircd.fd_to_socket[u.fileno()] = (u.socket, u)
 
             try:
                 u.socket.setblocking(1) ### Uncomment this. Why? I don't remember.
@@ -80,11 +80,11 @@ def sock_accept(localServer, s):
                 return
             try:
                 random_ping = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(8))
-                localServer.pings[u] = random_ping
+                ircd.pings[u] = random_ping
                 u._send('PING :{}'.format(random_ping))
 
             except Exception as ex:
-                #localServer.snotice('t', '[{}](1) {}'.format(addr[0], ex))
+                #ircd.snotice('t', '[{}](1) {}'.format(addr[0], ex))
                 logging.exception(ex)
                 u.quit(ex)
                 return
@@ -94,22 +94,22 @@ def sock_accept(localServer, s):
             conn.close()
             return
 
-    elif localServer.listen_socks[s] == 'servers':
+    elif ircd.listen_socks[s] == 'servers':
         try:
             conn, addr = s.accept()
-            if localServer.use_poll:
-                localServer.pollerObject.register(conn, READ_ONLY)
+            if ircd.use_poll:
+                ircd.pollerObject.register(conn, READ_ONLY)
             port = conn.getsockname()[1]
-            is_ssl = is_sslport(localServer, port)
+            is_ssl = is_sslport(ircd, port)
 
-            if is_ssl and not localServer.pre_wrap:
+            if is_ssl and not ircd.pre_wrap:
                 is_ssl = 0
                 version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
-                conn = localServer.sslctx.wrap_socket(conn, server_side=True)
+                conn = ircd.sslctx.wrap_socket(conn, server_side=True)
                 is_ssl = 1
                 logging.info('Wrapped incoming server socket {} in SSL'.format(conn))
 
-            s = Server(origin=localServer, serverLink=True, sock=conn, is_ssl=is_ssl)
+            s = Server(origin=ircd, serverLink=True, sock=conn, is_ssl=is_ssl)
 
         except ssl.SSLError as ex:
             logging.exception(ex)
@@ -119,35 +119,35 @@ def sock_accept(localServer, s):
             return
 
 class data_handler: #(threading.Thread):
-    def __init__(self, server):
+    def __init__(self, ircd):
         #threading.Thread.__init__(self)
-        self.server = server
-        self.listen_socks = self.server.listen_socks
+        self.ircd = ircd
+        self.listen_socks = self.ircd.listen_socks
 
     def run(self):
-        localServer = self.server
-        while 1:
+        ircd = self.ircd
+        while ircd.running:
             try:
-                if localServer.use_poll:
-                    fdVsEvent = localServer.pollerObject.poll(1000)
+                if ircd.use_poll:
+                    fdVsEvent = ircd.pollerObject.poll(1000)
                     #print('y u no read? {}'.format(fdVsEvent))
                     for fd, Event in fdVsEvent:
                         try:
-                            s = localServer.fd_to_socket[fd][0]
-                            c = localServer.fd_to_socket[fd][1]
+                            s = ircd.fd_to_socket[fd][0]
+                            c = ircd.fd_to_socket[fd][1]
                             t = type(c).__name__
 
                             if Event & (select.POLLIN | select.POLLPRI):
                                 logging.debug('POLLIN for {}'.format(c))
                                 if s in self.listen_socks:
                                     logging.debug('Incoming connection on {}'.format(s))
-                                    threading.Thread(target=sock_accept, args=([localServer, s])).start()
+                                    threading.Thread(target=sock_accept, args=([ircd, s])).start()
 
                                 elif t in ['User', 'Server']:
                                     logging.debug('Reading data from {}'.format(c))
-                                    read_socket(localServer, c)
+                                    read_socket(ircd, c)
                                 try:
-                                    localServer.pollerObject.modify(s, READ_WRITE)
+                                    ircd.pollerObject.modify(s, READ_WRITE)
                                     logging.debug('Flag for {} set to READ_WRITE'.format(c))
                                 except FileNotFoundError: ### Already closed.
                                     pass
@@ -156,7 +156,7 @@ class data_handler: #(threading.Thread):
                                 logging.debug('POLLOUT for {} ({})'.format(s, c))
                                 if c.sendbuffer:
                                     logging.debug('Sending data to {}'.format(c))
-                                    check_flood(localServer, c)
+                                    check_flood(ircd, c)
                                     try:
                                         sent = s.send(bytes(c.sendbuffer, 'utf-8'))
                                         c.sendbuffer = c.sendbuffer[sent:]
@@ -165,33 +165,33 @@ class data_handler: #(threading.Thread):
                                         c.quit('Write error')
                                         time.sleep(1000)
                                 logging.debug('Flag for {} set to READ_ONLY'.format(c))
-                                localServer.pollerObject.modify(s, READ_ONLY)
+                                ircd.pollerObject.modify(s, READ_ONLY)
                                 continue
                             elif Event & select.POLLHUP:
-                                #localServer.pollerObject.unregister(s)
+                                #ircd.pollerObject.unregister(s)
                                 c.quit('Hung up poll')
 
                             elif Event & select.POLLERR:
-                                #localServer.pollerObject.unregister(s)
+                                #ircd.pollerObject.unregister(s)
                                 c.quit('Polling error')
                         except Exception as ex:
                             logging.exception(ex)
                             time.sleep(1000)
 
-                        check_loops(localServer)
+                        check_loops(ircd)
                         continue
                 else:
-                    #localServer = self.server
-                    read_users = [user for user in list(localServer.users) if user.socket and user.fileno() != -1]
-                    write_users = [user for user in list(localServer.users) if user.sendbuffer and user.socket and user.fileno() != -1]
+                    #ircd = self.server
+                    read_users = [user for user in list(ircd.users) if user.socket and user.fileno() != -1]
+                    write_users = [user for user in list(ircd.users) if user.sendbuffer and user.socket and user.fileno() != -1]
 
-                    read_servers = [server for server in list(localServer.servers) if server.socket and server.fileno() != -1]
-                    write_servers = [server for server in list(localServer.servers) if server.socket and server.sendbuffer and server.fileno() != -1]
+                    read_servers = [server for server in list(ircd.servers) if server.socket and server.fileno() != -1]
+                    write_servers = [server for server in list(ircd.servers) if server.socket and server.sendbuffer and server.fileno() != -1]
 
                     try:
                         read, write, error = select.select(list(self.listen_socks) + read_users + read_servers, write_users + write_servers, read_users + read_servers + write_users + write_servers + list(self.listen_socks), 1.0)
                     except ValueError as ex:
-                        for fd in [fd for fd in list(localServer.users) if fd.socket and not fd.registered]:
+                        for fd in [fd for fd in list(ircd.users) if fd.socket and not fd.registered]:
                             fd.quit('Limit reached')
                         logging.info('Cleanup done')
                         logging.exception(ex)
@@ -200,7 +200,7 @@ class data_handler: #(threading.Thread):
                     for s in error:
                         logging.error('Error occurred in {}'.format(s))
                     for s in write:
-                        check_flood(localServer, s)
+                        check_flood(ircd, s)
                         if type(s).__name__ == 'User' or type(s).__name__ == 'Server':
                             try:
                                 sent = s.socket.send(bytes(s.sendbuffer, 'utf-8'))
@@ -214,99 +214,101 @@ class data_handler: #(threading.Thread):
 
                     for s in read:
                         if type(s).__name__ in ['User', 'Server']:
-                            read_socket(localServer, s)
+                            read_socket(ircd, s)
                             continue
                         if self.listen_socks[s] in ['clients', 'servers']:
-                            threading.Thread(target=sock_accept, args=([localServer, s])).start()
+                            threading.Thread(target=sock_accept, args=([ircd, s])).start()
                             continue
-                    check_loops(localServer)
+                    check_loops(ircd)
             except Exception as ex:
                 logging.exception(ex)
+        sys.exit()
         logging.warning('data_handler loop broke! This should only happen after /restart.')
 
-def check_loops(localServer):
+
+def check_loops(ircd):
     '''
     Checks related to users
     '''
     pingfreq = 120
-    users = (user for user in localServer.users if user.socket)
+    users = (user for user in ircd.users if user.socket)
     for user in (user for user in users if time.time() - user.ping > pingfreq and time.time()*1000 - user.lastPingSent > pingfreq/2):
         user.lastPingSent = time.time() * 1000
         user.lag_measure = user.lastPingSent
-        user._send('PING :{}'.format(localServer.hostname))
+        user._send('PING :{}'.format(ircd.hostname))
 
-    users = (user for user in localServer.users if user.socket and time.time() - user.ping > 180.0)
+    users = (user for user in ircd.users if user.socket and time.time() - user.ping > 180.0)
     for user in users:
         user.quit('Ping timeout: {} seconds'.format(int(time.time() - user.ping)))
 
 
-    for t in (localServer.tkl):
-        for mask in dict(localServer.tkl[t]):
-            expire = localServer.tkl[t][mask]['expire']
+    for t in (ircd.tkl):
+        for mask in dict(ircd.tkl[t]):
+            expire = ircd.tkl[t][mask]['expire']
             if expire == '0':
                 continue
             if int(time.time()) > expire:
                 mask = '{} {}'.format(mask.split('@')[0], mask.split('@')[1])
                 data = '- {} {}'.format(t, mask)
                 p = {'expire': True}
-                localServer.handle('tkl', data, params=p)
+                ircd.handle('tkl', data, params=p)
 
     ### Request links
-    if localServer.users:
-        linkServers = [link for link in localServer.conf['link'] if link.lower() != localServer.hostname.lower() and 'outgoing' in localServer.conf['link'][link] and 'options' in localServer.conf['link'][link] and not list(filter(lambda s: s.hostname == link, localServer.servers))]
-        servers = (link for link in linkServers if link not in localServer.linkRequests)
+    if ircd.users:
+        linkServers = [link for link in ircd.conf['link'] if link.lower() != ircd.hostname.lower() and 'outgoing' in ircd.conf['link'][link] and 'options' in ircd.conf['link'][link] and not list(filter(lambda s: s.hostname == link, ircd.servers))]
+        servers = (link for link in linkServers if link not in ircd.linkRequests)
         for link in servers:
-            localServer.linkRequests[link] = {}
-            localServer.linkRequests[link]['ctime'] = int(time.time())
+            ircd.linkRequests[link] = {}
+            ircd.linkRequests[link]['ctime'] = int(time.time())
 
-        servers = (link for link in linkServers if 'autoconnect' in localServer.conf['link'][link]['options'])
-        for link in (link for link in servers if time.time() - localServer.linkRequests[link]['ctime'] > 900.0):
-            localServer.linkRequests[link] = {}
-            localServer.linkRequests[link]['ctime'] = int(time.time())
+        servers = (link for link in linkServers if 'autoconnect' in ircd.conf['link'][link]['options'])
+        for link in (link for link in servers if time.time() - ircd.linkRequests[link]['ctime'] > 900.0):
+            ircd.linkRequests[link] = {}
+            ircd.linkRequests[link]['ctime'] = int(time.time())
             logging.info('Auto connecting to {}'.format(link))
-            connectTo(None, localServer, link, autoLink=True)
+            connectTo(None, ircd, link, autoLink=True)
 
-    if len(localServer.dnsblCache) >= 1024:
-        del localServer.dnsblCache[localServer.dnsblCache[0]]
+    if len(ircd.dnsblCache) >= 1024:
+        del ircd.dnsblCache[ircd.dnsblCache[0]]
 
-    if len(localServer.hostcache) >= 1024:
-        del localServer.hostcache[localServer.hostcache[0]]
+    if len(ircd.hostcache) >= 1024:
+        del ircd.hostcache[ircd.hostcache[0]]
 
-    if len(localServer.deny_cache) >= 1024:
-        del localServer.deny_cache[localServer.deny_cache[0]]
+    if len(ircd.deny_cache) >= 1024:
+        del ircd.deny_cache[ircd.deny_cache[0]]
 
     ### Remove cached host look-ups after 6 hours.
-    for host in (host for host in dict(localServer.hostcache) if int(time.time()) - localServer.hostcache[host]['ctime'] > 3600.0*6):
-        del localServer.hostcache[host]
+    for host in (host for host in dict(ircd.hostcache) if int(time.time()) - ircd.hostcache[host]['ctime'] > 3600.0*6):
+        del ircd.hostcache[host]
 
     ### Remove cached DNSBL after 1 day.
-    for host in (host for host in dict(localServer.dnsblCache) if int(time.time()) - localServer.dnsblCache[host]['ctime'] > 3600.0*24):
-        del localServer.dnsblCache[host]
+    for host in (host for host in dict(ircd.dnsblCache) if int(time.time()) - ircd.dnsblCache[host]['ctime'] > 3600.0*24):
+        del ircd.dnsblCache[host]
 
     ### Remove cached Deny entries after 1 day.
-    for host in (host for host in dict(localServer.deny_cache) if int(time.time()) - localServer.deny_cache[host]['ctime'] > 3600.0*24):
-        del localServer.deny_cache[host]
+    for host in (host for host in dict(ircd.deny_cache) if int(time.time()) - ircd.deny_cache[host]['ctime'] > 3600.0*24):
+        del ircd.deny_cache[host]
 
     ### Check for unregistered connections.
-    for user in (user for user in list(localServer.users) if user.socket and not user.registered):
-        if time.time() - user.signon >= int(localServer.conf['settings']['regtimeout']):
+    for user in (user for user in list(ircd.users) if user.socket and not user.registered):
+        if time.time() - user.signon >= int(ircd.conf['settings']['regtimeout']):
             user.quit('Registration timed out')
             continue
 
-    conn_backlog = [user for user in localServer.users if user.socket and not user.registered]
+    conn_backlog = [user for user in ircd.users if user.socket and not user.registered]
     for user in conn_backlog:
         totalIP = list(filter(lambda s: s.ip == user.ip, conn_backlog))
         if len(totalIP) > 2:
             user.quit('Too many unknown connections from your IP')
             continue
 
-    for throttle in (throttle for throttle in dict(localServer.throttle) if int(time.time()) - localServer.throttle[throttle]['ctime'] > int(localServer.conf['settings']['throttle'].split(':')[1])):
-        del localServer.throttle[throttle]
+    for throttle in (throttle for throttle in dict(ircd.throttle) if int(time.time()) - ircd.throttle[throttle]['ctime'] > int(ircd.conf['settings']['throttle'].split(':')[1])):
+        del ircd.throttle[throttle]
         continue
 
     ### Check for timed channels status.
     modify_status = {}
-    for chan in localServer.channels:
+    for chan in ircd.channels:
         try:
             for user in dict(chan.temp_status):
                 for mode in chan.temp_status[user]:
@@ -323,39 +325,39 @@ def check_loops(localServer):
             modes = []
             for mode in modify_status[chan]:
                 modes.append(mode)
-            localServer.handle('MODE', '{} {} 0'.format(chan.name, ' '.join(modes)))
+            ircd.handle('MODE', '{} {} 0'.format(chan.name, ' '.join(modes)))
 
     '''
     Checks related to servers
     '''
     # Send out pings
     pingfreq = 60
-    servers = (server for server in localServer.servers if server.socket and server.hostname)
+    servers = (server for server in ircd.servers if server.socket and server.hostname)
     for server in (server for server in servers if time.time() - server.ping > pingfreq and time.time() * 1000 - server.lastPingSent > pingfreq/2):
         server.lastPingSent = time.time() * 1000
         #server.lag_measure = server.lastPingSent
         try:
-            server._send(':{} PING {} {}'.format(localServer.sid, localServer.hostname, server.hostname))
+            server._send(':{} PING {} {}'.format(ircd.sid, ircd.hostname, server.hostname))
         except OSError as ex:
             server.quit('Write error: {}'.format(str(ex)))
 
     # Ping timeouts (only for direct links)
-    for server in (server for server in localServer.servers if server.hostname and server.socket and time.time() - server.ping >= 120.0):
+    for server in (server for server in ircd.servers if server.hostname and server.socket and time.time() - server.ping >= 120.0):
         server.quit('Ping timeout: {} seconds'.format(int(time.time() - server.ping)))
 
     # Registration timeouts
-    for server in [server for server in localServer.servers if not server.eos and ((server.introducedBy and not server.introducedBy.eos) or server.socket) and time.time() - server.ping >= 10.0]:
+    for server in [server for server in ircd.servers if not server.eos and ((server.introducedBy and not server.introducedBy.eos) or server.socket) and time.time() - server.ping >= 10.0]:
         is_silent = False if server.socket else True
         server.quit('Server registration timed out', silent=is_silent)
 
     # Check for unknown or timed out servers (non-sockets)
-    for server in [server for server in localServer.servers if not server.socket and server.uplink and server.uplink.socket and time.time() - server.uplink.ping >= 120.0]:
+    for server in [server for server in ircd.servers if not server.socket and server.uplink and server.uplink.socket and time.time() - server.uplink.ping >= 120.0]:
         is_silent = False if server.socket else True
         server.quit('Server uplink ping timed out: {} seconds'.format(int(time.time() - server.uplink.ping)))
 
-    for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'loop']:
+    for callable in [callable for callable in ircd.hooks if callable[0].lower() == 'loop']:
         try:
-            callable[2](localServer)
+            callable[2](ircd)
         except Exception as ex:
             logging.exception(ex)
 
@@ -365,7 +367,7 @@ def check_loops(localServer):
     if not os.path.exists('db'):
         os.mkdir('db')
 
-def read_socket(localServer, sock):
+def read_socket(ircd, sock):
     if not hasattr(sock, 'socket'):
         # Client probably repidly disconnected. Possible causes can be ZNC that have not yet accepted new cert.
         #sock.quit('No socket')
@@ -373,11 +375,14 @@ def read_socket(localServer, sock):
 
     try:
         if sock.cls:
-            buffer_len = int(localServer.conf['class'][sock.cls]['sendq']) * 2
+            buffer_len = int(ircd.conf['class'][sock.cls]['sendq']) * 2
         else:
             buffer_len = 8192 if type(sock).__name__ == 'User' else 65536
         try:
             recv = sock.socket.recv(buffer_len).decode('utf-8')
+        except UnicodeDecodeError as ex: # Do nothing, skip read.
+            logging.debug(f'Unable to read socket {sock}: {ex}')
+            return
         except Exception as ex:
             logging.exception(ex)
             sock.quit('Read error: {}'.format(ex))
@@ -389,7 +394,7 @@ def read_socket(localServer, sock):
             return
 
         sock.recvbuffer += recv
-        check_flood(localServer, sock)
+        check_flood(ircd, sock)
         sock.handle_recv()
         return recv
     except Exception as ex:

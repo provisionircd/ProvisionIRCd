@@ -653,10 +653,10 @@ class Server:
 
             atexit.register(exit_handler)
 
+        self.running = 1
         from handle.handleSockets import data_handler
         self.datahandler = data_handler(self)
         self.datahandler.run()
-        self.running = 1
         return
 
     def handle(self, cmd, data, kwargs=None):
@@ -672,14 +672,6 @@ class Server:
         except Exception as ex:
            logging.exception(ex)
 
-        try:
-            for callable in [callable for callable in self.localServer.commands if callable[0].lower() == cmd.lower()]:
-                if kwargs:
-                    callable[1](self, self.localServer, p, **kwargs)
-                else:
-                    callable[1](self, self.localServer, p)
-        except Exception as ex:
-            logging.exception(ex)
 
     def broadcast(self, users, data, source=None):
         if source:

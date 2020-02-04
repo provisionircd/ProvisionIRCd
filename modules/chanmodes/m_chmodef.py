@@ -114,9 +114,6 @@ class chmodef(ircd.ChannelMode):
         self.desc = 'Set flood protection for your channel (/helpop chmodef for more info)'
         self.type = 2
 
-        #self.register()
-
-
 
 ### Types: 0 = mask, 1 = require param, 2 = optional param, 3 = no param, 4 = special user channel-mode.
 #@ircd.Modules.channel_modes(chmode, 2, 3, 'Set flood protection for your channel (/helpop chmodef for more info)', None, None, '[params]') ### ('mode', type, level, 'Mode description', class 'user' or None, prefix, 'param desc')
@@ -127,7 +124,7 @@ def addmode_f(self, localServer, channel, modebuf, parambuf, action, m, param):
         floodTypes = 'jm'
         tempparam = []
         if m != chmode or action != '+':
-            return
+            return 0
         for p in param.split(','):
             if len(p) < 2:
                 continue
@@ -152,11 +149,11 @@ def addmode_f(self, localServer, channel, modebuf, parambuf, action, m, param):
                 continue
 
             if len(p.split(':')) < 3:
-                continue
+                return 0
             if not p.split(':')[0].isdigit():
-                continue
+                return 0
             if p.split(':')[1] not in floodTypes:
-                continue
+                return 0
             if not p.split(':')[2].isdigit():
                 continue
 
@@ -215,9 +212,6 @@ def addmode_f(self, localServer, channel, modebuf, parambuf, action, m, param):
                 channel.chmodef[type]['action'] = str(fAction)
                 channel.chmodef[type]['actionSet'] = None
 
-            #print('Success! Returning {}'.format(p))
-            if m not in channel.modes:
-                channel.modes += m
             tempparam.append(p)
 
             p = []

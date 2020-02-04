@@ -67,11 +67,9 @@ class Command:
 
     def check(self, user, recv):
         cmd = recv[0].upper()
-        if type(user).__name__ != self.req_class:
-            if self.req_class == 'Server':
-                user.sendraw(ERR.SERVERONLY, ':{} is a server only command'.format(cmd))
+        if type(user).__name__ != self.req_class and self.req_class == 'Server':
+            user.sendraw(ERR.SERVERONLY, ':{} is a server only command'.format(cmd))
             return 0
-
         received_params = len(recv) - 1
         if received_params < self.params:
             user.sendraw(ERR.NEEDMOREPARAMS, ':{} Not enough parameters. Required: {}'.format(cmd, self.params))

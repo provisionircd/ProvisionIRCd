@@ -1,35 +1,38 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 /die command
 """
 
 import ircd
+import sys
 
-from handle.functions import cloak
+@ircd.Modules.command
+class Die(ircd.Command):
+    """
+    Shutdown the server remotely.
+    """
+    def __init__(self):
+        self.command = 'die'
+        self.req_flags = 'die'
 
-@ircd.Modules.params(1)
-@ircd.Modules.req_modes('o')
-@ircd.Modules.req_flags('die')
-@ircd.Modules.commands('die')
-def die(self, localServer, recv):
-    if recv[1] != localServer.conf['settings']['diepass']:
-        self.flood_penalty += 500000
-        return self.sendraw(481, ':Permission denied')
-    reason = 'Die command received by {} ({}@{})'.format(self.nickname,self.ident,self.hostname)
-    msg = '*** {}'.format(reason)
-    localServer.snotice('s', msg)
-    for server in list(localServer.servers):
-        server._send(':{} SQUIT {} :{}'.format(localServer.hostname,localServer.hostname,reason))
+    def execute(self, client, recv):
+        if recv[1] != self.ircd.conf['settings']['diepass']:
+            client.flood_penalty += 500000
+            return client.sendraw(self.ERR.NOPRIVILEGES, ':Permission denied')
+        reason = 'Die command received by {} ({}@{})'.format(client.nickname, client.ident, client.hostname)
+        msg = '*** {}'.format(reason)
+        self.ircd.snotice('s', msg)
+        for server in list(self.ircd.servers):
+            server._send(':{} SQUIT {} :{}'.format(self.ircd.hostname, self.ircd.hostname, reason))
 
-    for user in [user for user in localServer.users if user.server == localServer]:
-        user.quit(reason=None)
+        for user in [user for user in self.ircd.users if user.server == self.ircd]:
+            user.quit(reason=None)
 
-    localServer.running = False
+        self.ircd.running = 0
 
-    for s in localServer.listen_socks:
-        try:
-            s.shutdown(socket.SHUT_WR)
-        except:
+        for s in self.ircd.listen_socks:
+            try:
+                s.shutdown(socket.SHUT_WR)
+            except:
+                pass
             s.close()
+        sys.exit()

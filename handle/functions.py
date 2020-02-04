@@ -543,7 +543,7 @@ def check_flood(localServer, target):
                 max_len = recvq/10
                 max_cmds = max_len/10
                 if 'o' in user.modes:
-                    max_cmds *= 10
+                    max_cmds *= 5
 
                 if (buffer_len >= max_cmds) and (user.registered and int(time.time()) - user.signon > 1):
                     if user.registered:
@@ -553,7 +553,7 @@ def check_flood(localServer, target):
                     user.quit('Excess Flood2')
                     return
 
-                flood_penalty_treshhold = 1000000 if 'o' not in user.modes else 100000000
+                flood_penalty_treshhold = 1000000 if 'o' not in user.modes else 10000000
                 if int(time.time()) - user.flood_penalty_time > 60:
                     user.flood_penalty = 0
                     user.flood_penalty_time = 0
