@@ -1,6 +1,5 @@
 from handle.functions import logging
 
-
 class UserModeError(Exception):
     pass
 

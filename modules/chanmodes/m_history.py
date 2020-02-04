@@ -12,14 +12,12 @@ from handle.functions import logging
 
 chmode = 'H'
 
-
 @ircd.Modules.channel_mode
 class chmode_H(ircd.ChannelMode):
     def __init__(self):
         self.mode = chmode
         self.desc = 'Displays the message backlog to new users'
         self.type = 2
-        #self.param_regex = "(100|[1-9][0-9]?):(100|[1-9][0-9]?)" # "[0-9][0-9]:[0-9][0-9][0-9][0-9][0-9]" # "(.):(.)"
         self.param_format = "<int>:<int>"
         self.param_help = '[maxlines:expire_in_minutes]'
 
@@ -31,7 +29,6 @@ def checkExpiredBacklog(localServer):
         expire = chan.msg_backlog['expire'] * 60
         if float(datetime.utcnow().strftime("%s.%f")) - latest_date > expire:
             chan.msg_backlog['lines'] = [] # Remove all lines.
-            #chan.msg_backlog['lines'] = chan.msg_backlog['lines'][1:] # Remove only expired line.
 
 
 ircd.Modules.hooks.channel_destroy()
@@ -62,7 +59,6 @@ def history_msg(self, localServer, channel, msg):
                 localServer.m_history[channel][user]['last'] = None
                 localServer.m_history[channel][user]['replay_time'] = int(time.time())
             localServer.m_history[channel][user]['last'] = data
-        ### Looking for parted users.
         for user in [user for user in list(localServer.m_history[channel]) if user not in channel.users]:
             del localServer.m_history[channel][user]
     except Exception as ex:
