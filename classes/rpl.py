@@ -6,6 +6,10 @@ class RPL(Enum):
     CREATED = 0o003
     MYINFO = 0o004
     ISUPPORT = 0o005
+    MAP = 0o006
+    MAPEND = 0o007
+    SNOMASK = 0o008
+    BOUNCE = 0o010
 
     LUSERCLIENT = 251
     LUSEROP = 252
@@ -16,6 +20,8 @@ class RPL(Enum):
     GLOBALUSERS = 266
 
     AWAY = 301
+    USERHOST = 302
+    ISON = 303
     TEXT = 304
     ENDOFWHO = 315
     LISTSTART = 321
@@ -23,6 +29,10 @@ class RPL(Enum):
     LISTEND = 323
     INVITING = 341
     WHOREPLY = 352
+
+    LINKS = 364
+    ENDOFLINKS = 365
+
     MOTD = 372
     MOTDSTART = 375
     ENDOFMOTD = 376

@@ -4,28 +4,42 @@
 
 import ircd
 
-@ircd.Modules.params(1)
-@ircd.Modules.commands('ison')
-def ison(self, localServer, recv):
-    """Checks to see if a nickname is online.
-Example: /ISON Nick1 SomeOthernick"""
-    nicks = []
-    for nick in recv[1:]:
-        users = filter(lambda u: u.nickname.lower() == nick.lower() and u.registered, localServer.users)
-        for user in [user for user in users if user.nickname not in nicks]:
-            nicks.append(user.nickname)
-    self.sendraw(303, ':{}'.format(' '.join(nicks)))
 
-@ircd.Modules.params(1)
-@ircd.Modules.commands('userhost')
-def userhost(self, localServer, recv):
-    """Returns the cloaked userhost of the given user.
-Example: /USERHOST John"""
-    hosts = []
-    for nick in recv[1:]:
-        users = filter(lambda u: u.nickname.lower() == nick.lower() and u.registered, localServer.users)
-        for user in users:
-            h = '{}*=+{}@{}'.format(user.nickname,user.ident,user.cloakhost if 'o' not in self.modes else user.hostname)
-            if h not in hosts:
-                hosts.append(h)
-    self.sendraw(302, ':{}'.format(' '.join(hosts)))
+@ircd.Modules.command
+class Ison(ircd.Command):
+    def __init__(self):
+    """
+    Checks to see if a nickname is online.
+    Example: /ISON Nick1 SomeOthernick
+    """
+    self.command = 'ison'
+    self.params = 1
+
+    def execute(self, client, recv):
+        nicks = []
+        for nick in recv[1:]:
+            users = filter(lambda u: u.nickname.lower() == nick.lower() and u.registered, self.ircd.users)
+            for user in [user for user in users if user.nickname not in nicks]:
+                nicks.append(user.nickname)
+        client.sendraw(self.RPL.ISON, ':{}'.format(' '.join(nicks)))
+
+
+@ircd.Modules.command
+class Userhost(ircd.Command):
+    def __init__(self):
+    """
+    Returns the cloaked userhost of the given user.
+    Example: /USERHOST John
+    """
+    self.command = 'userhost'
+    self.params = 1
+
+    def execute(self, client, recv):
+        hosts = []
+        for nick in recv[1:]:
+            users = filter(lambda u: u.nickname.lower() == nick.lower() and u.registered, self.ircd.users)
+            for user in users:
+                h = '{}*=+{}@{}'.format(user.nickname,user.ident,user.cloakhost if 'o' not in self.modes else user.hostname)
+                if h not in hosts:
+                    hosts.append(h)
+        client.sendraw(self.RPL.USERHOST, ':{}'.format(' '.join(hosts)))

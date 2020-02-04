@@ -475,28 +475,28 @@ def randomness(string, strict=True):
 
 
 @ircd.Modules.hooks.pre_local_connect()
-def antirandom_nick(self, localServer):
-    nick = self.nickname
+def antirandom_nick(client, ircd):
+    nick = client.nickname
     score = randomness(nick.lower())
     if score >= max_score:
-        self.quit('Please provide a valid nickname', error=True)
-        mask = '{}!{}@{}'.format(nick, '*' if not self.ident else self.ident, self.hostname)
-        localServer.snotice('s', '*** Randomness match for {}[{}] with score {} (/nick)'.format(mask, self.ip, score))
+        client.quit('Please provide a valid nickname', error=True)
+        mask = '{}!{}@{}'.format(nick, '*' if not client.ident else client.ident, client.hostname)
+        ircd.snotice('s', '*** Randomness match for {}[{}] with score {} (/nick)'.format(mask, client.ip, score))
 
     if nick[0].isalpha() and nick[1:].isdigit() and len(nick) > 3:
-        self.quit('Please provide a valid nickname', error=True)
-        localServer.snotice('s', '*** Aleatory match for {}[{}]'.format(nick, self.ip))
+        client.quit('Please provide a valid nickname', error=True)
+        ircd.snotice('s', '*** Aleatory match for {}[{}]'.format(nick, client.ip))
 
 
 @ircd.Modules.hooks.pre_local_connect()
-def user(self, localServer):
-    ident = self.ident
+def user(client, ircd):
+    ident = client.ident
     score = randomness(ident.lower())
     if score >= max_score+1: ### Less strict for idents.
-        self.quit('Please provide a valid ident', error=True)
-        localServer.snotice('s', '*** Randomness match for {}[{}] with score {} (/user)'.format(self.fullmask(), self.ip, score))
+        client.quit('Please provide a valid ident', error=True)
+        ircd.snotice('s', '*** Randomness match for {}[{}] with score {} (/user)'.format(client.fullmask(), client.ip, score))
 
     ### Aleatory checks on ident? Why the hell not.
     if ident[0].isalpha() and ident[1:].isdigit() and len(ident) > 4:
-        self.quit('Please provide a valid ident', error=True)
-        localServer.snotice('s', '*** Aleatory ident match for {}!{}@*[{}]'.format(self.nickname, ident, self.ip))
+        client.quit('Please provide a valid ident', error=True)
+        ircd.snotice('s', '*** Aleatory ident match for {}!{}@*[{}]'.format(client.nickname, ident, client.ip))

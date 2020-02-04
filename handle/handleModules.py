@@ -153,6 +153,7 @@ def UnloadModule(self, name):
                 '''
                 core_classes = self.user_mode_class + self.channel_mode_class + self.command_class
                 for m in [m for m in core_classes if m.module == module]:
+                    print('unload 1')
                     m.unload()
 
                 if hasattr(module, 'unload'):

@@ -7,27 +7,58 @@ class ChannelModeError(Exception):
     pass
 
 
-class UserMode:
-    ircd = None
+class BaseMode:
     mode = ''
-    req_flag = 0
     desc = ''
-    support = ()
+    support = {}
     registered = 0
 
+    def register(self):
+        if not self.registered:
+            self.validate()
+
+        if issubclass(self.__class__, UserMode):
+            mode_class_list = self.ircd.user_mode_class
+        elif issubclass(self.__class__, ChannelMode):
+            mode_class_list = self.ircd.channel_mode_class
+
+            if self not in mode_class_list:
+                mode_class_list.append(self)
+
+            if issubclass(self.__class__, UserMode):
+                self.ircd.user_modes[self.mode] = (self.req_flag, self.desc)
+                logging.debug('Usermode registered: {}'.format(self))
+                #logging.debug('Permission flag: {}'.format(self.req_flag))
+                #logging.debug('Description: {}'.format(self.desc))
+            elif issubclass(self.__class__, ChannelMode:
+                if self.type != 3 and self.param_help:
+                    t = (self.req_flag, self.desc, self.param_help)
+                else:
+                    t = (self.req_flag, self.desc)
+
+                self.ircd.channel_modes[self.type][self.mode] = t
+                logging.debug('Channelmode registered: {}'.format(self))
+                #logging.debug('Permission flag: {}'.format(self.req_flag))
+
+            self.registered = 1
+
+
     def validate(self):
+        if issubclass(self.__class__, UserMode):
+            mode_class_list = self.ircd.user_mode_class
+
+        elif issubclass(self.__class__, ChannelMode):
+            mode_class_list = self.ircd.channel_mode_class
+
         # Remove duplicate instances of the same class.
-        for c in self.ircd.user_mode_class:
+        for c in mode_class_list:
             if (type(c).__name__ == type(self).__name__ and c != self):
                 c.unload()
-
-        if not self.ircd:
-            self.error("Missing server class reference")
 
         if not self.mode:
             self.error("Missing or invalid modebar")
 
-        if self.mode in self.ircd.user_modes: # and self not in self.ircd.user_mode_class:
+        if self.mode in mode_class_list:
             self.error(f"Mode '{self.mode}' is already in use.")
 
         if not self.desc:
@@ -39,29 +70,44 @@ class UserMode:
             if type(self.support) != list:
                 self.error("Invalid SUPPORT type: must be a list containing one or more tuples")
             for s in [s for s in self.support if type(s) != tuple]:
-                self.error("Invalid SUPPORT entry: {}\nMust be a tuple".format(s))
+                self.error("Invalid SUPPORT entry: {} (must be a tuple)".format(s))
 
 
-    def register(self):
-        if not self.registered:
-            self.validate()
-            if self not in self.ircd.user_mode_class:
-                self.ircd.user_mode_class.append(self)
-            self.ircd.user_modes[self.mode] = (self.req_flag, self.desc)
-            logging.debug('Usermode registered: {}'.format(self))
-            #logging.debug('Permission flag: {}'.format(self.req_flag))
-            #logging.debug('Description: {}'.format(self.desc))
-            self.registered = 1
+    def unload(self):
+        if issubclass(self.__class__, UserMode):
+            mode_class_list = self.ircd.user_mode_class
+            del self.ircd.user_modes[self.mode]
+
+        elif issubclass(self.__class__, ChannelMode):
+            mode_class_list = self.ircd.channel_mode_class
+            if self.mode in self.ircd.channel_modes[self.type]:
+                del self.ircd.channel_modes[self.type][self.mode]
+
+        if self in mode_class_list:
+            mode_class_list.remove(self)
+
+        logging.debug('{} successfully unhooked'.format(self))
 
 
     def error(self, error):
         self.unload()
-        raise UserModeError(error)
+        if issubclass(self.__class__, UserMode):
+            raise UserMode(error)
+
+        elif issubclass(self.__class__, ChannelMode):
+            raise ChannelModeError(error)
+
+
+
+class UserMode(BaseMode):
+    mode = ''
+    req_flag = 0
+    desc = ''
 
 
     def give_mode(self, user):
         if self.mode in user.modes:
-            logging.error(f'Usermode {self.mode} is already active on user {user.nickname}')
+            logging.error(f'Usermode "{self.mode}" is already active on user {user.nickname}')
             return 0
 
         if self.req_flag == 1 and 'o' not in user.modes:
@@ -70,7 +116,7 @@ class UserMode:
 
         user.modes += self.mode
         self.modebuf.append(self.mode)
-        logging.debug('Usermode of {} is now: {}'.format(user.nickname, user.modes))
+        logging.debug('Usermode of {} is now: {} (+{})'.format(user.nickname, user.modes, self.mode))
         return 1
 
 
@@ -84,32 +130,20 @@ class UserMode:
         return 1
 
 
-    def unload(self):
-        self.ircd.user_mode_class.remove(self)
-        del self.ircd.user_modes[self.mode]
-        logging.debug('{} successfully unhooked'.format(self))
-
-
     def __repr__(self):
         return f"<UserMode '{self.mode}'>"
 
 
 
 
-class ChannelMode:
-    ircd = None
-    mode = ''
+class ChannelMode(BaseMode):
     req_flag = 3 # Default.
-    desc = None
     type = None
-    param_regex = None
     param_format = None
     param_help = None
 
     # Types: 0 = mask, 1 = require param, 2 = optional param, 3 = no param, 4 = special user channel-mode, 5 = "list" mode (like +beI)
     type = 3
-
-    support = ()
 
     # Type 5 ("list modes, like +beI etc) require some additional info.
     # The internal "name" of the list, i.e. channel.whitelist. Used in SJOIN to check if there's a duplicate entry, or to remove all entries.
@@ -118,56 +152,9 @@ class ChannelMode:
     # This is used in SJOIN to indicate that it is a list-entry.
     mode_prefix = ''
 
-    registered = 0
-
-    def validate(self):
-        # Remove duplicate instances of the same class.
-        for c in self.ircd.channel_mode_class:
-            if (type(c).__name__ == type(self).__name__ and c != self):
-                c.unload()
-
-        if not self.ircd:
-            self.error("Missing server class reference")
-
-        if not self.mode:
-            self.error("Missing or invalid modebar")
-
-        if self.mode in self.ircd.channel_modes:
-            self.error(f"Channel mode '{self.mode}' is already in use.")
-
-        if not self.desc:
-            self.error(f"Channel mode '{self.mode}' is missing a description.")
-
-        if self.type is None:
-            self.error(f"Channel mode '{self.mode}' is missing a type.")
-
-        if self.support:
-            if self.support[0] in self.ircd.support:
-                self.error("Support is conflicting with another module")
-            if type(self.support) != list:
-                self.error("Invalid SUPPORT type: must be a list containing one or more tuples")
-            for s in [s for s in self.support if type(s) != tuple]:
-                self.error("Invalid SUPPORT entry: {}\nMust be a tuple".format(s))
-
-
-    def register(self):
-        if not self.registered:
-            self.validate()
-            self.ircd.channel_mode_class.append(self)
-
-            if self.type != 3 and self.param_help:
-                t = (self.req_flag, self.desc, self.param_help)
-            else:
-                t = (self.req_flag, self.desc)
-
-            self.ircd.channel_modes[self.type][self.mode] = t
-            logging.debug('Channelmode registered: {}'.format(self))
-            #logging.debug('Permission flag: {}'.format(self.req_flag))
-            self.registered = 1
-
 
     def check(self, channel, action, param=None):
-        param = self.fix_param(param)
+        # TODO: move check() inside set_mode(), and then remove check() from m_mode.py
         if action == '+':
             if self.type == 3 and self.mode in channel.modes:
                 logging.debug('Mode "{}" is already set on {}'.format(self.mode, channel))
@@ -223,18 +210,7 @@ class ChannelMode:
         return 1
 
 
-    def fix_param(self, param):
-        # Fuck regex.
-        #if self.param_regex and param:
-        #    r = re.findall(self.param_regex, param)
-        #    if r:
-        #        param = r[0]
-        #        logging.debug('Fixed param: {}'.format(param))
-        return param
-
-
     def set_mode(self, user, channel, param=None):
-        param = self.fix_param(param)
         process = self.pre_hook(user, channel, param, action='+')
         if not process and process is not None:
             # Assume the module handled everything correctly.
@@ -264,10 +240,9 @@ class ChannelMode:
                 logging.debug(f'Mode conflict: mode "{self.mode}" and param "{param}" are already stored in the buffer.')
             else:
                 logging.debug(f'Mode conflict: mode "{self.mode}"is already stored in the buffer.')
-            logging.debug(f'A module probably already handled it. Not adding again.')
+            logging.debug('A module probably already handled it. Not adding again.')
         else:
             self.modebuf.append(self.mode)
-            logging.debug('modebuf appended from set_mode()')
             if param:
                 self.parambuf.append(param)
 
@@ -299,9 +274,6 @@ class ChannelMode:
             logging.debug(f'Forgetting param for {self.mode}: {self.ircd.chan_params[channel][self.mode]}')
             del self.ircd.chan_params[channel][self.mode]
 
-        if self.mode not in channel.modes:
-            return 0
-
         channel.modes = channel.modes.replace(self.mode, '')
 
         if ((param and param in self.parambuf) and self.mode in self.modebuf) or (not param and self.mode in self.modebuf):
@@ -317,17 +289,6 @@ class ChannelMode:
 
         logging.debug('Channel mode "{}" removed from {} (param: {})'.format(self.mode, channel, param))
         return 1
-
-
-    def error(self, error):
-        self.unload()
-        raise ChannelModeError(error)
-
-
-    def unload(self):
-        self.ircd.channel_mode_class.remove(self)
-        del self.ircd.channel_modes[self.type][self.mode]
-        logging.debug('{} successfully unhooked'.format(self))
 
 
     def __repr__(self):

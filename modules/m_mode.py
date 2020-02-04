@@ -22,9 +22,9 @@ from collections import OrderedDict
 #P  = '\033[35m' # purple
 
 ### Make these global so they can be modified by modules.
-commandQueue = []
-modebuf = []
-parambuf = []
+#commandQueue = []
+#modebuf = []
+#parambuf = []
 
 MAXMODES = 24
 
@@ -86,7 +86,7 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
     except Exception as ex:
         logging.exception(ex)
     try:
-        global modebuf, parambuf, action, prevaction, commandQueue
+        #global modebuf, parambuf, action, prevaction, commandQueue
         modebuf, parambuf, commandQueue = [], [], []
         action = ''
         prevaction = ''
@@ -488,8 +488,10 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
                 ircd.handle(cmd, data)
 
             save_db(ircd)
-            modebuf = []
-            parambuf = []
+
+            # I have these commented out because I no longer use them as globals.
+            #modebuf = []
+            #parambuf = []
 
     except Exception as ex:
         logging.exception(ex)
