@@ -15,7 +15,7 @@ class Map(ircd.Command):
     def __init__(self):
         self.command = 'map'
         self.req_modes = 'o'
-        self.support = [('MAP')]
+        self.support = [('MAP',)]
 
     def execute(self, client, recv):
         displayed = []
@@ -42,7 +42,6 @@ class Map(ircd.Command):
         client.sendraw(self.RPL.MAPEND, ':End of /MAP')
 
 
-
 @ircd.Modules.command
 class Links(ircd.Command):
     """
@@ -51,7 +50,6 @@ class Links(ircd.Command):
     def __init__(self):
         self.command = 'links'
         self.req_modes = 'o'
-        self.support = [('MAP')]
 
     def execute(self, client, recv):
         for s in self.ircd.servers+[self.ircd]:

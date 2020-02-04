@@ -30,7 +30,7 @@ class BaseMode:
                 logging.debug('Usermode registered: {}'.format(self))
                 #logging.debug('Permission flag: {}'.format(self.req_flag))
                 #logging.debug('Description: {}'.format(self.desc))
-            elif issubclass(self.__class__, ChannelMode:
+            elif issubclass(self.__class__, ChannelMode):
                 if self.type != 3 and self.param_help:
                     t = (self.req_flag, self.desc, self.param_help)
                 else:

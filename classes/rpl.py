@@ -1,15 +1,15 @@
 from enum import Enum
 
 class RPL(Enum):
-    WELCOME = 0o001
-    YOURHOST = 0o002
-    CREATED = 0o003
-    MYINFO = 0o004
-    ISUPPORT = 0o005
-    MAP = 0o006
-    MAPEND = 0o007
-    SNOMASK = 0o008
-    BOUNCE = 0o010
+    WELCOME = 1
+    YOURHOST = 2
+    CREATED = 3
+    MYINFO = 4
+    ISUPPORT = 5
+    MAP = 6
+    MAPEND = 7
+    SNOMASK = 8
+    BOUNCE = 10
 
     LUSERCLIENT = 251
     LUSEROP = 252

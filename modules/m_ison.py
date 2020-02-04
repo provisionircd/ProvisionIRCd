@@ -7,13 +7,13 @@ import ircd
 
 @ircd.Modules.command
 class Ison(ircd.Command):
-    def __init__(self):
     """
     Checks to see if a nickname is online.
     Example: /ISON Nick1 SomeOthernick
     """
-    self.command = 'ison'
-    self.params = 1
+    def __init__(self):
+        self.command = 'ison'
+        self.params = 1
 
     def execute(self, client, recv):
         nicks = []
@@ -26,13 +26,13 @@ class Ison(ircd.Command):
 
 @ircd.Modules.command
 class Userhost(ircd.Command):
-    def __init__(self):
     """
     Returns the cloaked userhost of the given user.
     Example: /USERHOST John
     """
-    self.command = 'userhost'
-    self.params = 1
+    def __init__(self):
+        self.command = 'userhost'
+        self.params = 1
 
     def execute(self, client, recv):
         hosts = []
