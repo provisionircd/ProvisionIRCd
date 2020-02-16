@@ -149,7 +149,7 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
 
             for port in tempconf['listen']:
                 if 'ssl' in tempconf['listen'][port]['options']:
-                    if not os.path.isfile(localServer.rootdir+'/ssl/server.cert.pem') or not os.path.isfile(localServer.rootdir+'/ssl/server.key.pem'):
+                    if not os.path.isfile(localServer.rootdir+'/'+tempconf['settings']['ssl_cert']) or not os.path.isfile(localServer.rootdir+'/'+tempconf['settings']['ssl_key']):
                         conferr("You have one or more SSL ports listening but there are files missing in {}/ssl/ folder. Make sure you have 'server.cert.pem' and 'server.key.pem' present!".format(localServer.rootdir), noConf=True)
                         conferr("You can create self-signed certs (not recommended) by issuing the following command in your terminal: openssl req -x509 -newkey rsa:4096 -keyout server.key.pem -out server.cert.pem", noConf=True)
                         conferr("or you can get a free CA cert from Let's Encrypt: https://letsencrypt.org", noConf=True)
@@ -320,13 +320,14 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
                 except Exception as ex:
                     logging.exception(ex)
         try:
-            localServer.server_cert = 'ssl/server.cert.pem'
-            localServer.server_key = 'ssl/server.key.pem'
-            localServer.ca_certs = 'ssl/curl-ca-bundle.crt'
+            localServer.server_cert = tempconf['settings']['ssl_cert']
+            localServer.server_key = tempconf['settings']['ssl_key']
+            localServer.ca_certs = tempconf['settings']['ssl_ca']
+            localServer.server_password = tempconf['settings']['ssl_password']
             version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
             if int(version) >= 36:
                 temp_sslctx = ssl.SSLContext(ssl.PROTOCOL_TLS)
-                temp_sslctx.load_cert_chain(certfile=localServer.server_cert, keyfile=localServer.server_key)
+                temp_sslctx.load_cert_chain(certfile=localServer.server_cert, keyfile=localServer.server_key, password=localServer.server_password)
                 temp_sslctx.load_default_certs(purpose=ssl.Purpose.CLIENT_AUTH)
                 temp_sslctx.load_verify_locations(cafile=localServer.ca_certs)
                 temp_sslctx.verify_mode = ssl.CERT_NONE

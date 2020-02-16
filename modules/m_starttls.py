@@ -17,9 +17,10 @@ def starttls(self, localServer, recv):
         if self.socket:
             if not self.ssl:
                 self.socket.send(bytes(':{} 670 {} :STARTTLS successful, proceed with TLS handshake\r\n'.format(localServer.hostname, self.nickname), 'utf-8'))
-                server_cert = '../ssl/server.cert.pem'
-                server_key = '../ssl/server.key.pem'
-                ca_certs = '../ssl/curl-ca-bundle.crt'
+                server_cert = '../' + self.ircd.conf['settings']['ssl_cert']
+                server_key = '../' + self.ircd.conf['settings']['ssl_key']
+                server_password = self.ircd.conf['settings']['ssl_password']
+                ca_certs = '../' + self.ircd.conf['settings']['ca']
                 sslctx = ssl.SSLContext(ssl.PROTOCOL_TLS)
                 sslctx.load_cert_chain(certfile=server_cert, keyfile=server_key)
                 sslctx.load_default_certs(purpose=ssl.Purpose.CLIENT_AUTH)
