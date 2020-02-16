@@ -272,6 +272,17 @@ class Server:
                 self.maxlist_string = "b:{s[b]},e:{s[e]},I:{s[I]}".format(s=self.maxlist)
                 self.servers = []
                 self.running = 0
+                self.caps = [
+                            'account-notify',
+                            'away-notify',
+                            'server-time',
+                            'chghost',
+                            'echo-message',
+                            'userhost-in-names',
+                            'extended-join',
+                            'operwatch'
+                    ]
+
                 validconf = handle.handleConf.checkConf(self, None, self.confdir, self.conffile)
 
                 if not validconf:

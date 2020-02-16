@@ -151,6 +151,8 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
                 localServer.tls_files[port] = {}
                 localServer.tls_files[port]['keypass'] = None
                 default_cert, default_key = localServer.rootdir+'/ssl/server.cert.pem', localServer.rootdir+'/ssl/server.key.pem'
+                localServer.default_cert, localServer.default_key = default_cert, default_key
+                localServer.default_ca_file = 'ssl/curl-ca-bundle.crt'
                 if 'ssl' in tempconf['listen'][port]['options']:
                     localServer.tls_files[port]['cert'] = default_cert
                     localServer.tls_files[port]['key'] = default_key
@@ -368,7 +370,7 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
                     logging.info(f"Password protected key: {'yes' if tls_key_pass else 'no'}")
 
                     localServer.sslctx[port].load_default_certs(purpose=ssl.Purpose.CLIENT_AUTH)
-                    localServer.sslctx[port].load_verify_locations(cafile='ssl/curl-ca-bundle.crt')
+                    localServer.sslctx[port].load_verify_locations(cafile=localServer.default_ca_file)
                     localServer.sslctx[port].verify_mode = ssl.CERT_NONE
                     #localServer.sslctx = temp_sslctx
 

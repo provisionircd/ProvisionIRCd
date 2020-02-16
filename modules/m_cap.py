@@ -38,26 +38,3 @@ class Cap(ircd.Command):
                 client.welcome()
         else:
             client.sendraw(410, '{} :Unknown CAP command'.format(recv[1]))
-
-
-def init(ircd, reload=False):
-    ircd.caps = [
-                'account-notify',
-                'away-notify',
-                'server-time',
-                'chghost',
-                'echo-message',
-                'tls',
-                'userhost-in-names',
-                'extended-join',
-                'operwatch'
-        ]
-
-'''
-@ircd.Modules.hooks.welcome
-def cap_operwatch(self, ircd):
-    if 'operwatch' not in self.caps:
-        return
-    for u in [u for u in ircd.users if 'o' in u.modes]:
-        self._send(':{} UMODE +o'.format(u.fullmask())
-'''

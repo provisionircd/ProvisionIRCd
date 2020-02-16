@@ -15,6 +15,7 @@ class Command:
     req_flags = None
     req_class = 'User'
     support = ()
+    cap = []
     server_support = 0
     help = None
     RPL, ERR = RPL, ERR
@@ -50,6 +51,11 @@ class Command:
                 self.error("Invalid SUPPORT type: must be a list containing one or more tuples")
             for s in [s for s in self.support if type(s) != tuple]:
                 self.error("Invalid SUPPORT entry: {} must be a tuple".format(s))
+
+        if self.cap:
+            if type(self.cap) == str:
+                self.cap = [self.cap]
+            self.ircd.caps.extend(self.cap)
 
 
         #in_use = [cmd for cmd in self.ircd.commands if cmd[0].upper() == self.command]
