@@ -22,7 +22,7 @@ def starttls(self, localServer, recv):
                 server_password = self.ircd.conf['settings']['ssl_password']
                 ca_certs = '../' + self.ircd.conf['settings']['ca']
                 sslctx = ssl.SSLContext(ssl.PROTOCOL_TLS)
-                sslctx.load_cert_chain(certfile=server_cert, keyfile=server_key)
+                sslctx.load_cert_chain(certfile=server_cert, keyfile=server_key, password=server_password)
                 sslctx.load_default_certs(purpose=ssl.Purpose.CLIENT_AUTH)
                 sslctx.load_verify_locations(cafile=ca_certs)
                 sslctx.verify_mode = ssl.CERT_NONE
