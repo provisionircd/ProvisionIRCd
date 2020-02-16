@@ -161,7 +161,6 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
                             conferr("or you can get a free CA cert from Let's Encrypt: https://letsencrypt.org", noConf=True)
                             break
 
-                    tls_default = 1
                     if 'ssl-options' in tempconf['listen'][port]:
                         t = tempconf['listen'][port]['ssl-options']
                         if 'certificate' not in t:
@@ -174,7 +173,6 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
 
                         else:
                             localServer.tls_files[port]['cert'] = os.path.realpath(t['certificate'])
-                            tls_default = 0
 
 
                         if 'key' not in t:
@@ -186,17 +184,11 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
 
                         else:
                             localServer.tls_files[port]['key'] = os.path.realpath(t['key'])
-                            tls_default = 0
 
                             if 'keypass' in t and t['keypass']:
                                 if len(t['keypass']) < 6:
                                     logging.warning(f"Insecure TLS key password for file '{localServer.tls_files[port]['key']}'")
                                 localServer.tls_files[port]['keypass'] = t['keypass']
-
-
-                    if tls_default:
-                        logging.warning(f"No ssl-options specified for port {port} -- falling back to defaults.")
-
 
 
         if 'class' not in tempconf:
