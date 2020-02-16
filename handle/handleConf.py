@@ -187,7 +187,7 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
 
                             if 'keypass' in t and t['keypass']:
                                 if len(t['keypass']) < 6:
-                                    logging.warning(f"Insecure TLS key password for file '{localServer.tls_files[port]['key']}'")
+                                    logging.warning(f"Insecure TLS key password for file: '{localServer.tls_files[port]['key']}'")
                                 localServer.tls_files[port]['keypass'] = t['keypass']
 
 

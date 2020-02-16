@@ -10,7 +10,7 @@ class Md(ircd.Command):
     def __init__(self):
         self.command = 'md'
         self.req_class = 'Server'
-        self.params = 6
+        self.params = 3
 
     def execute(self, client, recv):
         ### :irc.foonet.com MD client 001HBEI01 certfp :a6fc0bd6100a776aa3266ed9d5853d6dce563560d8f18869bc7eef811cb2d413
