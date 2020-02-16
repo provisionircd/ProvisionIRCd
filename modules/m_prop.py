@@ -1,5 +1,5 @@
 """
-provides channel properties with /prop command
+provides channel properties with /prop command aaaa
 """
 
 import ircd
@@ -141,16 +141,12 @@ Current supported properties:
     except Exception as ex:
         logging.exception(ex)
 
+
+
 @ircd.Modules.hooks.channel_create()
 @ircd.Modules.hooks.channel_destroy()
 def prop_dictset(self, localServer, channel):
     channel.properties = {}
-
-
-def init(localServer, reload=False):
-    for chan in [chan for chan in localServer.channels if not hasattr(chan, 'properties')]:
-        chan.properties = {}
-
 
 
 ### No instant rejoin after kicks checks.
@@ -190,3 +186,8 @@ def check_hl(self, localServer, channel, msg):
         if matches >= hl_limit:
             localServer.notice(self, "* Message blocked: Mass highlighting users is not allowed on {}.".format(channel.name))
             return 0
+
+
+def init(localServer, reload=False):
+    for chan in [chan for chan in localServer.channels if not hasattr(chan, 'properties')]:
+        chan.properties = {}

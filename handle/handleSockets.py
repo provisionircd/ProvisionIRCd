@@ -43,7 +43,7 @@ def sock_accept(ircd, s):
             is_ssl = is_sslport(ircd, port)
             conn_backlog = [user for user in ircd.users if user.socket and not user.registered]
             logging.info('Accepting client on {} -- fd: {}, with IP {}'.format(s, conn.fileno(), addr[0]))
-            if len(conn_backlog) > 500:
+            if len(conn_backlog) > 100:
                 logging.warning('Current connection backlog is >{}, so not allowing any more connections for now. Bye.'.format(len(conn_backlog)))
                 conn.close()
                 return
@@ -51,7 +51,7 @@ def sock_accept(ircd, s):
             if is_ssl and not ircd.pre_wrap:
                 is_ssl = 0
                 version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
-                conn = ircd.sslctx.wrap_socket(conn, server_side=True)
+                conn = ircd.sslctx[str(port)].wrap_socket(conn, server_side=True)
                 is_ssl = 1
                 logging.info('Wrapped incoming user socket {} in SSL'.format(conn))
                 try:
@@ -105,7 +105,7 @@ def sock_accept(ircd, s):
             if is_ssl and not ircd.pre_wrap:
                 is_ssl = 0
                 version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
-                conn = ircd.sslctx.wrap_socket(conn, server_side=True)
+                conn = ircd.sslctx[str(port)].wrap_socket(conn, server_side=True)
                 is_ssl = 1
                 logging.info('Wrapped incoming server socket {} in SSL'.format(conn))
 
@@ -118,6 +118,7 @@ def sock_accept(ircd, s):
             logging.exception(ex)
             return
 
+
 class data_handler: #(threading.Thread):
     def __init__(self, ircd):
         #threading.Thread.__init__(self)
@@ -128,6 +129,7 @@ class data_handler: #(threading.Thread):
         ircd = self.ircd
         while ircd.running:
             try:
+
                 if ircd.use_poll:
                     fdVsEvent = ircd.pollerObject.poll(1000)
                     #print('y u no read? {}'.format(fdVsEvent))
@@ -180,18 +182,20 @@ class data_handler: #(threading.Thread):
 
                         check_loops(ircd)
                         continue
+
                 else:
                     #ircd = self.server
-                    read_users = [user for user in list(ircd.users) if user.socket and user.fileno() != -1]
-                    write_users = [user for user in list(ircd.users) if user.sendbuffer and user.socket and user.fileno() != -1]
+                    dikke_read_users = [user for user in iter(ircd.users) if user.socket and user.fileno() != -1]
+                    read_users = [user for user in iter(ircd.users) if user.socket and user.fileno() != -1]
+                    write_users = [user for user in iter(ircd.users) if user.sendbuffer and user.socket and user.fileno() != -1]
 
-                    read_servers = [server for server in list(ircd.servers) if server.socket and server.fileno() != -1]
-                    write_servers = [server for server in list(ircd.servers) if server.socket and server.sendbuffer and server.fileno() != -1]
+                    read_servers = [server for server in iter(ircd.servers) if server.socket and server.fileno() != -1]
+                    write_servers = [server for server in iter(ircd.servers) if server.socket and server.sendbuffer and server.fileno() != -1]
 
                     try:
                         read, write, error = select.select(list(self.listen_socks) + read_users + read_servers, write_users + write_servers, read_users + read_servers + write_users + write_servers + list(self.listen_socks), 1.0)
                     except ValueError as ex:
-                        for fd in [fd for fd in list(ircd.users) if fd.socket and not fd.registered]:
+                        for fd in iter([fd for fd in iter(ircd.users) if fd.socket and not fd.registered]):
                             fd.quit('Limit reached')
                         logging.info('Cleanup done')
                         logging.exception(ex)
@@ -222,6 +226,7 @@ class data_handler: #(threading.Thread):
                     check_loops(ircd)
             except Exception as ex:
                 logging.exception(ex)
+                break
         sys.exit()
         logging.warning('data_handler loop broke! This should only happen after /restart.')
 
@@ -231,18 +236,19 @@ def check_loops(ircd):
     Checks related to users
     '''
     pingfreq = 120
-    users = (user for user in ircd.users if user.socket)
-    for user in (user for user in users if time.time() - user.ping > pingfreq and time.time()*1000 - user.lastPingSent > pingfreq/2):
+    users = iter([user for user in ircd.users if user.socket])
+
+    for user in iter([user for user in users if time.time() - user.ping > pingfreq and time.time()*1000 - user.lastPingSent > pingfreq/2]):
         user.lastPingSent = time.time() * 1000
         user.lag_measure = user.lastPingSent
         user._send('PING :{}'.format(ircd.hostname))
 
-    users = (user for user in ircd.users if user.socket and time.time() - user.ping > 180.0)
-    for user in users:
+    ping_users = iter([user for user in users if time.time() - user.ping > 180.0])
+
+    for user in ping_users:
         user.quit('Ping timeout: {} seconds'.format(int(time.time() - user.ping)))
 
-
-    for t in (ircd.tkl):
+    for t in ircd.tkl:
         for mask in dict(ircd.tkl[t]):
             expire = ircd.tkl[t][mask]['expire']
             if expire == '0':
@@ -255,14 +261,14 @@ def check_loops(ircd):
 
     ### Request links
     if ircd.users:
-        linkServers = [link for link in ircd.conf['link'] if link.lower() != ircd.hostname.lower() and 'outgoing' in ircd.conf['link'][link] and 'options' in ircd.conf['link'][link] and not list(filter(lambda s: s.hostname == link, ircd.servers))]
-        servers = (link for link in linkServers if link not in ircd.linkRequests)
+        linkServers = iter([link for link in ircd.conf['link'] if link.lower() != ircd.hostname.lower() and 'outgoing' in ircd.conf['link'][link] and 'options' in ircd.conf['link'][link] and not list(filter(lambda s: s.hostname == link, ircd.servers))])
+        servers = iter([link for link in linkServers if link not in ircd.linkRequests])
         for link in servers:
             ircd.linkRequests[link] = {}
             ircd.linkRequests[link]['ctime'] = int(time.time())
 
-        servers = (link for link in linkServers if 'autoconnect' in ircd.conf['link'][link]['options'])
-        for link in (link for link in servers if time.time() - ircd.linkRequests[link]['ctime'] > 900.0):
+        servers = iter([link for link in linkServers if 'autoconnect' in ircd.conf['link'][link]['options']])
+        for link in iter([link for link in servers if time.time() - ircd.linkRequests[link]['ctime'] > 900.0]):
             ircd.linkRequests[link] = {}
             ircd.linkRequests[link]['ctime'] = int(time.time())
             logging.info('Auto connecting to {}'.format(link))
@@ -278,31 +284,24 @@ def check_loops(ircd):
         del ircd.deny_cache[ircd.deny_cache[0]]
 
     ### Remove cached host look-ups after 6 hours.
-    for host in (host for host in dict(ircd.hostcache) if int(time.time()) - ircd.hostcache[host]['ctime'] > 3600.0*6):
+    for host in iter([host for host in dict(ircd.hostcache) if int(time.time()) - ircd.hostcache[host]['ctime'] > 3600.0*6]):
         del ircd.hostcache[host]
 
     ### Remove cached DNSBL after 1 day.
-    for host in (host for host in dict(ircd.dnsblCache) if int(time.time()) - ircd.dnsblCache[host]['ctime'] > 3600.0*24):
+    for host in iter([host for host in dict(ircd.dnsblCache) if int(time.time()) - ircd.dnsblCache[host]['ctime'] > 3600.0*24]):
         del ircd.dnsblCache[host]
 
     ### Remove cached Deny entries after 1 day.
-    for host in (host for host in dict(ircd.deny_cache) if int(time.time()) - ircd.deny_cache[host]['ctime'] > 3600.0*24):
+    for host in iter([host for host in dict(ircd.deny_cache) if int(time.time()) - ircd.deny_cache[host]['ctime'] > 3600.0*24]):
         del ircd.deny_cache[host]
 
     ### Check for unregistered connections.
-    for user in (user for user in list(ircd.users) if user.socket and not user.registered):
+    for user in iter([user for user in list(ircd.users) if user.socket and not user.registered]):
         if time.time() - user.signon >= int(ircd.conf['settings']['regtimeout']):
             user.quit('Registration timed out')
             continue
 
-    conn_backlog = [user for user in ircd.users if user.socket and not user.registered]
-    for user in conn_backlog:
-        totalIP = list(filter(lambda s: s.ip == user.ip, conn_backlog))
-        if len(totalIP) > 2:
-            user.quit('Too many unknown connections from your IP')
-            continue
-
-    for throttle in (throttle for throttle in dict(ircd.throttle) if int(time.time()) - ircd.throttle[throttle]['ctime'] > int(ircd.conf['settings']['throttle'].split(':')[1])):
+    for throttle in iter(throttle for throttle in dict(ircd.throttle) if int(time.time()) - ircd.throttle[throttle]['ctime'] > int(ircd.conf['settings']['throttle'].split(':')[1])):
         del ircd.throttle[throttle]
         continue
 
@@ -332,8 +331,8 @@ def check_loops(ircd):
     '''
     # Send out pings
     pingfreq = 60
-    servers = (server for server in ircd.servers if server.socket and server.hostname)
-    for server in (server for server in servers if time.time() - server.ping > pingfreq and time.time() * 1000 - server.lastPingSent > pingfreq/2):
+    valid_servers = iter([server for server in ircd.servers if server.socket and server.hostname])
+    for server in iter([server for server in valid_servers if time.time() - server.ping > pingfreq and time.time() * 1000 - server.lastPingSent > pingfreq/2]):
         server.lastPingSent = time.time() * 1000
         #server.lag_measure = server.lastPingSent
         try:
@@ -342,16 +341,16 @@ def check_loops(ircd):
             server.quit('Write error: {}'.format(str(ex)))
 
     # Ping timeouts (only for direct links)
-    for server in (server for server in ircd.servers if server.hostname and server.socket and time.time() - server.ping >= 120.0):
+    for server in iter([server for server in valid_servers if time.time() - server.ping >= 120.0]):
         server.quit('Ping timeout: {} seconds'.format(int(time.time() - server.ping)))
 
     # Registration timeouts
-    for server in [server for server in ircd.servers if not server.eos and ((server.introducedBy and not server.introducedBy.eos) or server.socket) and time.time() - server.ping >= 10.0]:
+    for server in iter([server for server in ircd.servers if not server.eos and ((server.introducedBy and not server.introducedBy.eos) or server.socket) and time.time() - server.ping >= 10.0]):
         is_silent = False if server.socket else True
         server.quit('Server registration timed out', silent=is_silent)
 
     # Check for unknown or timed out servers (non-sockets)
-    for server in [server for server in ircd.servers if not server.socket and server.uplink and server.uplink.socket and time.time() - server.uplink.ping >= 120.0]:
+    for server in iter([server for server in ircd.servers if not server.socket and server.uplink and server.uplink.socket and time.time() - server.uplink.ping >= 120.0]):
         is_silent = False if server.socket else True
         server.quit('Server uplink ping timed out: {} seconds'.format(int(time.time() - server.uplink.ping)))
 
@@ -366,6 +365,7 @@ def check_loops(ircd):
 
     if not os.path.exists('db'):
         os.mkdir('db')
+
 
 def read_socket(ircd, sock):
     if not hasattr(sock, 'socket'):
@@ -382,9 +382,14 @@ def read_socket(ircd, sock):
             recv = sock.socket.recv(buffer_len).decode('utf-8')
         except UnicodeDecodeError as ex: # Do nothing, skip read.
             logging.debug(f'Unable to read socket {sock}: {ex}')
+
+            #####
+            sock.quit('') # Drunk shit, REMOVE THIS!!!!!!!!! #####
+            #####
+
             return
         except Exception as ex:
-            logging.exception(ex)
+            #logging.exception(ex)
             sock.quit('Read error: {}'.format(ex))
             return
 

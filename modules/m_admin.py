@@ -10,7 +10,6 @@ class Admin(ircd.Command):
     def __init__(self):
         self.command = 'admin'
 
-
     def execute(self, client, recv):
         client.sendraw(256, ':Administrative info about {}'.format(self.ircd.hostname))
         for line in self.ircd.conf['admin']:

@@ -31,6 +31,7 @@ except:
     pass
 
 
+
 def RevIP(ip):
     x = 3
     revip = ''
@@ -82,7 +83,7 @@ def DNSBLCheck(self):
     ircd = user.server
     if user.ip in ircd.dnsblCache:
         reason = 'Your IP is blacklisted by {}'.format(ircd.dnsblCache[user.ip]['bl']+' [cached]')
-        for u in [u for u in list(ircd.users) if u.ip == user.ip]:
+        for u in iter([u for u in list(ircd.users) if u.ip == user.ip]):
             u.sendraw(f':{ircd.hostname} {RPL.TEXT} * :{reason}')
             u.sendbuffer = ''
             u.recvbuffer = ''
@@ -95,10 +96,11 @@ def DNSBLCheck(self):
         user.quit('Your IP has been banned (listed locally)')
         return
 
-    for x in [x for x in ircd.conf['dnsbl']['list'] if '.' in x]:
+    for x in iter([x for x in ircd.conf['dnsbl']['list'] if '.' in x]):
         if user in user.server.users:
             b = blacklist_check(user, x)
             b.start()
+
 
 READ_ONLY = (
     select.POLLIN |
@@ -134,6 +136,8 @@ def resolve_ip(self):
                 if self.server.deny_cache[ip]['reason']:
                     self.server.notice(self, '* Connection denied: {}'.format(self.server.deny_cache[ip]['reason']))
                 return self.quit('Your host matches a deny block, and is therefore not allowed.')
+
+
 
 
 class User:
@@ -216,15 +220,19 @@ class User:
 
                 throttleTreshhold = int(self.server.conf['settings']['throttle'].split(':')[0])
                 throttleTime = int(self.server.conf['settings']['throttle'].split(':')[1])
-                totalConns = list(filter(lambda u: u.ip == self.ip and int(time.time()) - self.server.throttle[u]['ctime'] <= throttleTime, self.server.throttle))
+                total_conns = [u for u in self.server.throttle if u.ip == self.ip and int(time.time()) - self.server.throttle[u]['ctime'] <= throttleTime]
                 throttle_except = False
                 if 'except' in self.server.conf and 'throttle' in self.server.conf['except']:
                     for e in self.server.conf['except']['throttle']:
                         if match(e, self.ip):
                             throttle_except = True
                             break
-                if len(totalConns) >= throttleTreshhold and not throttle_except:
+                if len(total_conns) >= throttleTreshhold and not throttle_except:
                     return self.quit('Throttling - You are (re)connecting too fast')
+
+                unknown_conn = [user for user in self.server.users if user.ip == self.ip and not user.registered]
+                if len(unknown_conn) > 2:
+                    return self.quit('Too many unknown connections from your IP')
 
                 self.server.throttle[self] = {}
                 self.server.throttle[self]['ip'] = self.ip
@@ -301,7 +309,7 @@ class User:
                     if len(self.origin.users) > self.origin.maxgusers:
                         self.origin.maxgusers = len(self.origin.users)
 
-                    watch_notify = [user for user in self.origin.users if self.nickname.lower() in [x.lower() for x in user.watchlist]]
+                    watch_notify = iter([user for user in self.origin.users if self.nickname.lower() in [x.lower() for x in user.watchlist]])
                     for user in watch_notify:
                         user.sendraw(RPL.LOGON, '{} {} {} {} :logged online'.format(self.nickname, self.ident, self.cloakhost, self.signon))
 
@@ -315,10 +323,6 @@ class User:
         except Exception as ex:
             logging.exception(ex)
 
-    def __del__(self):
-        #pass
-        logging.debug('User {} closed'.format(self))
-        #objgraph.show_most_common_types()
 
     def handle_recv(self):
         try:
@@ -443,9 +447,10 @@ class User:
         words = list(filter(None, words))
         return words
 
+
     def _send(self, data):
         if not hasattr(self, 'socket'):
-            logging.debug('Socket {} got sent flashed out.'.format(self))
+            #logging.debug('Socket {} got sent flashed out.'.format(self))
             return
         if self.socket:
             self.sendbuffer += data + '\r\n'
@@ -453,10 +458,12 @@ class User:
                 logging.debug('Flag for {} set to READ_WRITE (_send())'.format(self))
                 self.server.pollerObject.modify(self.socket, READ_WRITE)
 
+
     def send(self, command, data):
         if not self.socket:
             return
         self._send(':{} {} {} {}'.format(self.server.hostname, command, self.nickname, data))
+
 
     def sendraw(self, numeric, data):
         if type(numeric).__name__ in ['RPL', 'ERR']:
@@ -471,6 +478,7 @@ class User:
         '''
         self.send(str(numeric).rjust(3, '0'), data)
 
+
     def broadcast(self, users, data, source=None):
         if source:
             if type(source).__name__ == 'Server':
@@ -484,6 +492,7 @@ class User:
 
         for user in users:
             user._send(':{} {}'.format(source, data))
+
 
     def setinfo(self, info, t='', source=None):
         try:
@@ -504,7 +513,7 @@ class User:
             updated = []
             if self.registered:
                 for user in self.localServer.users:
-                    for user in [user for user in self.localServer.users if 'chghost' in user.caplist and user not in updated and user.socket]:
+                    for user in iter([user for user in self.localServer.users if 'chghost' in user.caplist and user not in updated and user.socket]):
                         common_chan = list(filter(lambda c: user in c.users and self in c.users, self.localServer.channels))
                         if not common_chan:
                             continue
@@ -558,7 +567,7 @@ class User:
                 return self.quit('Your host matches a deny block, and is therefore not allowed.')
 
             block = 0
-            for cls in [cls for cls in self.server.conf['allow'] if cls in self.server.conf['class']]:
+            for cls in iter([cls for cls in self.server.conf['allow'] if cls in self.server.conf['class']]):
                 t = self.server.conf['allow'][cls]
                 isMatch = False
                 if 'ip' in t:
@@ -615,10 +624,10 @@ class User:
             self.sendraw(RPL.CREATED, ':This server was created {} at {}'.format(d, t))
 
             umodes, chmodes = '', ''
-            for m in [m for m in self.server.user_modes if m.isalpha() and m not in umodes]:
+            for m in iter([m for m in self.server.user_modes if m.isalpha() and m not in umodes]):
                 umodes += m
             for t in self.server.channel_modes:
-                for m in [m for m in self.server.channel_modes[t] if m.isalpha() and m not in chmodes]:
+                for m in iter([m for m in self.server.channel_modes[t] if m.isalpha() and m not in chmodes]):
                     chmodes += m
             umodes = ''.join(sorted(set(umodes)))
             chmodes = ''.join(sorted(set(chmodes)))
@@ -660,7 +669,7 @@ class User:
                 p = {'override': True}
                 self.handle('mode', '{} +{}'.format(self.nickname, ''.join(modes)), params=p)
 
-            watch_notify = [user for user in self.server.users if self.nickname.lower() in [x.lower() for x in user.watchlist]]
+            watch_notify = iter([user for user in self.server.users if self.nickname.lower() in [x.lower() for x in user.watchlist]])
             for user in watch_notify:
                 user.sendraw(RPL.LOGON, '{} {} {} {} :logged online'.format(self.nickname, self.ident, self.cloakhost, self.signon))
 
@@ -673,20 +682,25 @@ class User:
         gc.collect()
 
 
+
     def __repr__(self):
         return "<User '{}:{}'>".format(self.fullmask(), self.server.hostname)
 
+
     def fileno(self):
         return self.socket.fileno()
+
 
     def fullmask(self):
         if not hasattr(self, 'cloakhost'):
             self.cloakhost = '*'
         return '{}!{}@{}'.format(self.nickname, self.ident, self.cloakhost)
 
+
     def fullrealhost(self):
         host = self.hostname if self.hostname else self.ip
         return '{}!{}@{}'.format(self.nickname, self.ident if self.ident != '' else '*', host)
+
 
     def chlevel(self, channel):
         localServer = self.server if self.socket else self.origin
@@ -707,11 +721,13 @@ class User:
         else:
             return 0
 
+
     def ocheck(self, mode, flag):
         localServer = self.server if self.socket else self.localServer
-        if (mode in self.modes and flag in self.operflags) or self.server.hostname.lower() in set(localServer.conf['settings']['ulines']):
+        if (mode in self.modes and flag in self.operflags) or self.server.hostname.lower() in localServer.conf['settings']['ulines']:
             return True
         return False
+
 
     def quit(self, reason, error=True, banmsg=None, kill=False, silent=False, api=False): ### Why source?
         try:
@@ -731,7 +747,7 @@ class User:
             if banmsg:
                 localServer.notice(self, '*** You are banned from this server: {}'.format(banmsg))
 
-            if int(time.time()) - self.signon < 300 and self.registered and not error and self.socket:
+            if int(time.time()) - self.signon < 60 and self.registered and not error and self.socket:
                 reason = str(localServer.conf['settings']['quitprefix']).strip()
                 if reason.endswith(':'):
                     reason = reason[:-1]
@@ -755,14 +771,14 @@ class User:
             if self.registered and (self.server == localServer or self.server.eos):
                 if reason and not kill:
                     skip = [sourceServer]
-                    for server in [server for server in localServer.servers if hasattr(server, 'protoctl') and 'NOQUIT' in server.protoctl and not server.eos]:
+                    for server in iter([server for server in localServer.servers if hasattr(server, 'protoctl') and 'NOQUIT' in server.protoctl and not server.eos]):
                         skip.append(server)
                     localServer.new_sync(localServer, skip, ':{} QUIT :{}'.format(self.uid, reason))
 
                 if self.socket and reason and not silent:
                     localServer.snotice('c', '*** Client exiting: {} ({}@{}) ({})'.format(self.nickname, self.ident, self.hostname, reason))
 
-            for channel in [channel for channel in self.channels if 'j' in channel.modes]:
+            for channel in iter([channel for channel in self.channels if 'j' in channel.modes]):
                 self.handle('PART', '{}'.format(channel.name))
                 continue
 
@@ -773,9 +789,9 @@ class User:
                     if user not in all_broadcast and user != self:
                         all_broadcast.append(user)
             inv_checked = 0
-            for u in [u for u in all_broadcast if u != self]:
+            for u in iter([u for u in all_broadcast if u != self]):
                 visible = 0
-                for channel in [chan for chan in self.channels if not visible]:
+                for channel in iter([chan for chan in self.channels if not visible]):
                     for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'visible_in_channel']:
                         try:
                             visible = callable[2](u, localServer, self, channel)
@@ -805,7 +821,7 @@ class User:
                         except Exception as ex:
                             logging.exception(ex)
 
-            watch_notify_offline = [user for user in localServer.users if self.nickname.lower() in [x.lower() for x in user.watchlist]]
+            watch_notify_offline = iter([user for user in localServer.users if self.nickname.lower() in [x.lower() for x in user.watchlist]])
             for user in watch_notify_offline:
                 user.sendraw(RPL.LOGOFF, '{} {} {} {} :logged offline'.format(self.nickname, self.ident, self.cloakhost, self.signon))
 
@@ -838,11 +854,11 @@ class User:
                 except: # Prevent weird spam shit.
                     pass
 
-            del self.socket
             del self
 
         except Exception as ex:
             logging.exception(ex)
+
 
     def handle(self, command, data=None, params=None):
         recv = '{} {}'.format(command, data if data else '')
@@ -857,3 +873,9 @@ class User:
                     c.execute(self, parsed)
             except Exception as ex:
                 logging.exception(ex)
+
+
+    def __del__(self):
+        #pass
+        logging.debug('User {} closed'.format(self))
+        #objgraph.show_most_common_types()

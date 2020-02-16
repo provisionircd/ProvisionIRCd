@@ -44,6 +44,7 @@ class Protoctl(ircd.Command):
                             client.quit('SID {} is already in use on that network'.format(param))
                             return
                         client.sid = param
+
                     elif cap == 'CHANMODES':
                         remote_modes = param.split(',')
                         local_modes = self.ircd.chmodes_string.split(',')
@@ -52,9 +53,16 @@ class Protoctl(ircd.Command):
                             for m in [m for m in remote_modes[n] if m not in local_modes[n]]:
                                 missing_modes.append(m)
                         if missing_modes:
-                            client._send(':{} ERROR :they are missing channel modes: {}'.format(client.sid, ', '.join(missing_modes)))
+                            # The error is outgoing and will be displayed on the REMOTE server.
+                            ip, port = client.socket.getpeername()
+                            error = 'Link denied for {}[{}:{}]: they are missing channel modes: {}'.format(
+                            client.hostname, ip, port, ', '.join(missing_modes)  )
+
+                            client._send(':{} ERROR :{}'.format(client.sid, error))
+
                             client.quit('we are missing channel modes: {}'.format(', '.join(missing_modes)))
                             return
+
                     elif cap == 'EXTBAN':
                         remote_prefix = param[0]
                         remote_ban_types = param.split(',')[1]

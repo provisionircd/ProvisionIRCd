@@ -5,50 +5,57 @@
 import ircd
 import re
 
-@ircd.Modules.params(2)
-@ircd.Modules.req_modes('o')
-@ircd.Modules.req_flags('localsacmds|globalsacmds')
-@ircd.Modules.commands('sajoin')
-def sajoin(self, localServer, recv):
-    """Forcefully join a user to a channel.
-Syntax: /SAJOIN <user> <channel>"""
-    target = list(filter(lambda c: c.nickname.lower() == recv[1].lower(), localServer.users))
-    if not target:
-        return self.sendraw(401, '{} :No such nick'.format(recv[1]))
+import ircd
+import re
 
-    if target[0].server != localServer and not self.ocheck('o', 'globalsacmds'):
-        return self.sendraw(481, ':Permission denied - You do not have the correct IRC Operator privileges')
+@ircd.Modules.command
+class Sajoin(ircd.Command):
+    """Forcefully join a user into a channel.
+    Syntax: SAJOIN <user> <channel>
+    """
+    def __init__(self):
+        self.command = 'sajoin'
+        self.params = 2
+        self.req_flags = ('localsacmds|globalsacmds')
 
-    if 'S' in target[0].modes or target[0].server in localServer.conf['settings']['ulines']:
-        return localServer.notice(self, '*** You cannot use /SAJOIN on services.'.format(self.nickname))
+    def execute(self, client, recv):
+        target = next((c for c in self.ircd.users if c.nickname.lower() == recv[1].lower()))
+        if not target:
+            return client.sendraw(self.ERR.NOSUCHNICK, '{} :No such nick'.format(recv[1]))
 
-    regex = re.compile('\x1d|\x1f|\x02|\x12|\x0f|\x16|\x03(?:\d{1,2}(?:,\d{1,2})?)?', re.UNICODE)
-    chan = regex.sub('', recv[2]).strip()
+        if target.server != self.ircd and not client.ocheck('o', 'globalsacmds'):
+            return client.sendraw(self.ERR.NOPRIVILEGES, ':Permission denied - You do not have the correct IRC Operator privileges')
 
-    channel = list(filter(lambda c: c.name.lower() == chan.lower(), localServer.channels))
-    if not channel:
-        return self.sendraw(401, '{} :No such channel'.format(chan))
+        if 'S' in target.modes or target.server in self.ircd.conf['settings']['ulines']:
+            return self.ircd.notice(client, '*** You cannot use /SAJOIN on services.'.format(client.nickname))
 
-    chan = channel[0].name
+        regex = re.compile('\x1d|\x1f|\x02|\x12|\x0f|\x16|\x03(?:\d{1,2}(?:,\d{1,2})?)?', re.UNICODE)
+        chan = regex.sub('', recv[2]).strip()
 
-    channel = list(filter(lambda c: c.name.lower() == chan.lower(), target[0].channels))
-    if channel:
-        return self.sendraw(443, '{} {} :is already on that channel'.format(target[0].nickname, channel[0].name))
+        channel = list(filter(lambda c: c.name.lower() == chan.lower(), self.ircd.channels))
+        if not channel:
+            return client.sendraw(self.ERR.NOSUCHCHANNEL, '{} :No such channel'.format(chan))
 
-    p = {'override': True}
-    target[0].handle('join', chan, params=p)
-    chan_class = [c for c in localServer.channels if c.name == chan][0]
-    if target[0].server != localServer:
-        ### Sync join to its server.
-        prefix = ''
-        for mode in [mode for mode in localServer.chprefix if mode in chan_class.usermodes[target[0]]]:
-            prefix += localServer.chprefix[mode]
-        data = ':{} SJOIN {} {}{} :{}{}'.format(self.server.sid, chan_class.creation, chan_class.name, ' +{}'.format(chan_class.modes) if chan_class.modes and chan_class.users == [target[0]] else '', prefix, target[0].uid)
-        target[0].server._send(data)
+        chan = channel[0].name
 
-    self.flood_penalty += 100000
-    snomsg = '*** {} ({}@{}) used SAJOIN to make {} join {}'.format(self.nickname, self.ident, self.hostname, target[0].nickname, chan)
-    localServer.snotice('S', snomsg)
+        channel = list(filter(lambda c: c.name.lower() == chan.lower(), target.channels))
+        if channel:
+            return client.sendraw(self.ERR.USERONCHANNEL, '{} {} :is already on that channel'.format(target.nickname, channel[0].name))
 
-    msg = '*** Your were forced to join {}.'.format(chan)
-    localServer.notice(target[0], msg)
+        p = {'override': True}
+        target.handle('join', chan, params=p)
+        chan_class = [c for c in self.ircd.channels if c.name == chan][0]
+        if target.server != self.ircd:
+            ### Sync join to its server.
+            prefix = ''
+            for mode in [mode for mode in self.ircd.chprefix if mode in chan_class.usermodes[target]]:
+                prefix += self.ircd.chprefix[mode]
+            data = ':{} SJOIN {} {}{} :{}{}'.format(client.server.sid, chan_class.creation, chan_class.name, ' +{}'.format(chan_class.modes) if chan_class.modes and chan_class.users == [target[0]] else '', prefix, target[0].uid)
+            target.server._send(data)
+
+        client.flood_penalty += 100000
+        snomsg = '*** {} ({}@{}) used SAJOIN to make {} join {}'.format(client.nickname, client.ident, client.hostname, target.nickname, chan)
+        self.ircd.snotice('S', snomsg)
+
+        msg = '*** Your were forced to join {}.'.format(chan)
+        self.ircd.notice(target, msg)

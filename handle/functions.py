@@ -135,10 +135,13 @@ def initlogging(localServer):
 
     # Removing files >backupCount OR >backupExpire (in seconds)
     loghandlers = [EnhancedRotatingFileHandler(filename, when='midnight', maxBytes=1000*1000, backupCount=30, backupExpire=2629744)] # 2629744 = 1 month
+
     if not localServer.forked:
         stream = logging.StreamHandler()
+        stream.setLevel(logging.INFO)
         stream.terminator = '\n'+W
         loghandlers.append(stream)
+
     format = '%(asctime)s %(levelname)s [%(module)s]: %(message)s'#+W
     logging.basicConfig(level=logging.DEBUG, format=format, datefmt='%Y/%m/%d %H:%M:%S', handlers=loghandlers)
     logging.addLevelName(logging.WARNING, Y+"%s" % logging.getLevelName(logging.WARNING))

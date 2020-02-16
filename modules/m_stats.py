@@ -131,7 +131,7 @@ class Stats(ircd.Command):
                 client.sendraw(210, '{} {}:{} [options: {}], used by {} client{}'.format(recv[1], ip, port, options, len(port_clients), 's' if len(port_clients) != 1 else ''))
 
         elif recv[1] == 'G':
-            for type in [type for type in self.ircd.tkl if type in 'GZQ']:
+            for type in [type for type in self.ircd.tkl if type in 'gGZQ']: # G should also see g (local)
                 for mask in self.ircd.tkl[type]:
                     display = mask.split('@')[1] if type == 'Q' else mask
                     t = self.ircd.tkl[type][mask]

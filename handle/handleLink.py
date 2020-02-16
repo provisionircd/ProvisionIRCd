@@ -99,6 +99,7 @@ def selfIntroduction(localServer, newServer, outgoing=False):
     except Exception as ex:
         logging.exception(ex)
 
+
 def syncUsers(localServer, newServer, local_only):
     try:
         totalServers = [localServer]
@@ -222,3 +223,6 @@ class Link(threading.Thread):
 
         except Exception as ex:
             logging.exception(ex)
+            # Outgoing link timed out.
+            if serv:
+                serv.squit(str(ex))

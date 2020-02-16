@@ -9,7 +9,7 @@ from handle.functions import update_support, logging
 def ListModules(self):
     modules = {}
 
-    for file in [file for file in os.listdir(self.modules_dir) if not file.startswith('__') and file.startswith('m_')]:
+    for file in iter([file for file in os.listdir(self.modules_dir) if not file.startswith('__') and file.startswith('m_')]):
         path = os.path.join(self.modules_dir, file)
         file = 'modules.'+file.split('.py')[:1][0]
         modules[file] = path
@@ -21,7 +21,7 @@ def ListModules(self):
         dir = ntpath.basename(x[0])
         if not dir or dir.startswith('__'):
             continue
-        for file in [file for file in os.listdir(fullpath) if not file.startswith('__') and file.startswith('m_')]:
+        for file in iter([file for file in os.listdir(fullpath) if not file.startswith('__') and file.startswith('m_')]):
             path = os.path.join(fullpath, file)
             folder = os.path.basename(os.path.dirname(path))
             file = 'modules.{}.{}'.format(folder, file.split('.py')[:1][0])
@@ -153,7 +153,6 @@ def UnloadModule(self, name):
                 '''
                 core_classes = self.user_mode_class + self.channel_mode_class + self.command_class
                 for m in [m for m in core_classes if m.module == module]:
-                    print('unload 1')
                     m.unload()
 
                 if hasattr(module, 'unload'):
@@ -232,6 +231,7 @@ def FindCallables(self, module):
     return info
 
 
+
 def support(*support):
     def add_attribute(function):
         if not hasattr(function, "support"):
@@ -240,6 +240,8 @@ def support(*support):
         return function
     return add_attribute
 
+
+# Try commenting out class and pass. We still needs support and api
 def user_mode(cls):
     class umode(UserMode):
         pass
@@ -254,6 +256,8 @@ def command(cls):
     class umode(Command):
         pass
     return cls
+#
+
 
 def api(*args):
     ### ('command', host=None, password=None)
@@ -336,9 +340,6 @@ def events(*command_list):
         function.events.extend(command_list)
         return function
     return add_attribute
-
-
-
 
 
 

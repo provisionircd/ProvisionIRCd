@@ -22,25 +22,25 @@ class BaseMode:
         elif issubclass(self.__class__, ChannelMode):
             mode_class_list = self.ircd.channel_mode_class
 
-            if self not in mode_class_list:
-                mode_class_list.append(self)
+        if self not in mode_class_list:
+            mode_class_list.append(self)
 
-            if issubclass(self.__class__, UserMode):
-                self.ircd.user_modes[self.mode] = (self.req_flag, self.desc)
-                logging.debug('Usermode registered: {}'.format(self))
-                #logging.debug('Permission flag: {}'.format(self.req_flag))
-                #logging.debug('Description: {}'.format(self.desc))
-            elif issubclass(self.__class__, ChannelMode):
-                if self.type != 3 and self.param_help:
-                    t = (self.req_flag, self.desc, self.param_help)
-                else:
-                    t = (self.req_flag, self.desc)
+        if issubclass(self.__class__, UserMode):
+            self.ircd.user_modes[self.mode] = (self.req_flag, self.desc)
+            logging.debug('Usermode registered: {}'.format(self))
+            #logging.debug('Permission flag: {}'.format(self.req_flag))
+            #logging.debug('Description: {}'.format(self.desc))
+        elif issubclass(self.__class__, ChannelMode):
+            if self.type != 3 and self.param_help:
+                t = (self.req_flag, self.desc, self.param_help)
+            else:
+                t = (self.req_flag, self.desc)
 
-                self.ircd.channel_modes[self.type][self.mode] = t
-                logging.debug('Channelmode registered: {}'.format(self))
-                #logging.debug('Permission flag: {}'.format(self.req_flag))
+            self.ircd.channel_modes[self.type][self.mode] = t
+            logging.debug('Channelmode registered: {}'.format(self))
+            #logging.debug('Permission flag: {}'.format(self.req_flag))
 
-            self.registered = 1
+        self.registered = 1
 
 
     def validate(self):

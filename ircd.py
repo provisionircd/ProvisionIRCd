@@ -5,18 +5,6 @@ import os
 import sys
 import time
 import ssl
-
-if sys.version_info[0] < 3:
-    print('Python 2 is not supported.')
-    sys.exit()
-
-
-version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
-if int(version) < 36:
-    print('Python version 3.6 or higher is required.')
-    sys.exit()
-
-
 import gc
 gc.enable()
 import socket
@@ -32,6 +20,13 @@ try:
     import objgraph
 except:
     pass
+
+
+version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
+if int(version) < 36:
+    print('Python version 3.6 or higher is required.')
+    sys.exit()
+
 
 path = os.path.abspath(__file__)
 dir_path = os.path.dirname(path)
@@ -109,6 +104,7 @@ class Server:
                 self.rootdir = dir_path
                 self.confdir = dir_path+'/conf/'
                 self.modules_dir = dir_path+'/modules/'
+                self.tls_files = {}
                 self.conffile = conffile
                 self.ERR = ERR
                 self.RPL = RPL
@@ -432,8 +428,13 @@ class Server:
                         for m in [m for m in remote_modules if m not in local_modules]:
                             missing_mods.append(m)
                     if missing_mods:
+                        ip, port = self.socket.getpeername()
+                        # The error is outgoing and will be displayed on the REMOTE server.
+                        error = 'Link denied for {}[{}:{}]: they are missing modules: {}'.format(
+                        self.hostname, ip, port,  ', '.join(missing_mods)  )
+
                         string = ', '.join(missing_mods)
-                        self._send(':{} ERROR :they are missing modules: {}'.format(localServer.sid, string))
+                        self._send(':{} ERROR :{}'.format(localServer.sid, error))
                         self.quit('we are missing modules: {}'.format(string))
                         return
                 except:
@@ -695,7 +696,7 @@ class Server:
                     flags = localServer.snos[sno][1]
                     #print('Flags for {}: {}'.format(sno, flags))
 
-                users = list(filter(lambda u: 'o' in u.modes and 's' in u.modes and sno in u.snomasks, localServer.users))
+            users = list(filter(lambda u: 'o' in u.modes and 's' in u.modes and sno in u.snomasks, localServer.users))
             for user in users:
                 try:
                     if sno in localServer.conf['opers'][user.operaccount]['ignore']['snomask']:
@@ -751,7 +752,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='IRCd.')
     parser.add_argument('-c', '--conf', help='Conf file.')
     parser.add_argument('--nofork', help='No fork.',action='store_true')
-    parser.add_argument('--rehash', help='Rehash current server.',action='store_true')
     try:
         mkp = 1
         import bcrypt
@@ -764,15 +764,6 @@ if __name__ == "__main__":
     if args.mkpasswd:
         hashed = bcrypt.hashpw(args.mkpasswd.encode('utf-8'),bcrypt.gensalt(10)).decode('utf-8')
         print('Your salted password: {}'.format(hashed))
-        sys.exit()
-
-    if args.rehash:
-        if os.path.isfile(pidfile):
-            print('Process already running.')
-            with open(pidfile) as p:
-                pid = p.read()
-                print('Pid: {}'.format(pid))
-
         sys.exit()
 
     global conffile

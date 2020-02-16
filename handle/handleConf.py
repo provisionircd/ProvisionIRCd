@@ -148,12 +148,57 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
                     conferr("'options' can not contain both 'servers' and 'clients' in 'listen' block for port {}.".format(port))
 
             for port in tempconf['listen']:
+                localServer.tls_files[port] = {}
+                localServer.tls_files[port]['keypass'] = None
+                default_cert, default_key = localServer.rootdir+'/ssl/server.cert.pem', localServer.rootdir+'/ssl/server.key.pem'
                 if 'ssl' in tempconf['listen'][port]['options']:
-                    if not os.path.isfile(localServer.rootdir+'/ssl/server.cert.pem') or not os.path.isfile(localServer.rootdir+'/ssl/server.key.pem'):
-                        conferr("You have one or more SSL ports listening but there are files missing in {}/ssl/ folder. Make sure you have 'server.cert.pem' and 'server.key.pem' present!".format(localServer.rootdir), noConf=True)
-                        conferr("You can create self-signed certs (not recommended) by issuing the following command in your terminal: openssl req -x509 -newkey rsa:4096 -keyout server.key.pem -out server.cert.pem", noConf=True)
-                        conferr("or you can get a free CA cert from Let's Encrypt: https://letsencrypt.org", noConf=True)
-                        break
+                    localServer.tls_files[port]['cert'] = default_cert
+                    localServer.tls_files[port]['key'] = default_key
+                    if 'ssl-options' not in tempconf['listen'][port]:
+                        if not os.path.isfile(default_cert) or not os.path.isfile(default_key):
+                            conferr("You have one or more SSL ports listening but there are files missing in {}/ssl/ folder. Make sure you have 'server.cert.pem' and 'server.key.pem' present!".format(localServer.rootdir), noConf=True)
+                            conferr("You can create self-signed certs (not recommended) by issuing the following command in your terminal: openssl req -x509 -newkey rsa:4096 -keyout server.key.pem -out server.cert.pem", noConf=True)
+                            conferr("or you can get a free CA cert from Let's Encrypt: https://letsencrypt.org", noConf=True)
+                            break
+
+                    tls_default = 1
+                    if 'ssl-options' in tempconf['listen'][port]:
+                        t = tempconf['listen'][port]['ssl-options']
+                        if 'certificate' not in t:
+                            logging.warning(f"Certificate path is missing in 'ssl-options' for TLS port {port}")
+                            logging.warning("Falling back to default.")
+
+                        elif not os.path.realpath(t['certificate']):
+                            logging.warning(f"Certificate for port {port} could not be found: {t['certificate']}.")
+                            logging.warning("Make sure the file exists and is accessible by the current user. Falling back to default.")
+
+                        else:
+                            localServer.tls_files[port]['cert'] = os.path.realpath(t['certificate'])
+                            tls_default = 0
+
+
+                        if 'key' not in t:
+                            logging.warning(f"Key path is missing in 'ssl-options' for TLS port {port}")
+                            logging.warning("Falling back to default.")
+                        elif not os.path.realpath(t['key']):
+                            logging.warning(f"Key could for port {port} not be found: {t['key']}.")
+                            logging.warning("Make sure the file exists and is accessible by the current user. Falling back to default.")
+
+                        else:
+                            localServer.tls_files[port]['key'] = os.path.realpath(t['key'])
+                            tls_default = 0
+
+                            if 'keypass' in t and t['keypass']:
+                                if len(t['keypass']) < 6:
+                                    logging.warning(f"Insecure TLS key password for file '{localServer.tls_files[port]['key']}'")
+                                localServer.tls_files[port]['keypass'] = t['keypass']
+
+
+                    if tls_default:
+                        logging.warning(f"No ssl-options specified for port {port} -- falling back to defaults.")
+
+
+
         if 'class' not in tempconf:
             conferr('\'class\' block not found')
         else:
@@ -319,39 +364,44 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
                         continue
                 except Exception as ex:
                     logging.exception(ex)
-        try:
-            localServer.server_cert = 'ssl/server.cert.pem'
-            localServer.server_key = 'ssl/server.key.pem'
-            localServer.ca_certs = 'ssl/curl-ca-bundle.crt'
-            version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
-            if int(version) >= 36:
-                temp_sslctx = ssl.SSLContext(ssl.PROTOCOL_TLS)
-                temp_sslctx.load_cert_chain(certfile=localServer.server_cert, keyfile=localServer.server_key)
-                temp_sslctx.load_default_certs(purpose=ssl.Purpose.CLIENT_AUTH)
-                temp_sslctx.load_verify_locations(cafile=localServer.ca_certs)
-                temp_sslctx.verify_mode = ssl.CERT_NONE
-                localServer.sslctx = temp_sslctx
+            localServer.sslctx = {}
+            for port in [p for p in tempconf['listen'] if 'ssl' in tempconf['listen'][p]['options']]:
+                try:
+                    localServer.sslctx[port] = ssl.SSLContext(ssl.PROTOCOL_TLS)
+                    tls_cert = localServer.tls_files[port]['cert']
+                    tls_key = localServer.tls_files[port]['key']
+                    tls_key_pass = localServer.tls_files[port]['keypass']
+                    localServer.sslctx[port].load_cert_chain(certfile=tls_cert, keyfile=tls_key, password=tls_key_pass)
+                    logging.info(f'Using on port {port}: cert {tls_cert} and key {tls_key}')
+                    logging.info(f"Password protected key: {'yes' if tls_key_pass else 'no'}")
 
-        except PermissionError as ex:
-            err = 'Reloading TLS certificates failed with PermissionError. Make sure the files can be read by the current user.'
-            if rehash:
-                localServer.notice(user, '*** {}'.format(err))
-            else:
-                conferr(err)
+                    localServer.sslctx[port].load_default_certs(purpose=ssl.Purpose.CLIENT_AUTH)
+                    localServer.sslctx[port].load_verify_locations(cafile='ssl/curl-ca-bundle.crt')
+                    localServer.sslctx[port].verify_mode = ssl.CERT_NONE
+                    #localServer.sslctx = temp_sslctx
 
-        except FileNotFoundError as ex:
-            err = "One or more required SSL files could not be found."
-            err += "\nCheck to see if the following files are present and valid:"
-            err += "\n"+localServer.server_cert
-            err += "\n"+localServer.server_key
-            err += "\n"+localServer.ca_certs
-            conferr(err)
-            logging.exception(ex)
+                except PermissionError as ex:
+                    err = f'Reloading TLS certificates for port {port} failed with PermissionError. Make sure the files can be read by the current user.'
+                    logging.exception(ex)
 
-        except Exception as ex:
-            logging.exception(ex)
-            if rehash:
-                localServer.notice(user, '*** [ssl] -- Error: {}'.format(ex))
+                    if rehash:
+                        localServer.notice(user, '*** {}'.format(err))
+                    else:
+                        conferr(err)
+
+                except FileNotFoundError as ex:
+                    err = "One or more required SSL files could not be found."
+                    err += "\nCheck to see if the following files are present and valid:"
+                    err += "\n"+tls_key
+                    err += "\n"+tls_cert
+
+                    conferr(err)
+                    logging.exception(ex)
+
+                except Exception as ex:
+                    logging.exception(ex)
+                    if rehash:
+                        localServer.notice(user, '*** [ssl] -- Error: {}'.format(ex))
 
     except KeyError as ex:
         exc_type, exc_obj, exc_tb = sys.exc_info()
@@ -483,6 +533,7 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
 
         return 1
     gc.collect()
+    exit()
     return 1
 
 def check_opers(tempconf, err_conf):

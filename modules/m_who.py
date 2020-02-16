@@ -56,25 +56,25 @@ class Who(ircd.Command):
             flags = recv[2]
         params = '' if len(recv) < 3 else recv[3:]
         #logging.debug('WHO mask: {}'.format(mask))
-        for user in self.ircd.users:
+        for user in iter(self.ircd.users):
             continue_loop = 0
             chan = '*'
-            if not [c for c in self.ircd.channels if client in c.users and user in c.users] and 'i' in client.modes and not 'o' in client.modes and user != client:
+            if not iter([c for c in self.ircd.channels if client in c.users and user in c.users]) and 'i' in client.modes and not 'o' in client.modes and user != client:
                 continue
                 #logging.debug('Checking mask: {}'.format(m))
-            if (mask[0] not in self.ircd.chantypes+'*' or mask.lower() not in [c.name.lower() for c in self.ircd.channels]) and mask not in [user.nickname, '*']:
+            if (mask[0] not in self.ircd.chantypes+'*' or mask.lower() not in iter([c.name.lower() for c in self.ircd.channels])) and mask not in [user.nickname, '*']:
                 continue
 
             if mask[0] in self.ircd.chantypes+'*':
                 ### Mask is a channel.
-                if mask.lower() not in [c.name.lower() for c in user.channels] and mask != '*':
+                if mask.lower() not in iter([c.name.lower() for c in user.channels]) and mask != '*':
                     continue
             paramcount = 0
             pos_match = []
             neg_match = []
             user_match = []
             action = ''
-            for f in [f for f in flags if f in WHO_FLAGS or f in '+-']:
+            for f in iter([f for f in flags if f in WHO_FLAGS or f in '+-']):
                 if f in '+-':
                     action = f
                     continue
@@ -166,7 +166,7 @@ class Who(ircd.Command):
                     continue
                 #channel = user.channels[0]
                 chan = channel.name
-                modes = ''.join([{'q': '~', 'a': '&', 'o': '@', 'h': '%', 'v': ''}[x] for x in channel.usermodes[user]])
+                modes = ''.join([   {'q': '~', 'a': '&', 'o': '@', 'h': '%', 'v': ''}[x] for x in channel.usermodes[user]   ])
             if 'x' in user.modes:
                 modes += 'x'
             if user.away:
