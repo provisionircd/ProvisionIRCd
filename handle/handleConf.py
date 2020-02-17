@@ -527,7 +527,6 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
 
         return 1
     gc.collect()
-    exit()
     return 1
 
 def check_opers(tempconf, err_conf):
