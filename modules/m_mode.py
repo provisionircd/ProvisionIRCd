@@ -177,7 +177,7 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
                     # Modules like extbans do not have a mode, so we will check for hooks manually.
                     for callable in [callable for callable in ircd.hooks if callable[0].lower() == 'pre_'+hook and m in callable[1]]:
                         try:
-                            callable[2](self, ircd, channel, modebuf, parambuf, action, param_mode)
+                            callable[2](self, ircd, channel, modebuf, parambuf, action, m, param_mode)
                         except Exception as ex:
                             logging.exception(ex)
 
@@ -695,7 +695,7 @@ def chgumode(client, ircd, recv, override, sourceServer=None, sourceUser=None):
                     continue
                 if action == '+':
                     if m == 'x':
-                        cloaked = cloak(ircd, client.hostname)
+                        cloaked = cloak(client)
                         client.setinfo(cloaked, t='host', source=sourceServer)
                         client.cloakhost = cloaked
                     elif m == 'S' and client.server.hostname not in ircd.conf['settings']['ulines']:
@@ -765,7 +765,7 @@ def chgumode(client, ircd, recv, override, sourceServer=None, sourceUser=None):
 
                         if hasattr(target, 'opermodes'):
                             for mode in [m for m in target.opermodes if m in target.modes]:
-                                modes.append(mode)
+                                modebuf.append(mode)
                                 if mode == 's':
                                     target.snomasks = ''
                         if target.swhois:

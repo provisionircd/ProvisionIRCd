@@ -21,6 +21,8 @@ import sys
 import os
 import hashlib
 import time
+import itertools
+
 
 W = '\033[0m'  # white (normal)
 R = '\033[31m' # red
@@ -32,6 +34,46 @@ READ_ONLY = (
     select.POLLERR
 )
 READ_WRITE = READ_ONLY | select.POLLOUT
+
+
+
+
+def listen_socks(ircd):
+    for i in range(len(ircd.listen_socks)):
+        yield list(ircd.listen_socks)[i]
+
+
+def users(ircd, mode='r'):
+    # Defaults to read mode. Returns all users for reading.
+    for i in range(len(ircd.users)):
+        u = ircd.users[i]
+        if mode == 'r':
+            if u.socket and u.socket.fileno() != -1:
+                yield u
+        elif mode == 'w':
+            if u.socket and u.sendbuffer and u.socket.fileno() != -1:
+                yield u
+        elif mode == 'a': # All
+            yield u
+
+
+def servers(ircd, mode='r'):
+    # Defaults to read mode. Returns all servers for reading.
+    for i in range(len(ircd.servers)):
+        s = ircd.servers[i]
+        if mode == 'r':
+            if s.socket and s.socket.fileno() != -1:
+                yield s
+        elif mode == 'w':
+            if s.socket and s.sendbuffer and s.socket.fileno() != -1:
+                yield s
+
+
+def channels(ircd):
+    for i in range(len(ircd.channels)):
+        yield ircd.channels[i]
+
+
 
 def sock_accept(ircd, s):
     if ircd.listen_socks[s] == 'clients':
@@ -184,16 +226,14 @@ class data_handler: #(threading.Thread):
                         continue
 
                 else:
-                    #ircd = self.server
-                    dikke_read_users = [user for user in iter(ircd.users) if user.socket and user.fileno() != -1]
-                    read_users = [user for user in iter(ircd.users) if user.socket and user.fileno() != -1]
-                    write_users = [user for user in iter(ircd.users) if user.sendbuffer and user.socket and user.fileno() != -1]
-
-                    read_servers = [server for server in iter(ircd.servers) if server.socket and server.fileno() != -1]
-                    write_servers = [server for server in iter(ircd.servers) if server.socket and server.sendbuffer and server.fileno() != -1]
-
+                    read_clients = itertools.chain(listen_socks(ircd), users(ircd), servers(ircd))
+                    write_clients = itertools.chain(users(ircd, 'w'), servers(ircd, 'w'))
+                    #print(f"Size of read_clients: {sys.getsizeof(read_clients)}")
                     try:
-                        read, write, error = select.select(list(self.listen_socks) + read_users + read_servers, write_users + write_servers, read_users + read_servers + write_users + write_servers + list(self.listen_socks), 1.0)
+                        read, write, error = select.select(read_clients, write_clients, read_clients, 1.0)
+                                                # read and error need the same iteratable.
+
+                        #read, write, error = select.select(list(self.listen_socks) + read_users + read_servers, write_users + write_servers, read_users + #read_servers + write_users + write_servers + list(self.listen_socks), 1.0)
                     except ValueError as ex:
                         for fd in iter([fd for fd in iter(ircd.users) if fd.socket and not fd.registered]):
                             fd.quit('Limit reached')
@@ -236,19 +276,19 @@ def check_loops(ircd):
     Checks related to users
     '''
     pingfreq = 120
-    users = iter([user for user in ircd.users if user.socket])
+    users = iter([user for user in iter(ircd.users) if user.socket])
 
     for user in iter([user for user in users if time.time() - user.ping > pingfreq and time.time()*1000 - user.lastPingSent > pingfreq/2]):
         user.lastPingSent = time.time() * 1000
         user.lag_measure = user.lastPingSent
         user._send('PING :{}'.format(ircd.hostname))
 
-    ping_users = iter([user for user in users if time.time() - user.ping > 180.0])
+    ping_users = [user for user in users if time.time() - user.ping >= 180.0]
 
-    for user in ping_users:
+    for user in list(ping_users):
         user.quit('Ping timeout: {} seconds'.format(int(time.time() - user.ping)))
 
-    for t in ircd.tkl:
+    for t in iter(ircd.tkl):
         for mask in dict(ircd.tkl[t]):
             expire = ircd.tkl[t][mask]['expire']
             if expire == '0':
@@ -307,7 +347,7 @@ def check_loops(ircd):
 
     ### Check for timed channels status.
     modify_status = {}
-    for chan in ircd.channels:
+    for chan in channels(ircd):
         try:
             for user in dict(chan.temp_status):
                 for mode in chan.temp_status[user]:

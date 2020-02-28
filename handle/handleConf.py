@@ -147,12 +147,19 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
                 elif 'clients' in tempconf['listen'][port]['options'] and 'servers' in tempconf['listen'][port]['options']:
                     conferr("'options' can not contain both 'servers' and 'clients' in 'listen' block for port {}.".format(port))
 
+            default_cert, default_key = localServer.rootdir+'/ssl/server.cert.pem', localServer.rootdir+'/ssl/server.key.pem'
+
+            if not os.path.isfile(default_cert) or not os.path.isfile(default_key):
+                conferr("You have one or more SSL ports listening but there are files missing in {}/ssl/ folder. Make sure you have 'server.cert.pem' and 'server.key.pem' present!".format(localServer.rootdir), noConf=True)
+                conferr("You can create self-signed certs (not recommended) by issuing the following command in your terminal: openssl req -x509 -newkey rsa:4096 -keyout server.key.pem -out server.cert.pem", noConf=True)
+                conferr("or you can get a free CA cert from Let's Encrypt: https://letsencrypt.org", noConf=True)
+
+
+            localServer.default_cert, localServer.default_key = default_cert, default_key
+            localServer.default_ca_file = 'ssl/curl-ca-bundle.crt'
             for port in tempconf['listen']:
                 localServer.tls_files[port] = {}
                 localServer.tls_files[port]['keypass'] = None
-                default_cert, default_key = localServer.rootdir+'/ssl/server.cert.pem', localServer.rootdir+'/ssl/server.key.pem'
-                localServer.default_cert, localServer.default_key = default_cert, default_key
-                localServer.default_ca_file = 'ssl/curl-ca-bundle.crt'
                 if 'ssl' in tempconf['listen'][port]['options']:
                     localServer.tls_files[port]['cert'] = default_cert
                     localServer.tls_files[port]['key'] = default_key
@@ -358,6 +365,16 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
                         continue
                 except Exception as ex:
                     logging.exception(ex)
+
+
+            localServer.default_sslctx = ssl.SSLContext(ssl.PROTOCOL_TLS)
+            tls_cert, tls_key = localServer.default_cert, localServer.default_key
+            localServer.default_sslctx.load_cert_chain(certfile=tls_cert, keyfile=tls_key)
+            localServer.default_sslctx.load_default_certs(purpose=ssl.Purpose.CLIENT_AUTH)
+            localServer.default_sslctx.load_verify_locations(cafile=localServer.default_ca_file)
+            localServer.default_sslctx.verify_mode = ssl.CERT_NONE
+
+
             localServer.sslctx = {}
             for port in [p for p in tempconf['listen'] if 'ssl' in tempconf['listen'][p]['options']]:
                 try:
@@ -560,11 +577,13 @@ def check_opers(tempconf, err_conf):
         #except ValueError:
         #    conferr('Invalid salt for oper {} password. Make sure you use bcrypt. You can get one with /mkpasswd on IRC or use the --mkpasswd argument.'.format(oper))
 
+
 def check_links(tempconf, mainconf, err_conf):
     if 'link' not in tempconf:
         return
     reqvalues = ['pass', 'class']
     for link in tempconf['link']:
+        link = link.strip()
         if link not in confLinks:
             confLinks.append(link)
         else:

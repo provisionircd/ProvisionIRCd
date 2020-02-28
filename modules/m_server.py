@@ -15,12 +15,12 @@ Y = '\033[33m' # yellow
 B = '\033[34m' # blue
 P = '\033[35m' # purple
 
-@ircd.Modules.command
+
 class Server(ircd.Command):
     def __init__(self):
         self.command = 'server'
         self.req_class = 'Server'
-        self.params = 5
+        self.params = 4
 
 
     def execute(self, client, recv):

@@ -127,7 +127,7 @@ class EnhancedRotatingFileHandler(logging.handlers.TimedRotatingFileHandler):
                     #print('os.remove({})'.format(f))
                     os.remove(f)
 
-def initlogging(localServer):
+def initlogging(ircd):
     datefile = time.strftime('%Y%m%d')
     if not os.path.exists('logs'):
         os.mkdir('logs')
@@ -136,9 +136,9 @@ def initlogging(localServer):
     # Removing files >backupCount OR >backupExpire (in seconds)
     loghandlers = [EnhancedRotatingFileHandler(filename, when='midnight', maxBytes=1000*1000, backupCount=30, backupExpire=2629744)] # 2629744 = 1 month
 
-    if not localServer.forked:
+    if not ircd.forked:
         stream = logging.StreamHandler()
-        stream.setLevel(logging.INFO)
+        stream.setLevel(logging.DEBUG)
         stream.terminator = '\n'+W
         loghandlers.append(stream)
 
@@ -179,44 +179,44 @@ def initlogging(localServer):
 
 
 class TKL:
-    def check(self, localServer, user, type):
+    def check(self, ircd, user, type):
         try:
-            if type not in localServer.tkl:
+            if type not in ircd.tkl:
                 return
             if type.lower() in 'gz':
-                if type in 'gz' and user.server != localServer:
+                if type in 'gz' and user.server != ircd:
                     return
                 ex = False
-                for mask in localServer.tkl[type]:
+                for mask in iter(ircd.tkl[type]):
                     host = '{}@{}'.format('*' if type.lower() == 'z' else user.ident, user.ip if type.lower() == 'z' else user.hostname)
-                    if 'except' in localServer.conf and 'tkl' in localServer.conf['except']:
-                        for e in localServer.conf['except']['tkl']:
-                            if match(e, host) and user.server == localServer:
+                    if 'except' in ircd.conf and 'tkl' in ircd.conf['except']:
+                        for e in ircd.conf['except']['tkl']:
+                            if match(e, host) and user.server == ircd:
                                 ex = True
                                 break
 
                     if match(mask, host) and not ex:
-                        if type in 'GZ' and not localServer.tkl[type][mask]['global']:
+                        if type in 'GZ' and not ircd.tkl[type][mask]['global']:
                             continue
-                        if type.lower() in 'gz' and user.server == localServer:
+                        if type.lower() in 'gz' and user.server == ircd:
                             ### Local ban on local user.
-                            banmsg = localServer.tkl[type][mask]['reason']
-                            setter = localServer.tkl[type][mask]['setter']
+                            banmsg = ircd.tkl[type][mask]['reason']
+                            setter = ircd.tkl[type][mask]['setter']
                             if user.socket:
                                 if user.registered:
-                                    localServer.notice(user, '*** You are banned from this server: [{}] {}'.format(setter, banmsg))
+                                    ircd.notice(user, '*** You are banned from this server: [{}] {}'.format(setter, banmsg))
                                 user.sendraw(304, '{}'.format(':[{}] {}'.format(setter, banmsg)))
                             user.quit('User has been banned from using this server', error=True)
                         return
         except Exception as ex:
             logging.exception(ex)
 
-    def add(self, localServer, data):
+    def add(self, ircd, data):
         try:
-            data = localServer.parse_command(' '.join(data[3:]))
+            data = ircd.parse_command(' '.join(data[3:]))
             tkltype = data[0]
-            if tkltype not in localServer.tkl:
-                localServer.tkl[tkltype] = {}
+            if tkltype not in ircd.tkl:
+                ircd.tkl[tkltype] = {}
             no_snotice = False
             ident = data[1]
             if tkltype == 'Q' and data[1] == 'H':
@@ -227,7 +227,7 @@ class TKL:
             expire = '0' if float(data[4]) == 0 else int(data[4])
             ctime = int(data[5])
             reason = data[6]
-            user = list(filter(lambda c: c.nickname.lower() == setter.lower(), localServer.users))
+            user = list(filter(lambda c: c.nickname.lower() == setter.lower(), ircd.users))
             if expire != '0':
                 d = datetime.datetime.fromtimestamp(expire).strftime('%a %b %d %Y')
                 t = datetime.datetime.fromtimestamp(expire).strftime('%H:%M:%S %Z')
@@ -236,51 +236,51 @@ class TKL:
             if user:
                 user = user[0]
 
-            if not no_snotice and (fullmask not in localServer.tkl[tkltype] or fullmask in localServer.tkl[tkltype] and expire != localServer.tkl[tkltype][fullmask]['expire']):
+            if not no_snotice and (fullmask not in ircd.tkl[tkltype] or fullmask in ircd.tkl[tkltype] and expire != ircd.tkl[tkltype][fullmask]['expire']):
                 display_mask = fullmask.split('@')[1] if tkltype == 'Q' else fullmask
-                msg = '*** {}TKL {} {} for {} by {} [{}] expires on: {}'.format('Global ' if tkltype in 'GZ' else '', tkltype, 'active' if fullmask not in localServer.tkl[tkltype] else 'updated', display_mask, setter, reason, 'never' if expire == '0' else d+' '+t)
-                localServer.snotice('G', msg)
+                msg = '*** {}TKL {} {} for {} by {} [{}] expires on: {}'.format('Global ' if tkltype in 'GZ' else '', tkltype, 'active' if fullmask not in ircd.tkl[tkltype] else 'updated', display_mask, setter, reason, 'never' if expire == '0' else d+' '+t)
+                ircd.snotice('G', msg)
 
-            if fullmask in localServer.tkl[tkltype]:
-                del localServer.tkl[tkltype][fullmask]
+            if fullmask in ircd.tkl[tkltype]:
+                del ircd.tkl[tkltype][fullmask]
 
-            localServer.tkl[tkltype][fullmask] = {}
-            localServer.tkl[tkltype][fullmask]['ctime'] = ctime
-            localServer.tkl[tkltype][fullmask]['expire'] = expire
-            localServer.tkl[tkltype][fullmask]['setter'] = setter
-            localServer.tkl[tkltype][fullmask]['reason'] = reason
-            localServer.tkl[tkltype][fullmask]['global'] = True if tkltype in 'GZQ' else False
-            for user in list(localServer.users):
-                TKL.check(self, localServer, user, tkltype)
+            ircd.tkl[tkltype][fullmask] = {}
+            ircd.tkl[tkltype][fullmask]['ctime'] = ctime
+            ircd.tkl[tkltype][fullmask]['expire'] = expire
+            ircd.tkl[tkltype][fullmask]['setter'] = setter
+            ircd.tkl[tkltype][fullmask]['reason'] = reason
+            ircd.tkl[tkltype][fullmask]['global'] = True if tkltype in 'GZQ' else False
+            for user in list(ircd.users):
+                TKL.check(self, ircd, user, tkltype)
 
             if tkltype in 'GZQ':
-                data = ':{} TKL + {} {} {} {} {} {} :{}'.format(localServer.sid, tkltype, ident, mask, setter, expire, ctime, reason)
-                localServer.new_sync(localServer, self, data)
-            save_db(localServer)
+                data = ':{} TKL + {} {} {} {} {} {} :{}'.format(ircd.sid, tkltype, ident, mask, setter, expire, ctime, reason)
+                ircd.new_sync(ircd, self, data)
+            save_db(ircd)
             return
 
         except Exception as ex:
             logging.exception(ex)
 
-    def remove(self, localServer, data, expire=False):
+    def remove(self, ircd, data, expire=False):
         try:
             tkltype = data[3]
             ident = data[4]
             mask = data[5]
             fullmask = '{}@{}'.format(ident, mask)
-            if fullmask not in localServer.tkl[tkltype] or not fullmask:
+            if fullmask not in ircd.tkl[tkltype] or not fullmask:
                 return
-            date = '{} {}'.format(datetime.datetime.fromtimestamp(float(localServer.tkl[tkltype][fullmask]['ctime'])).strftime('%a %b %d %Y'), datetime.datetime.fromtimestamp(float(localServer.tkl[tkltype][fullmask]['ctime'])).strftime('%H:%M:%S %Z'))
+            date = '{} {}'.format(datetime.datetime.fromtimestamp(float(ircd.tkl[tkltype][fullmask]['ctime'])).strftime('%a %b %d %Y'), datetime.datetime.fromtimestamp(float(ircd.tkl[tkltype][fullmask]['ctime'])).strftime('%H:%M:%S %Z'))
             date = date.strip()
             if ident != 'H': # tkltype == 'Q' and
                 display_mask = fullmask.split('@')[1] if tkltype == 'Q' else fullmask
-                msg = '*** {}{}TKL {} {} removed (set by {} on {}) [{}]'.format('Expiring ' if expire else '', 'Global ' if tkltype in 'GZ' else '', tkltype, display_mask, localServer.tkl[tkltype][fullmask]['setter'], date, localServer.tkl[tkltype][fullmask]['reason'])
-                localServer.snotice('G', msg)
-            del localServer.tkl[tkltype][fullmask]
+                msg = '*** {}{}TKL {} {} removed (set by {} on {}) [{}]'.format('Expiring ' if expire else '', 'Global ' if tkltype in 'GZ' else '', tkltype, display_mask, ircd.tkl[tkltype][fullmask]['setter'], date, ircd.tkl[tkltype][fullmask]['reason'])
+                ircd.snotice('G', msg)
+            del ircd.tkl[tkltype][fullmask]
             if tkltype in 'GZQ' and not expire:
-                data = ':{} TKL - {} {} {}'.format(localServer.sid, tkltype, ident, mask)
-                localServer.new_sync(localServer, self, data)
-            save_db(localServer)
+                data = ':{} TKL - {} {} {}'.format(ircd.sid, tkltype, ident, mask)
+                ircd.new_sync(ircd, self, data)
+            save_db(ircd)
         except Exception as ex:
             logging.exception(ex)
 
@@ -305,13 +305,14 @@ def match(first, second):
         return match(first[1:], second) or match(first, second[1:])
     return False
 
+
 def is_sslport(server,checkport):
-    if 'ssl' in set(server.conf['listen'][str(checkport)]['options']):
-        return True
-    return False
+    return 'ssl' in set(server.conf['listen'][str(checkport)]['options'])
+
 
 def _print(txt, server=None):
     write(str(txt), server)
+
 
 def valid_expire(s):
     spu = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800, "M": 2592000}
@@ -322,32 +323,32 @@ def valid_expire(s):
     return int(s[:-1]) * spu[s[-1]]
 
 
-def checkSpamfilter(self, localServer, target, filterTarget, msg):
+def checkSpamfilter(self, ircd, target, filterTarget, msg):
     try:
         if type(self).__name__ == 'Server':
             return
-        if 'spamfilter' not in localServer.conf or self.server != localServer or self.ocheck('o', 'override'):
+        if 'spamfilter' not in ircd.conf or self.server != ircd or self.ocheck('o', 'override'):
             return False
-        for entry in localServer.conf['spamfilter']:
-            #t = localServer.conf['spamfilter'][entry]['type']
-            action = localServer.conf['spamfilter'][entry]['action']
-            if filterTarget in localServer.conf['spamfilter'][entry]['target'] and match(entry.lower(), msg.lower()):
+        for entry in iter(ircd.conf['spamfilter']):
+            #t = ircd.conf['spamfilter'][entry]['type']
+            action = ircd.conf['spamfilter'][entry]['action']
+            if filterTarget in ircd.conf['spamfilter'][entry]['target'] and match(entry.lower(), msg.lower()):
                 msg = 'Spamfilter match by {} ({}@{}) matching {} [{} {} {}]'.format(self.nickname, self.ident, self.hostname, entry, filterTarget.upper(), target, msg)
-                localServer.snotice('F', msg)
+                ircd.snotice('F', msg)
                 reason = entry
-                if 'reason' in localServer.conf['spamfilter'][entry] and len(localServer.conf['spamfilter'][entry]['reason']) > 0:
-                    reason = localServer.conf['spamfilter'][entry]['reason']
+                if 'reason' in ircd.conf['spamfilter'][entry] and len(ircd.conf['spamfilter'][entry]['reason']) > 0:
+                    reason = ircd.conf['spamfilter'][entry]['reason']
                 if action == 'block':
                     self.sendraw(404, '{} :Spamfilter match: {}'.format(target, reason))
                     return True
                 elif action == 'kill':
-                    localServer.handle('kill', '{} :Spamfilter match: {}'.format(self.nickname, reason))
+                    ircd.handle('kill', '{} :Spamfilter match: {}'.format(self.nickname, reason))
 
                 elif action == 'gzline':
-                    duration = localServer.conf['spamfilter'][entry]['duration']
+                    duration = ircd.conf['spamfilter'][entry]['duration']
                     duration = valid_expire(duration)
-                    data = '+ Z * {} {} {} {} :{}'.format(self.ip, localServer.hostname, str(int(time.time()) + duration), int(time.time()), 'Spamfilter match: {}'.format(reason))
-                    localServer.handle('tkl', data)
+                    data = '+ Z * {} {} {} {} :{}'.format(self.ip, ircd.hostname, str(int(time.time()) + duration), int(time.time()), 'Spamfilter match: {}'.format(reason))
+                    ircd.handle('tkl', data)
 
     except Exception as ex:
         logging.exception(ex)
@@ -355,7 +356,6 @@ def checkSpamfilter(self, localServer, target, filterTarget, msg):
 
 def update_support(ircd):
     ircd.server_support = {}
-
     if hasattr(ircd, 'channel_modes'):
         chmodes_string = ''
         for t in ircd.channel_modes:
@@ -418,7 +418,7 @@ def update_support(ircd):
 
     # Decorate method, EXTBAN does not hook a command or mode so we have to check it this way.
     for module in ircd.modules:
-        for function in [function for function in ircd.modules[module][4] if hasattr(function, 'support')]:
+        for function in iter([function for function in ircd.modules[module][4] if hasattr(function, 'support')]):
             for r in [r for r in function.support]:
                 server_support = False
                 if type(r) == tuple and len(r) > 1 and r[1]:
@@ -460,15 +460,28 @@ def show_support(client, ircd):
     client.sendraw(RPL.ISUPPORT, '{} :are supported by this server'.format(' '.join(line)))
 
 
-def cloak(localServer, host):
+def cloak(client):
+    """
+    host = received hostname, depending on resolve settings. Can either be IP or realhost.
+    """
+
+    ircd = client.server
+    host = client.hostname
+    ip = client.ip
+
+    # If the resolved hostname strongly represents an IP address, treat it as such.
     static = ['static.kpn.net']
-    cloakkey = localServer.conf['settings']['cloak-key']
+    if host in static or '.ip-' in host:
+        host = ip
+
+    cloakkey = ircd.conf['settings']['cloak-key']
     key = '{}{}'.format(host, cloakkey)
     hashhost = hashlib.sha512(bytes(key, 'utf-8'))
     hex_dig = hashhost.hexdigest()
     cloak1 = hex(binascii.crc32(bytes(hex_dig[0:32], 'utf-8')) % (1<<32))[2:]
     cloak2 = hex(binascii.crc32(bytes(hex_dig[32:64], 'utf-8')) % (1<<32))[2:]
-    if host.replace('.', '').isdigit() or '.ip-' in host or host in static:
+
+    if host.replace('.', '').isdigit():
         cloak3 = hex(binascii.crc32(bytes(hex_dig[64:96], 'utf-8')) % (1<<32))[2:]
         cloakhost = cloak1+'.'+cloak2+'.'+cloak3+'.IP'
         return cloakhost
@@ -518,14 +531,14 @@ def Base64toIP(base):
         logging.exception(ex)
 
 
-def check_flood(localServer, target):
+def check_flood(ircd, target):
     try:
         if type(target).__name__ == 'User':
             user = target
             flood_safe = True if hasattr(user, 'flood_safe') and user.flood_safe else False
             if user.cls:
-                sendq = localServer.conf['class'][user.cls]['sendq']
-                recvq = localServer.conf['class'][user.cls]['recvq']
+                sendq = ircd.conf['class'][user.cls]['sendq']
+                recvq = ircd.conf['class'][user.cls]['recvq']
             else:
                 sendq, recvq = 512, 512
 
@@ -535,7 +548,7 @@ def check_flood(localServer, target):
                 flood_amount = len(user.recvbuffer) if flood_type == 'recvq' else len(user.sendbuffer)
                 flood_limit = recvq if flood_type == 'recvq' else sendq
                 if user.registered:
-                    localServer.snotice('f', '*** Flood1 -- {} ({}@{}) has reached their max {} ({}) while the limit is {}'\
+                    ircd.snotice('f', '*** Flood1 -- {} ({}@{}) has reached their max {} ({}) while the limit is {}'\
                     .format(user.nickname, user.ident, user.hostname, 'RecvQ' if flood_type == 'recvq' else 'SendQ', flood_amount, flood_limit))
                 user.quit('Excess Flood1')
                 return
@@ -550,7 +563,7 @@ def check_flood(localServer, target):
 
                 if (buffer_len >= max_cmds) and (user.registered and int(time.time()) - user.signon > 1):
                     if user.registered:
-                        localServer.snotice('f', '*** Buffer Flood -- {} ({}@{}) has reached their max buffer length ({}) while the limit is {}'\
+                        ircd.snotice('f', '*** Buffer Flood -- {} ({}@{}) has reached their max buffer length ({}) while the limit is {}'\
                         .format(user.nickname, user.ident, user.hostname, buffer_len, max_cmds))
                     logging.debug('Flood buffer: {}'.format(user.recvbuffer))
                     user.quit('Excess Flood2')
@@ -562,15 +575,15 @@ def check_flood(localServer, target):
                     user.flood_penalty_time = 0
                 if user.flood_penalty >= flood_penalty_treshhold:
                     if user.registered and not flood_safe:
-                        localServer.snotice('f', '*** Flood -- {} ({}@{}) has reached their max flood penalty ({}) while the limit is {}'\
+                        ircd.snotice('f', '*** Flood -- {} ({}@{}) has reached their max flood penalty ({}) while the limit is {}'\
                         .format(user.nickname, user.ident, user.hostname, user.flood_penalty, flood_penalty_treshhold))
                     user.quit('Excess Flood')
                     return
         else:
             server = target
             if server.cls:
-                sendq = localServer.conf['class'][server.cls]['sendq']
-                recvq = localServer.conf['class'][server.cls]['recvq']
+                sendq = ircd.conf['class'][server.cls]['sendq']
+                recvq = ircd.conf['class'][server.cls]['recvq']
             else:
                 sendq, recvq = 65536, 65536
 
@@ -579,7 +592,7 @@ def check_flood(localServer, target):
                 flood_amount = len(server.recvbuffer) if flood_type == 'recvq' else len(server.sendbuffer)
                 flood_limit = recvq if flood_type == 'recvq' else sendq
 
-                localServer.snotice('f', '*** Flood1 -- Server {} has reached their max {} ({}) while the limit is {}'\
+                ircd.snotice('f', '*** Flood1 -- Server {} has reached their max {} ({}) while the limit is {}'\
                 .format(server.hostname, 'RecvQ' if flood_type == 'recvq' else 'SendQ', flood_amount, flood_limit))
                 server.quit('Excess Flood')
                 return
@@ -587,38 +600,38 @@ def check_flood(localServer, target):
         logging.exception(ex)
 
 
-def save_db(localServer):
+def save_db(ircd):
     perm_chans = {}
     current_perm = {}
     try:
-        with open(localServer.rootdir+'/db/chans.db') as f:
+        with open(ircd.rootdir+'/db/chans.db') as f:
             current_perm = f.read().split('\n')[0]
             current_perm = json.loads(current_perm)
     except Exception as ex:
         pass
-    for chan in [chan for chan in localServer.channels if 'P' in chan.modes]:
+    for chan in iter([chan for chan in iter(ircd.channels) if 'P' in chan.modes]):
         perm_chans[chan.name] = {}
         perm_chans[chan.name]['creation'] = chan.creation
         perm_chans[chan.name]['modes'] = chan.modes
         perm_chans[chan.name]['bans'] = chan.bans
         perm_chans[chan.name]['invex'] = chan.invex
         perm_chans[chan.name]['excepts'] = chan.excepts
-        perm_chans[chan.name]['modeparams'] = localServer.chan_params[chan]
+        perm_chans[chan.name]['modeparams'] = ircd.chan_params[chan]
         perm_chans[chan.name]['topic'] = [] if not chan.topic else [chan.topic, chan.topic_author, chan.topic_time]
 
     if perm_chans and current_perm != perm_chans:
         logging.debug('Perm channels data changed, updating file... If this message gets spammed, you probably have another instance running.')
-        with open(localServer.rootdir+'/db/chans.db', 'w+') as f:
+        with open(ircd.rootdir+'/db/chans.db', 'w+') as f:
             json.dump(perm_chans, f)
 
     current_tkl = {}
     try:
-        with open(localServer.rootdir+'/db/tkl.db') as f:
+        with open(ircd.rootdir+'/db/tkl.db') as f:
             current_tkl = f.read().split('\n')[0]
             current_tkl = json.loads(current_tkl)
     except:
         pass
-    if localServer.tkl and current_tkl != localServer.tkl:
+    if ircd.tkl and current_tkl != ircd.tkl:
         logging.debug('TKL data changed, updating file... If this message gets spammed, you probably have another instance running.')
-        with open(localServer.rootdir+'/db/tkl.db', 'w+') as f:
-            json.dump(localServer.tkl, f)
+        with open(ircd.rootdir+'/db/tkl.db', 'w+') as f:
+            json.dump(ircd.tkl, f)

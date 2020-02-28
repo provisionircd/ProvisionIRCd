@@ -46,12 +46,20 @@ def checkExtMatch(type, action, channel, msg):
                 except:
                     pass
                 if action == 'block':
+                    try:
+                        p = re.compile(m)
+                        if p.findall(msg):
+                            return 1
+                    except:
+                        pass
+
                     char = m.split(':')[0]
                     if rep_char_block and char_repeat(msg, char, rep_char_block):
                         return True
                     block = match(m.lower(), msg.lower()) or m.lower() in msg.lower().split()
                     if not rep_char_block and block:
                         return True
+
                 if action == 'replace':
                     ### This just works, so don't mess it up.
                     m = ban.split(':', 2)[2]
@@ -64,24 +72,43 @@ def checkExtMatch(type, action, channel, msg):
                             replaceWith = m.split(':')[1]
                         else:
                             replaceWith = ':'+m.split(':', 2)[2]
-                    for word in msg.split():
-                        word = regex.sub('', word)
-                        tempWord = word.lower()
-                        if match(search.lower(),tempWord) or search.lower() == tempWord:
-                            temp = search.replace('*', '')
-                            if word.isupper():
-                                temp = temp.upper()
-                                did_replace = True
-                                replaceWith = replaceWith.upper()
-                            elif not word.islower():
-                                temp = re.search(temp, word, flags=re.IGNORECASE).group()
-                            did_replace = True
-                            tempMsg = tempMsg.replace(temp, replaceWith)
+
+                    did_replace = 0
+                    try:
+                        regex_replace = re.sub(search, replaceWith, msg)
+                        if regex_replace and regex_replace != msg:
+                            did_replace = 1
+                            replaced_msg = regex_replace
+                    except:
+                        pass
+
                     if did_replace:
                         replaceDone = True
+                        tempMsg = replaced_msg
+
+                    else:
+                        for word in msg.split():
+                            replaceWith = replaceWith.replace('_', ' ')
+                            word = regex.sub('', word)
+                            tempWord = word.lower()
+                            if match(search.lower(), tempWord) or search.lower() == tempWord:
+                                temp = search.replace('*', '')
+                                if word.isupper():
+                                    temp = temp.upper()
+                                    did_replace = True
+                                    replaceWith = replaceWith.upper()
+                                elif not word.islower():
+                                    temp = re.search(temp, word, flags=re.IGNORECASE).group()
+                                did_replace = True
+                                #tempMsg = tempMsg.replace(temp, replaceWith)
+                                tempMsg = tempMsg.replace(word, replaceWith)
+
+                            if did_replace:
+                                replaceDone = True
 
             if replaceDone:
                 return tempMsg
+
     except Exception as ex:
         logging.exception(ex)
 
@@ -115,8 +142,8 @@ def checkExpiredBans(localServer):
 
 
 @ircd.Modules.support(('EXTBAN='+prefix+','+str(''.join(ext_bans)), True)) ### (support string, boolean if support must be sent to other servers)
-@ircd.Modules.hooks.pre_local_chanmode()
-@ircd.Modules.hooks.pre_remote_chanmode()
+@ircd.Modules.hooks.pre_local_chanmode('beI')
+@ircd.Modules.hooks.pre_remote_chanmode('beI')
 #def extbans(self, localServer, channel, modes, params, modebuf, parambuf):
 def extbans(self, localServer, channel, modebuf, parambuf, action, m, param):
     try:

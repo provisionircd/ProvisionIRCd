@@ -231,7 +231,7 @@ class User:
                     return self.quit('Throttling - You are (re)connecting too fast')
 
                 unknown_conn = [user for user in self.server.users if user.ip == self.ip and not user.registered]
-                if len(unknown_conn) > 2:
+                if len(unknown_conn) > 20:
                     return self.quit('Too many unknown connections from your IP')
 
                 self.server.throttle[self] = {}
@@ -244,7 +244,8 @@ class User:
 
                 if self.ssl and self.socket:
                     try:
-                        fp = self.socket.getpeercert(binary_form=True)
+                        fp = None
+                        #fp = self.socket.getpeercert(binary_form=True)
                         if fp:
                             self.fingerprint = hashlib.sha256(repr(fp).encode('utf-8')).hexdigest()
                     except Exception as ex:
@@ -273,7 +274,7 @@ class User:
                 TKL.check(self, self.server, self, 'g')
                 TKL.check(self, self.server, self, 'G')
 
-                self.cloakhost = cloak(self.server, self.hostname)
+                self.cloakhost = cloak(self)
 
             else:
                 try:
@@ -723,8 +724,8 @@ class User:
 
 
     def ocheck(self, mode, flag):
-        localServer = self.server if self.socket else self.localServer
-        if (mode in self.modes and flag in self.operflags) or self.server.hostname.lower() in localServer.conf['settings']['ulines']:
+        ircd = self.server if self.socket else self.ircd
+        if (mode in self.modes and flag in self.operflags) or self.server.hostname.lower() in ircd.conf['settings']['ulines']:
             return True
         return False
 
@@ -782,7 +783,17 @@ class User:
                 self.handle('PART', '{}'.format(channel.name))
                 continue
 
+
+
+
+
+
             ### Check module hooks for visible_in_channel()
+
+            ### FIX: [05:57:26] * vknzvmwlcrcdzz (vknzvmwlcrcd@dbe29a0e.364475e1.83c16263.IP) Quit (Write error: [Errno 110] Connection timed out)
+            ### IN STATUS WINDOW?
+
+
             all_broadcast = [self]
             for channel in self.channels:
                 for user in channel.users:

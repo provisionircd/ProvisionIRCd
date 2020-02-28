@@ -5,13 +5,16 @@ provides chmode +S (strip messages)
 import ircd
 import re
 
-chmode = 'S'
+class Chmode_S(ircd.ChannelMode):
+    def __init__(self):
+        self.mode = 'S'
+        self.desc = 'Strip colors from messages'
+        self.type = 3
 
-### Types: 0 = mask, 1 = require param, 2 = optional param, 3 = no param
-@ircd.Modules.channel_modes(chmode, 3, 2, 'Strip colors from messages') ### ('mode', type, level, 'Mode description')
+
 @ircd.Modules.hooks.pre_chanmsg()
 def stripmsg_S(self, localServer, channel, msg):
-    if chmode in channel.modes:
+    if 'S' in channel.modes:
         regex = re.compile("\x1d|\x1f|\x02|\x12|\x0f|\x16|\x03(?:\d{1,2}(?:,\d{1,2})?)?", re.UNICODE)
         msg = regex.sub('', msg)
         return msg

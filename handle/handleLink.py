@@ -200,7 +200,7 @@ class Link(threading.Thread):
             if self.is_ssl:
                 version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
                 if int(version) >= 36:
-                    self.socket = self.localServer.sslctx.wrap_socket(self.socket, server_side=False)
+                    self.socket = self.localServer.default_sslctx.wrap_socket(self.socket, server_side=False)
                 else:
                     self.socket = ssl.wrap_socket(self.socket)
                 logging.info('Wrapped outgoing socket {} in SSL'.format(self.socket))

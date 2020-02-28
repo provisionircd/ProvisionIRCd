@@ -25,7 +25,6 @@ def connectTo(self, ircd, name, autoLink=False):
 
 
 
-@ircd.Modules.command
 class Connect(ircd.Command):
     """
     Used by IRC Operators to request a link with a pre-configured server.
@@ -42,7 +41,7 @@ class Connect(ircd.Command):
         if 'HTTP/' in recv:
             client.quit('Illegal command')
             return
-        name = recv[1]
+        name = recv[1].strip()
         if name.lower() == self.ircd.hostname.lower():
             return client.send('NOTICE', '*** Cannot link to own local server.')
 

@@ -15,10 +15,12 @@ from modules.chanmodes.m_extbans import prefix, ext_bans
 from modules.m_joinpart import checkMatch
 from handle.functions import match
 
+
 trace_bans = 'Ci'
 for e in trace_bans:
     if e in ext_bans:
         logging.error('m_trace: "{}" conflicting with existing extban'.format(e))
+
 
 @ircd.Modules.hooks.local_connect()
 def connect_hook(self, localServer):
@@ -30,6 +32,7 @@ def connect_hook(self, localServer):
         with urllib.request.urlopen(url) as response:
             json_res = json.load(response)
             localServer.geodata[self.ip] = json_res
+
 
 @ircd.Modules.support(('EXTBAN='+prefix+','+trace_bans, True)) ### (support string, boolean if support must be sent to other servers)
 @ircd.Modules.hooks.pre_local_chanmode('beI')

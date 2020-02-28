@@ -81,14 +81,14 @@ def prop_mode(self, localServer, channel, modebuf, parambuf, action, m, param):
 @ircd.Modules.commands('prop')
 def prop(self, localServer, recv):
     """Maintain channel properties to expand functionality.
- PROP <channel>                        - View active properties.
- PROP <channel> <property> :[param]    - Add or remove channel properties.
-                                         To remove a property, dismiss the param value.
--
-Current supported properties:
- rejoindelay <int(1-60)>    - Blocks immediate rejoins after kick for <int> seconds.
- nomasshighlight <int(>2)>  - Blocks mass highlights in the channel with more than <int> nicknames.
-"""
+        PROP <channel>                        - View active properties.
+        PROP <channel> <property> :[param]    - Add or remove channel properties.
+                                             To remove a property, dismiss the param value.
+    -
+    Current supported properties:
+    rejoindelay <int(1-60)>    - Blocks immediate rejoins after kick for <int> seconds.
+    nomasshighlight <int(>2)>  - Blocks mass highlights in the channel with more than <int> nicknames.
+    """
     try:
         chan = [chan for chan in localServer.channels if chan.name.lower() == recv[1].lower()]
         if not chan:
