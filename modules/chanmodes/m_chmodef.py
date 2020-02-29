@@ -85,6 +85,7 @@ def chmodef_dictset(self, ircd, channel):
     channel.messageQueue = {}
     channel.joinQueue = {}
 
+
 @ircd.Modules.hooks.local_join()
 def join(self, ircd, channel):
     if chmode in channel.modes and 'j' in channel.chmodef and not self.ocheck('o', 'override') and self.server.eos:
@@ -122,7 +123,7 @@ class chmodef(ircd.ChannelMode):
 #@ircd.Modules.channel_modes(chmode, 2, 3, 'Set flood protection for your channel (/helpop chmodef for more info)', None, None, '[params]') ### ('mode', type, level, 'Mode description', class 'user' or None, prefix, 'param desc')
 @ircd.Modules.hooks.pre_local_chanmode(chmode)
 @ircd.Modules.hooks.pre_remote_chanmode(chmode)
-def addmode_f(self, ircd, channel, modebuf, parambuf, action, param):
+def addmode_f(self, ircd, channel, modebuf, parambuf, action, modebar, param):
     try:
         floodTypes = 'jm'
         tempparam = []

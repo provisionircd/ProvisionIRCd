@@ -22,10 +22,9 @@ import ircd
 import time
 import re
 
-from modules.m_mode import makeMask
 from modules.m_joinpart import checkMatch
 
-from handle.functions import match, logging
+from handle.functions import match, logging, make_mask
 
 ext_bans = ['T', 't', 'c', 'O', 'a', 'b']
 prefix = '~'
@@ -145,25 +144,25 @@ def checkExpiredBans(localServer):
 @ircd.Modules.hooks.pre_local_chanmode('beI')
 @ircd.Modules.hooks.pre_remote_chanmode('beI')
 #def extbans(self, localServer, channel, modes, params, modebuf, parambuf):
-def extbans(self, localServer, channel, modebuf, parambuf, action, m, param):
+def extbans(self, localServer, channel, modebuf, parambuf, action, modebar, param):
     try:
-        if m not in 'beI' or action != '+':
+        if modebar not in 'beI' or action != '+':
             return
         if not param:
-            logging.error('ERROR: invalid param received for {}{}: {}'.format(action, m, param))
+            logging.error('ERROR: invalid param received for {}{}: {}'.format(action, modebar, param))
             return
         if not re.findall("(^{}[{}]):(.*)".format(prefix, ''.join(ext_bans)), param):
-            #logging.info('Param {} is invalid for {}{}'.format(param, action, m))
+            #logging.info('Param {} is invalid for {}{}'.format(param, action, modebar))
             return
 
-        logging.info('Param for {}{} set: {}'.format(action, m, param))
+        logging.info('Param for {}{} set: {}'.format(action, modebar, param))
 
         try:
             setter = self.fullmask()
         except:
             setter = self.hostname
 
-        if m == 'b':
+        if modebar == 'b':
             if param[:2] not in ['~T', '~c', '~t', '~b']:
                 return
             if param[:2] == '~T':
@@ -185,7 +184,7 @@ def extbans(self, localServer, channel, modebuf, parambuf, action, m, param):
                     return
                 chanBan = param.split(':')[1]
                 if chanBan[0] not in localServer.chantypes or chanBan[0] not in '+%@&~':
-                    logging.info('Channel {} is invalid for {}{} {}'.format(chanBan, action, m, param))
+                    logging.info('Channel {} is invalid for {}{} {}'.format(chanBan, action, modebar, param))
                     return
                 tempchan = list(filter(lambda c: c.name.lower() == chanBan.lower(), localServer.channels))
                 if tempchan and len(channel.users) > 2:
@@ -202,7 +201,7 @@ def extbans(self, localServer, channel, modebuf, parambuf, action, m, param):
                 bTime = param.split(':')[1]
                 if not bTime.isdigit():
                     return
-                banmask = makeMask(localServer, param.split(':')[2])
+                banmask = make_mask(localServer, param.split(':')[2])
                 param = '{}:{}'.format(':'.join(param.split(':')[:2]), banmask)
 
             elif param[:2] == '~b':
@@ -212,22 +211,22 @@ def extbans(self, localServer, channel, modebuf, parambuf, action, m, param):
                 bParam = param.split(':')[1]
                 if bParam not in ['R']:
                     return
-                banmask = makeMask(localServer, param.split(':')[2])
+                banmask = make_mask(localServer, param.split(':')[2])
                 param = '{}:{}'.format(':'.join(param.split(':')[:2]), banmask)
 
-        elif m == 'I':
+        elif modebar == 'I':
             if param[:2] == '~O':
                 if len(param.split(':')) < 2:
                     return
 
-        if m == 'b':
+        if modebar == 'b':
             c = channel.bans
-        elif m == 'I':
+        elif modebar == 'I':
             c = channel.invex
-        elif m == 'e':
+        elif modebar == 'e':
             c = channel.excepts
         if param not in c:
-            modebuf.append(m)
+            modebuf.append(modebar)
             parambuf.append(param)
             c[param] = {}
             c[param]['setter'] = setter
@@ -235,6 +234,7 @@ def extbans(self, localServer, channel, modebuf, parambuf, action, m, param):
 
     except Exception as ex:
         logging.exception(ex)
+
 
 @ircd.Modules.hooks.pre_local_join()
 def join(self, localServer, channel, **kwargs):

@@ -105,16 +105,18 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
             extban_prefix = ircd.support['EXTBAN'][0]
             #logging.info('Extban prefix set: {}'.format(extban_prefix))
 
-        ### Setting some mode level shit.
-        ### +v = 1
-        ### +h = 2
-        ### +o = 3
-        ### +a = 4
-        ### +q = 5
-        ### oper = 6
-        ### server = 7
+        # Setting some mode level shit.
+        # +v = 1
+        # +h = 2
+        # +o = 3
+        # +a = 4
+        # +q = 5
+        # oper = 6
+        # server = 7
         modeLevel = {
-            ### Channel statuses. Users with +h or higher can always remove their own status.
+            # Channel statuses. Users with +h or higher can always remove their own status.
+            # These numbers may seem off, but it's correct. This determines the level requirement to set levels.
+            # For example, you can only give voice if you have 2 (+h) or higher, and only give ops with level 3 (+o) or higher.
             'v': 2,
             'h': 3,
             'o': 3,
@@ -173,6 +175,9 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
                     c.parambuf = parambuf
                     if (action == '+' and c.set_mode(self, channel, param_mode)) or (action == '-' and c.remove_mode(self, channel, param_mode)):
                         pass
+                    #else:
+                        #print('TRIGGER DAN')
+                        #continue
                 else:
                     # Modules like extbans do not have a mode, so we will check for hooks manually.
                     for callable in [callable for callable in ircd.hooks if callable[0].lower() == 'pre_'+hook and m in callable[1]]:
@@ -412,7 +417,7 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
                 ### Finally, call modules for core modes.
                 for callable in [callable for callable in ircd.hooks if callable[0].lower() == 'pre_'+hook and m in callable[1]]:
                     try:
-                        callable[2](self, ircd, channel, modebuf, parambuf, action, param_mode)
+                        callable[2](self, ircd, channel, modebuf, parambuf, action, m, param_mode)
                     except Exception as ex:
                         logging.exception(ex)
             continue
@@ -462,9 +467,19 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
                     except Exception as ex:
                         logging.exception(ex)
 
-                if m in ircd.parammodes and (m not in ircd.channel_modes[2] or action == '+'):
+
+
+
+                if m in ircd.parammodes and (m not in ircd.channel_modes[2] or action == '+') and len(parambuf) > paramcount:
+                    #logging.debug(f"Paramcount: {paramcount}")
+                    #logging.debug(f"Parambuf: {action}{m} {parambuf}")
                     total_params.append(parambuf[paramcount])
                     paramcount += 1
+                    #logging.debug(f"Increased paramcount (now={paramcount}) - moving on")
+
+
+
+
                 totalLength = len(''.join(total_modes)+' '+' '.join(total_params))
                 mode_amount = len(re.sub('[+-]', '', ''.join(total_modes)))
                 if mode_amount >= MAXMODES or totalLength >= 400:

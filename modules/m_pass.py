@@ -22,7 +22,7 @@ class Pass(ircd.Command):
             if client.registered:
                 return client.sendraw(462, ':You may not reregister')
             # Check for server password.
-            if 'password' in self.ircd.conf['allow'][client.cls]:
+            if client.cls and 'password' in self.ircd.conf['allow'][client.cls]:
                 if recv[1] == self.ircd.conf['allow'][client.cls]['password']:
                     client.server_pass_accepted = 1
                     logging.info('Server password accepted for {}'.format(client))

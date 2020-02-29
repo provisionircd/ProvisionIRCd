@@ -22,11 +22,13 @@ Y = '\033[33m' # yellow
 B = '\033[34m' # blue
 P = '\033[35m' # purple
 
+
 def syncChannels(localServer, newServer):
     for c in [c for c in localServer.channels if c.users and c.name[0] != '&']:
         modeparams = []
         for mode in c.modes:
             if mode in localServer.chan_params[c]:
+                logging.debug(f"Preparing param mode {mode} for syncing: {localServer.chan_params[c][mode]}")
                 modeparams.append(localServer.chan_params[c][mode])
         modeparams = ' {}'.format(' '.join(modeparams)) if modeparams else '{}'.format(' '.join(modeparams))
         memberlist, banlist, excepts, invex, prefix = [], [], [], [], ''
@@ -49,23 +51,33 @@ def syncChannels(localServer, newServer):
         e = ' '.join(['"' + x for x in [x for x in c.excepts]])+' ' if list(c.excepts) else ''
         I = ' '.join(["'" + x for x in [x for x in c.invex]])+' ' if list(c.invex) else ''
 
-        ### Loop over modules to fetch additional lists (m_whitelist) and append them to the end.
-        mod_list = ''
-        for callable in [callable for callable in localServer.hooks if callable[0].lower() == 'channel_lists_sync']:
-            try:
-                #logging.debug('Calling {}'.format(callable))
-                result = callable[2](localServer, c)
-                if result and result not in mod_list.split():
-                    t = ' ' if mod_list else ''
-                    mod_list += t+result
-            except Exception as ex:
-                logging.exception(ex)
 
-        data = '{} {} +{}{} :{} {}{}{}{}'.format(c.creation, c.name, c.modes, modeparams, memberlist, b, e, I, mod_list)
+
+
+        #mod = next((m for m in localServer.channel_mode_class if m.mode == chmode), None)
+
+        # List of mode classes of type 0.
+        modes_with_list = [m for m in localServer.channel_mode_class if m.type == 0 if hasattr(c, m.list_name)]
+        module_mode_lists = ''
+        for m in modes_with_list:
+            prefix = getattr(m, 'mode_prefix')
+            m_list_name = getattr(m, 'list_name') # whitelist
+            for entry in getattr(c, m_list_name):
+                module_mode_lists += prefix+entry+' '
+
+
+        module_mode_lists = module_mode_lists.strip()
+        logging.debug(f"Syncing modulair mode list: {module_mode_lists}")
+
+
+
+
+        data = '{} {} +{}{} :{} {}{}{}{}'.format(c.creation, c.name, c.modes, modeparams, memberlist, b, e, I, module_mode_lists)
         newServer._send(':{} SJOIN {}'.format(localServer.sid, data))
         if c.topic:
             data = ':{} TOPIC {} {} {} :{}'.format(localServer.sid, c.name, c.topic_author, c.topic_time, c.topic)
             newServer._send(data)
+
 
 def selfIntroduction(localServer, newServer, outgoing=False):
     try:
@@ -131,6 +143,7 @@ def syncUsers(localServer, newServer, local_only):
     except Exception as ex:
         logging.exception(ex)
 
+
 def syncData(localServer, newServer, selfRequest=True, local_only=False):
     if localServer.users:
         syncUsers(localServer, newServer, local_only=local_only)
@@ -172,6 +185,7 @@ def syncData(localServer, newServer, selfRequest=True, local_only=False):
     else:
         newServer._send(':{} PING {} {}'.format(localServer.sid, localServer.hostname, newServer.hostname))
     return
+
 
 class Link(threading.Thread):
     def __init__(self, origin=None, localServer=None, name=None, host=None, port=None, pswd=None, is_ssl=False, autoLink=False, incoming=True):
@@ -225,4 +239,4 @@ class Link(threading.Thread):
             logging.exception(ex)
             # Outgoing link timed out.
             if serv:
-                serv.squit(str(ex))
+                serv.quit(str(ex))

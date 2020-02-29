@@ -7,8 +7,12 @@ import re
 
 chmode = 'c'
 
-### Types: 0 = mask, 1 = require param, 2 = optional param, 3 no param.
-@ircd.Modules.channel_modes(chmode, 3, 3, 'Blocks messages containing colors') ### ('mode', type, level, 'Mode description', class 'user' or None, prefix, 'param desc')
+class Chmode_c(ircd.ChannelMode):
+    def __init__(self):
+        self.mode = chmode
+        self.desc = 'Blocks messages containing colors'
+
+
 @ircd.Modules.hooks.pre_chanmsg()
 def blockcolors_c(self, localServer, channel, msg):
     match = re.search("\x03(?:\d{1,2}(?:,\d{1,2})?)?", msg)

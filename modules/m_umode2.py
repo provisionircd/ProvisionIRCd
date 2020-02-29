@@ -4,7 +4,7 @@
 
 import ircd
 
-@ircd.Modules.command
+
 class Umode2(ircd.Command):
     def __init__(self):
         self.command = 'umode2'
@@ -12,7 +12,7 @@ class Umode2(ircd.Command):
 
     def execute(self, client, recv):
         ### :asdf UMODE2 +ot
-        target = [u for u in ircd.users if u.uid == recv[0][1:] or u.nickname == recv[0][1:]][0]
+        target = [u for u in self.ircd.users if u.uid == recv[0][1:] or u.nickname == recv[0][1:]][0]
         modeset = None
         for m in recv[2]:
             if m in '+-':

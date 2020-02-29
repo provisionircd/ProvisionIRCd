@@ -12,12 +12,13 @@ from handle.functions import logging
 
 chmode = 'H'
 
-@ircd.Modules.channel_mode
+
 class chmode_H(ircd.ChannelMode):
     def __init__(self):
         self.mode = chmode
         self.desc = 'Displays the message backlog to new users'
         self.type = 2
+        self.level = 4
         self.param_format = "<int>:<int>"
         self.param_help = '[maxlines:expire_in_minutes]'
 
@@ -68,7 +69,7 @@ def history_msg(self, localServer, channel, msg):
 
 @ircd.Modules.hooks.pre_local_chanmode(chmode)
 @ircd.Modules.hooks.pre_remote_chanmode(chmode)
-def chmode_H2(self, localServer, channel, modebuf, parambuf, action, param):
+def chmode_H2(self, localServer, channel, modebuf, parambuf, action, modebar, param):
     try:
         if action == '+':
             limit = int(param.split(':')[0])
@@ -86,9 +87,9 @@ def chmode_H2(self, localServer, channel, modebuf, parambuf, action, param):
             channel.msg_backlog['limit'] = limit
             channel.msg_backlog['expire'] = expire
             channel.msg_backlog['lines'] = []
-            #modebuf.append(m)
+            #modebuf.append(modebar)
             #parambuf.append(param)
-            #channel.modes += m
+            #channel.modes += modebar
             # Actually we should also add the chan_param here. BUT MEH FUCK IT.
             #return 0
         else:

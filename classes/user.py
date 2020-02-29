@@ -595,12 +595,12 @@ class User:
             if not self.cls or block:
                 return self.quit('You are not authorized to connect to this server')
 
-            totalClasses = list(filter(lambda u: u.registered and u.server == self.server and u.cls == self.cls, self.server.users))
+            totalClasses = list(filter(lambda u: u.server == self.server and u.cls == self.cls, self.server.users))
             if len(totalClasses) > int(self.server.conf['class'][self.cls]['max']):
                 return self.quit('Maximum connections for this class reached')
 
-            clones = list(filter(lambda u: u.registered and u.socket and u.ip == self.ip, self.server.users))
-            if len(clones) > int(self.server.conf['allow'][self.cls]['maxperip']):
+            clones = [u for u in self.server.users if u.socket and u.ip == self.ip]
+            if len(clones) >= int(self.server.conf['allow'][self.cls]['maxperip']):
                 return self.quit('Maximum connections from your IP')
 
             # Resolve IP in the background to test against deny-block matches, if host resolution is disabled.

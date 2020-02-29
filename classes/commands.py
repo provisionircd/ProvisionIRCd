@@ -71,37 +71,37 @@ class Command:
         raise CommandError(error)
 
 
-    def check(self, user, recv):
+    def check(self, client, recv):
         cmd = recv[0].upper()
-        if type(user).__name__ != self.req_class and self.req_class == 'Server':
-            user.sendraw(ERR.SERVERONLY, ':{} is a server only command'.format(cmd))
+        if type(client).__name__ != self.req_class and self.req_class == 'Server':
+            client.sendraw(ERR.SERVERONLY, ':{} is a server only command'.format(cmd))
             return 0
         received_params = len(recv) - 1
         if received_params < self.params:
-            user.sendraw(ERR.NEEDMOREPARAMS, ':{} Not enough parameters. Required: {}'.format(cmd, self.params))
+            client.sendraw(ERR.NEEDMOREPARAMS, ':{} Not enough parameters. Required: {}'.format(cmd, self.params))
             return 0
 
-        if self.req_modes:
+        if self.req_modes and type(client).__name__ != 'Server':
             req_modes = ' '.join(self.req_modes)
-            if 'o' in req_modes and 'o' not in user.modes:
-                user.sendraw(ERR.NOPRIVILEGES, ':Permission denied - You are not an IRC Operator')
+            if 'o' in req_modes and 'o' not in client.modes:
+                client.sendraw(ERR.NOPRIVILEGES, ':Permission denied - You are not an IRC Operator')
                 return 0
 
-            forbid = set(req_modes).difference(set(user.modes))
+            forbid = set(req_modes).difference(set(client.modes))
             if forbid:
-                user.sendraw(ERR.NOPRIVILEGES, ':Permission denied - Required mode not set')
+                client.sendraw(ERR.NOPRIVILEGES, ':Permission denied - Required mode not set')
                 return 0
 
             if self.req_flags:
                 forbid = 1
                 if '|' in self.req_flags:
-                    if list(filter(lambda f: f in user.operflags, self.req_flags.split('|'))):
+                    if list(filter(lambda f: f in client.operflags, self.req_flags.split('|'))):
                         forbid = False
                         logging.debug('You have one of the required flags. Allowing command.')
                 else:
-                    forbid = set([self.req_flags]).difference(set(user.operflags))
+                    forbid = set([self.req_flags]).difference(set(client.operflags))
                 if forbid:
-                    user.sendraw(ERR.NOPRIVILEGES, ':Permission denied - You do not have the correct IRC Operator privileges')
+                    client.sendraw(ERR.NOPRIVILEGES, ':Permission denied - You do not have the correct IRC Operator privileges')
                     return 0
         return 1
 

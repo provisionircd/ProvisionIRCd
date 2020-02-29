@@ -635,3 +635,41 @@ def save_db(ircd):
         logging.debug('TKL data changed, updating file... If this message gets spammed, you probably have another instance running.')
         with open(ircd.rootdir+'/db/tkl.db', 'w+') as f:
             json.dump(ircd.tkl, f)
+
+
+def make_mask(ircd, data):
+    if not data:
+        return
+    nick, ident, host = '', '', ''
+    nick = data.split('!')[0]
+    if nick == '' or '@' in nick or ('.' in nick and '@' not in data):
+        nick = '*'
+    if len(nick) > ircd.nicklen:
+        nick = '*{}'.format(nick[-20:])
+    try:
+        if '@' in data:
+            ident = data.split('@')[0]
+            if '!' in ident:
+                ident = data.split('@')[0].split('!')[1]
+        else:
+            ident = data.split('!')[1].split('@')[0]
+    except:
+        ident = '*'
+    if ident == '':
+        ident = '*'
+    if len(ident) > 12:
+        ident = '*{}'.format(ident[-12:])
+    try:
+        host = data.split('@')[1]
+    except:
+        if '.' in data:
+            try:
+                host = ''.join(data.split('@'))
+            except:
+                host = '*'
+    if len(host) > 64:
+        host = '*{}'.format(host[-64:])
+    if host == '':
+        host = '*'
+    result = '{}!{}@{}'.format(nick, ident, host)
+    return result

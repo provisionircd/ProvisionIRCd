@@ -12,8 +12,8 @@ import importlib
 import argparse
 import atexit
 import handle.handleConf
-from handle.handleLink import Link as link
 import handle.handleModules as Modules
+from handle.handleLink import Link as link
 from collections import OrderedDict
 import select
 try:
