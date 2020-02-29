@@ -724,7 +724,7 @@ class User:
 
 
     def ocheck(self, mode, flag):
-        ircd = self.server if self.socket else self.ircd
+        ircd = self.server if self.socket else self.localServer
         if (mode in self.modes and flag in self.operflags) or self.server.hostname.lower() in ircd.conf['settings']['ulines']:
             return True
         return False

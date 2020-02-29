@@ -85,7 +85,7 @@ class Sjoin(ircd.Command):
             # Custom list. In the beginning of SJOIN args.
             custom_mode_list = {}
             list_prefix = pos[0] # Like ^
-            local_chan = next((c for c in self.ircd.channels if c.name == channel), None)
+
 
             for m in [m for m in self.ircd.channel_mode_class if m.type == 0 and m.mode_prefix == list_prefix]:
                 # 2020/02/29 05:31:20 DEBUG [m_sjoin]: Set lokale <ChannelMode 'w'>
@@ -133,6 +133,7 @@ class Sjoin(ircd.Command):
 
             userClass.handle('join', channel, params=p)
             localChan = list(filter(lambda c: c.name.lower() == channel.lower(), self.ircd.channels))[0]
+            local_chan = next((c for c in self.ircd.channels if c.name == channel), None)
 
             if not local_chan:
                 logging.error(f"ERROR: Could not find or create local channel: {channel}")
@@ -285,6 +286,7 @@ class Sjoin(ircd.Command):
         elif timestamp == local_chan.creation and not source.eos:
             if modes:
                 logging.info('{}Equal timestamps for remote channel {} -- merging modes.{}'.format(Y, local_chan.name, W))
+                logging.debug(f"Modes: {modes}")
                 for member in memberlist:
                     rawUid = re.sub('[:*!~&@%+]', '', member)
                     if '*' in member:

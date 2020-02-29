@@ -70,6 +70,10 @@ class Protoctl(ircd.Command):
                         if 'EXTBAN' in self.ircd.support:
                             local_prefix = self.ircd.support['EXTBAN'][0]
                         if remote_prefix != local_prefix:
+
+                            error = 'Link denied for {}[{}:{}]: extban prefixes are not the same. We have: {} but they have: {}'.format(
+                            client.hostname, ip, port, remote_prefix, local_prefix  )
+
                             client._send(':{} ERROR :extban prefixes are not the same. We have: {} but they have: {}'.format(client.sid, remote_prefix, local_prefix))
                             client.quit('extban prefixes are not the same. We have: {} but they have: {}'.format(local_prefix, remote_prefix))
                             return
@@ -79,7 +83,9 @@ class Protoctl(ircd.Command):
                         for m in [m for m in remote_ban_types if m not in local_ban_types]:
                             missing_ext_types.append(m)
                         if missing_ext_types:
-                            client._send(':{} ERROR :they are missing ext bans: {}'.format(client.sid, ', '.join(missing_ext_types)))
+                            error = 'Link denied for {}[{}:{}]: they are missing ext bans: {}'.format(
+                            client.hostname, ip, port, ', '.join(missing_ext_types)  )
+
                             client.quit('we are missing ext bans: {}'.format(', '.join(missing_ext_types)))
                             return
 

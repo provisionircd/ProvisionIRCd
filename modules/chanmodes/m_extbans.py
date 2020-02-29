@@ -342,11 +342,12 @@ def join(self, localServer, channel, **kwargs):
     except Exception as ex:
         logging.exception(ex)
 
+
 @ircd.Modules.hooks.pre_chanmsg()
-def pre_chanmsg(self, localServer, channel, msg):
-    if checkExtMatch('b', 'block', channel, msg) and self.chlevel(channel) < 3 and not self.ocheck('o', 'override'):
-        self.sendraw(404, '{} :Cannot send to channel (+b ~T)'.format(channel.name))
+def pre_chanmsg(client, localServer, channel, msg):
+    if checkExtMatch('b', 'block', channel, msg) and client.chlevel(channel) < 3 and not client.ocheck('o', 'override'):
+        client.sendraw(404, '{} :Cannot send to channel (+b ~T)'.format(channel.name))
         return 0
-    if checkExtMatch('b', 'replace', channel, msg) and self.chlevel(channel) < 5 and not self.ocheck('o', 'override'):
+    if checkExtMatch('b', 'replace', channel, msg) and client.chlevel(channel) < 5 and not client.ocheck('o', 'override'):
         msg = checkExtMatch('b', 'replace', channel, msg)
     return msg

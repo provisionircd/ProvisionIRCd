@@ -30,6 +30,7 @@ def syncChannels(localServer, newServer):
             if mode in localServer.chan_params[c]:
                 logging.debug(f"Preparing param mode {mode} for syncing: {localServer.chan_params[c][mode]}")
                 modeparams.append(localServer.chan_params[c][mode])
+
         modeparams = ' {}'.format(' '.join(modeparams)) if modeparams else '{}'.format(' '.join(modeparams))
         memberlist, banlist, excepts, invex, prefix = [], [], [], [], ''
         for user in [user for user in c.users if '^' not in user.modes]:

@@ -602,7 +602,7 @@ class Server:
                 del localServer.sync_queue[self]
 
             if self.socket and reason:
-                self._send('ERROR :Closing link: [{}] ({})'.format(self.socket.getpeername()[0] if not self.hostname else self.hostname, reason))
+                self._send(':{} ERROR :Closing link: [{}] ({})'.format(self.sid, self.socket.getpeername()[0] if not self.hostname else self.hostname, reason))
 
             while self.sendbuffer:
                 logging.info('Server {} has sendbuffer remaining: {}'.format(self, self.sendbuffer.rstrip()))
