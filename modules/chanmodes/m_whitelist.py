@@ -7,7 +7,7 @@ import time
 import os
 import sys
 import re
-from handle.functions import logging, match make_mask
+from handle.functions import logging, match, make_mask
 from collections import OrderedDict
 
 chmode = 'w'
