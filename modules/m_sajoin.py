@@ -50,7 +50,7 @@ class Sajoin(ircd.Command):
             prefix = ''
             for mode in [mode for mode in self.ircd.chprefix if mode in chan_class.usermodes[target]]:
                 prefix += self.ircd.chprefix[mode]
-            data = ':{} SJOIN {} {}{} :{}{}'.format(client.server.sid, chan_class.creation, chan_class.name, ' +{}'.format(chan_class.modes) if chan_class.modes and chan_class.users == [target[0]] else '', prefix, target[0].uid)
+            data = ':{} SJOIN {} {}{} :{}{}'.format(client.server.sid, chan_class.creation, chan_class.name, ' +{}'.format(chan_class.modes) if chan_class.modes and chan_class.users == [target] else '', prefix, target.uid)
             target.server._send(data)
 
         client.flood_penalty += 100000

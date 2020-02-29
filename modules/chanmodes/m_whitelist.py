@@ -136,7 +136,7 @@ def destroy(self, ircd, channel):
     if not mod:
         logging.error(f"Module for channele mode '{chmode}' not found.")
         return
-    setattr(chan, mod.list_name, {})
+    setattr(channel, mod.list_name, {})
 
 
 def init(ircd, reload=False):
