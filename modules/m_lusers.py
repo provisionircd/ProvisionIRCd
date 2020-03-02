@@ -4,7 +4,7 @@
 
 import ircd
 
-@ircd.Modules.command
+
 class Lusers(ircd.Command):
     """
     View user statistics.

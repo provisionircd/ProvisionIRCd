@@ -10,7 +10,7 @@ from handle.functions import match
 
 NICKLEN = 33
 
-@ircd.Modules.command
+
 class Nick(ircd.Command):
     """
     Changes your nickname. Users you share a channel with will be notified of this change.

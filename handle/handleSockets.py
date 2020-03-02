@@ -143,7 +143,7 @@ def sock_accept(ircd, s):
                 ircd.pollerObject.register(conn, READ_ONLY)
             port = conn.getsockname()[1]
             is_ssl = is_sslport(ircd, port)
-
+            conn.settimeout(10)
             if is_ssl and not ircd.pre_wrap:
                 is_ssl = 0
                 version = '{}{}'.format(sys.version_info[0], sys.version_info[1])

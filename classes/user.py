@@ -66,7 +66,7 @@ class blacklist_check(threading.Thread):
                 msg = '*** DNSBL match for IP {}: {} [nick: {}]'.format(user.ip, blacklist, user.nickname)
                 user.server.snotice('d', msg)
             if user in user.server.users:
-                user._send(':{} 304 * :{}'.format(user.server.hostname, reason))
+                user.sendraw(RPL.TEXT, f"* :{reason}")
             user.sendbuffer = ''
             user.recvbuffer = ''
             user.quit(reason)
@@ -84,7 +84,7 @@ def DNSBLCheck(self):
     if user.ip in ircd.dnsblCache:
         reason = 'Your IP is blacklisted by {}'.format(ircd.dnsblCache[user.ip]['bl']+' [cached]')
         for u in iter([u for u in list(ircd.users) if u.ip == user.ip]):
-            u.sendraw(f':{ircd.hostname} {RPL.TEXT} * :{reason}')
+            u.sendraw(RPL.TEXT, f"* :{reason}")
             u.sendbuffer = ''
             u.recvbuffer = ''
             u.quit(reason)
@@ -198,6 +198,9 @@ class User:
                 #while list(filter(lambda u: u.uid == self.uid, self.server.users)):
                     self.uid = '{}{}'.format(self.server.sid, ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(6)))
 
+                self.lastPingSent = time.time() * 1000
+                self.lag_measure = self.lastPingSent
+
                 self.server.users.append(self)
                 for callable in [callable for callable in server.hooks if callable[0].lower() == 'new_connection']:
                     try:
@@ -237,9 +240,6 @@ class User:
                 self.server.throttle[self] = {}
                 self.server.throttle[self]['ip'] = self.ip
                 self.server.throttle[self]['ctime'] = int(time.time())
-
-                self.lastPingSent = time.time() * 1000
-                self.lag_measure = self.lastPingSent
                 self.server.totalcons += 1
 
                 if self.ssl and self.socket:

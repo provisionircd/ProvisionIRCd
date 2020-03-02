@@ -22,7 +22,7 @@ class Kill(ircd.Command):
             target = list(filter(lambda u: u.nickname.lower() == recv[2].lower() or u.uid.lower() == recv[2].lower(), self.ircd.users))
             if not target:
                 return
-            quitmsg = ' '.join(recv[3:])[1:]
+
             S = recv[0][1:]
             source = [s for s in self.ircd.servers+[self.ircd] if s.sid == S or s.hostname == S]+[u for u in self.ircd.users if u.uid == S or u.nickname == S]
             if not source:
@@ -34,9 +34,13 @@ class Kill(ircd.Command):
             else:
                 sourceID = source.sid
                 path = source.hostname
+
+            reason = quitmsg = ' '.join(recv[3:])[1:]
+            quitmsg = '[{}] Global kill by {} ({})'.format(client.hostname, path, reason)
+
             if target[0].socket:
-                target[0].sendraw(self.RPL.TEXT, '{}'.format(':[{}] {}'.format(path, quitmsg)))
-            data = ':{} KILL {} :{}'.format(sourceID, target[0].uid, quitmsg)
+                target[0].sendraw(self.RPL.TEXT, '{}'.format(':[{}] {}'.format(path, reason)))
+            data = ':{} KILL {} :{}'.format(sourceID, target[0].uid, reason)
             self.ircd.new_sync(self.ircd, client, data)
             target[0].quit(quitmsg, kill=True)
             return
@@ -67,6 +71,7 @@ class Kill(ircd.Command):
         self.ircd.snotice('k', msg)
 
         quitmsg = '[{}] {} kill by {} ({})'.format(client.server.hostname, 'Local' if target[0].server == self.ircd else 'Global', client.nickname, reason)
-        data = ':{} KILL {} :{}'.format(client.uid, target[0].uid, quitmsg)
+        #data = ':{} KILL {} :{}'.format(client.uid, target[0].uid, quitmsg)
+        data = ':{} KILL {} :{}'.format(client.uid, target[0].uid, reason)
         self.ircd.new_sync(self.ircd, client.server, data)
         target[0].quit(quitmsg, kill=True)

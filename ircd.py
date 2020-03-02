@@ -641,8 +641,11 @@ class Server:
             del gc.garbage[:]
 
             if not localServer.forked:
-                logging.debug('[SERVER] Growth after self.quit() (if any):')
-                objgraph.show_growth(limit=10)
+                try:
+                    logging.debug('[SERVER] Growth after self.quit() (if any):')
+                    objgraph.show_growth(limit=10)
+                except:
+                    pass
 
             del self
 

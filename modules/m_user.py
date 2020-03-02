@@ -5,7 +5,6 @@
 import ircd
 
 
-@ircd.Modules.command
 class User(ircd.Command):
     """
     Used to register your connection to the server
