@@ -12,7 +12,6 @@ import re
 MAXTARGETS = 20
 
 
-@ircd.Modules.command
 class Privmsg(ircd.Command):
     """
     Send a direct message to a channel or user.
@@ -24,10 +23,11 @@ class Privmsg(ircd.Command):
 
 
     def execute(self, client, recv, override=False):
+        #print(f": /privmsg: {client} :: {recv}")
         if type(client).__name__ == 'Server':
             sourceServer = client
             sourceID = client.sid
-            override = True
+            override = 1
             if client != self.ircd:
                 S = recv[0][1:]
                 source = [s for s in self.ircd.servers+[self.ircd] if s.sid == S or s.hostname == S]+[u for u in self.ircd.users if u.uid == S or u.nickname == S]
@@ -39,7 +39,7 @@ class Privmsg(ircd.Command):
             sourceServer = client.server
             sourceID = client.uid
             if client.ocheck('o', 'override'):
-                override = True
+                override = 1
 
         if len(recv) < 2:
             return client.sendraw(self.ERR.NORECIPIENT, ':No recipient given')
@@ -66,7 +66,7 @@ class Privmsg(ircd.Command):
                 if type(client).__name__ == 'User' and checkSpamfilter(client, self.ircd, user.nickname, 'private', msg):
                     continue
 
-                if type(client).__name__ == 'User':
+                if type(client).__name__ == 'User' and client.server == self.ircd:
                     block_msg = 0
                     for callable in [callable for callable in self.ircd.hooks if callable[0].lower() == 'pre_usermsg']:
                         try:
@@ -94,6 +94,7 @@ class Privmsg(ircd.Command):
                     data = ':{} PRIVMSG {} :{}'.format(sourceID, user.nickname, msg)
                     self.ircd.new_sync(self.ircd, sourceServer, data, direct=user.server)
 
+
             else:
                 channel = [channel for channel in self.ircd.channels if channel.name.lower() == target.lower()]
 
@@ -118,7 +119,8 @@ class Privmsg(ircd.Command):
                         client.sendraw(self.ERR.CANNOTSENDTOCHAN, '{} :Cannot send to channel (+m)'.format(channel.name))
                         continue
 
-                if type(client).__name__ == 'User':
+
+                if type(client).__name__ == 'User' and client.server == self.ircd:
                     block_msg = 0
                     for callable in [callable for callable in self.ircd.hooks if callable[0].lower() == 'pre_chanmsg']:
                         try:
@@ -211,7 +213,8 @@ class Notice(ircd.Command):
                 if type(client).__name__ == 'User' and checkSpamfilter(client, self.ircd, user.nickname, 'private', msg):
                     continue
 
-                if type(client).__name__ == 'User':
+
+                if type(client).__name__ == 'User' and client.server == self.ircd:
                     block_msg = 0
                     for callable in [callable for callable in self.ircd.hooks if callable[0].lower() == 'pre_usernotice']:
                         try:
@@ -251,7 +254,8 @@ class Notice(ircd.Command):
                 if type(client).__name__ == 'User' and checkSpamfilter(client, self.ircd, channel.name, 'channel', msg):
                     continue
 
-                if type(client).__name__ == 'User':
+
+                if type(client).__name__ == 'User' and client.server == self.ircd:
                     block_msg = 0
                     for callable in [callable for callable in self.ircd.hooks if callable[0].lower() == 'pre_channotice']:
                         try:
