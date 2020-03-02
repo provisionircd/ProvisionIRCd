@@ -7,6 +7,7 @@ import collections
 import time
 import ssl
 import gc
+import re
 import ircd
 gc.enable()
 
@@ -78,11 +79,13 @@ confOpers = []
 confLinks = []
 #conffile = ''
 
+
 def conferr(msg, noConf=False, err_conf=''):
     global errors
     if not noConf:
         msg = '{}{}'.format(err_conf+': ' if err_conf else '', msg)
     errors.append(msg)
+
 
 def checkConf(localServer, user, confdir, conffile, rehash=False):
     global errors
@@ -127,6 +130,11 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
         localServer.name = tempconf['me']['name']
         localServer.sid = tempconf['me']['sid']
 
+
+        if not os.path.isfile("conf/ircd.motd"):
+            conferr("conf/ircd.motd not found")
+
+
         if 'admin' not in tempconf:
             conferr('\'admin\' block not found!')
 
@@ -151,7 +159,7 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
 
             if not os.path.isfile(default_cert) or not os.path.isfile(default_key):
                 conferr("You have one or more SSL ports listening but there are files missing in {}/ssl/ folder. Make sure you have 'server.cert.pem' and 'server.key.pem' present!".format(localServer.rootdir), noConf=True)
-                conferr("You can create self-signed certs (not recommended) by issuing the following command in your terminal: openssl req -x509 -newkey rsa:4096 -keyout server.key.pem -out server.cert.pem", noConf=True)
+                conferr("You can create self-signed certs (not recommended) by issuing the following command in your terminal: openssl req -x509 -nodes -newkey rsa:4096 -keyout server.key.pem -out server.cert.pem", noConf=True)
                 conferr("or you can get a free CA cert from Let's Encrypt: https://letsencrypt.org", noConf=True)
 
 
@@ -211,6 +219,7 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
                 if 'max' not in tempconf['class'][cls]:
                     conferr('\'max\' missing for class \'{}\''.format(cls))
 
+
         if 'allow' not in tempconf:
             conferr('\'allow\' block not found')
         else:
@@ -223,8 +232,10 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
                     if 'maxperip' not in tempconf['allow'][cls]:
                         conferr('\'maxperip\' missing for allow-class \'{}\''.format(cls))
 
+
         if 'settings' not in tempconf:
             conferr('\'settings\' block not found!')
+
         else:
             reqvalues = ['cloak-key', 'throttle', 'nickflood', 'regtimeout', 'restartpass', 'diepass']
             for v in reqvalues:
@@ -250,6 +261,18 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
             if 'regtimeout' in tempconf['settings']:
                 if not str(tempconf['settings']['regtimeout']).isdigit() or not isinstance(tempconf['settings']['regtimeout'], int):
                     conferr('invalid \'regtimeout\' in settings-block: must be an integer')
+
+            if 'cloak-prefix' in tempconf['settings'] and tempconf['settings']['cloak-prefix']:
+                prefix = tempconf['settings']['cloak-prefix']
+                if len(prefix) > 5:
+                    conferr('\'cloak-prefix\' is set, but exceeds the maximum length, which is 5')
+                else:
+                    p = re.compile("(^[a-zA-Z0-9]{1,5}$)")
+                    match = p.search(prefix)
+                    if not match:
+                        conferr('invalid \'cloak-prefix\': only AZ-az0-9 characters are allowed, up to 5')
+
+
 
         if 'ulines' in tempconf['settings'] and not isinstance(tempconf['settings']['ulines'], list):
             conferr('invalid \'ulines\' in settings-block: must be a list')
@@ -545,6 +568,7 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
         return 1
     gc.collect()
     return 1
+
 
 def check_opers(tempconf, err_conf):
     if 'opers' not in tempconf: # or 'operclass' not in tempconf:

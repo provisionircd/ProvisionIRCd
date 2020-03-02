@@ -10,7 +10,6 @@ W  = '\033[0m'  # white (normal)
 P  = '\033[35m' # purple
 
 
-@ircd.Modules.command
 class Protoctl(ircd.Command):
     def __init__(self):
         self.command = 'protoctl'
@@ -56,9 +55,9 @@ class Protoctl(ircd.Command):
                             # The error is outgoing and will be displayed on the REMOTE server.
                             ip, port = client.socket.getpeername()
                             error = 'Link denied for {}[{}:{}]: they are missing channel modes: {}'.format(
-                            client.hostname, ip, port, ', '.join(missing_modes)  )
+                            client.hostname, ip, port, ', '.join(missing_modes) )
 
-                            client._send(':{} ERROR :{}'.format(client.sid, error))
+                            client._send(':{} ERROR :{}'.format(self.ircd.sid, error))
 
                             client.quit('we are missing channel modes: {}'.format(', '.join(missing_modes)))
                             return
@@ -70,11 +69,11 @@ class Protoctl(ircd.Command):
                         if 'EXTBAN' in self.ircd.support:
                             local_prefix = self.ircd.support['EXTBAN'][0]
                         if remote_prefix != local_prefix:
-
+                            ip, port = client.socket.getpeername()
                             error = 'Link denied for {}[{}:{}]: extban prefixes are not the same. We have: {} but they have: {}'.format(
-                            client.hostname, ip, port, remote_prefix, local_prefix  )
+                            client.hostname, ip, port, remote_prefix, local_prefix )
 
-                            client._send(':{} ERROR :extban prefixes are not the same. We have: {} but they have: {}'.format(client.sid, remote_prefix, local_prefix))
+                            client._send(':{} ERROR :extban prefixes are not the same. We have: {} but they have: {}'.format(self.ircd.sid, remote_prefix, local_prefix))
                             client.quit('extban prefixes are not the same. We have: {} but they have: {}'.format(local_prefix, remote_prefix))
                             return
                         local_ban_types = self.ircd.support['EXTBAN'][1:]
@@ -85,13 +84,13 @@ class Protoctl(ircd.Command):
                         if missing_ext_types:
                             error = 'Link denied for {}[{}:{}]: they are missing ext bans: {}'.format(
                             client.hostname, ip, port, ', '.join(missing_ext_types)  )
-
+                            client._send(':{} ERROR :{}'.format(self.ircd.sid, error))
                             client.quit('we are missing ext bans: {}'.format(', '.join(missing_ext_types)))
                             return
 
                 except Exception as ex:
                     logging.exception(ex)
-                    client.quit(ex)
+                    client.quit(str(ex))
 
                 logging.info('{}Added PROTOCTL support for {} for server {}{}'.format(P, p, client, W))
 

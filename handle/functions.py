@@ -483,6 +483,7 @@ def cloak(client):
 
     if host.replace('.', '').isdigit():
         cloak3 = hex(binascii.crc32(bytes(hex_dig[64:96], 'utf-8')) % (1<<32))[2:]
+
         cloakhost = cloak1+'.'+cloak2+'.'+cloak3+'.IP'
         return cloakhost
     c = 0
@@ -493,7 +494,12 @@ def cloak(client):
     if c == 1:
         c += 1
     host = '.'.join(host.split('.')[c-1:])
-    cloakhost = cloak1+'.'+cloak2+'.'+host
+
+    prefix = ''
+    if 'cloak-prefix' in ircd.conf['settings']:
+        prefix = ircd.conf['settings']['cloak-prefix']+'-'
+
+    cloakhost = prefix+cloak1+'.'+cloak2+'.'+host
     return cloakhost
 
 
