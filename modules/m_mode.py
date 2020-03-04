@@ -700,6 +700,7 @@ def chgumode(client, ircd, recv, override, sourceServer=None, sourceUser=None):
                     if m not in unknown and not override:
                         unknown.append(m)
                     continue
+
                 if m in 'z' and not override:
                     if m not in warn:
                         client.sendraw(ircd.ERR.UMODEUNKNOWNFLAG, 'Mode +{} may only be set by servers'.format(m))
@@ -708,14 +709,18 @@ def chgumode(client, ircd, recv, override, sourceServer=None, sourceUser=None):
                     warn = []
                 if m in 'ohsqHW' and (not client.operaccount or m not in ircd.conf['opers'][client.operaccount]['modes']) and not override:
                     continue
+
+
                 if action == '+':
                     if m == 'x':
                         cloaked = cloak(client)
                         client.setinfo(cloaked, t='host', source=sourceServer)
                         client.cloakhost = cloaked
+
                     elif m == 'S' and client.server.hostname not in ircd.conf['settings']['ulines']:
                         client.sendraw(ircd.ERR.UMODEUNKNOWNFLAG, 'Mode +{} may only be set by servers'.format(m))
                         continue
+
                     elif m == 's':
                         if len(recv) > 3:
                             for s in recv[3]:
@@ -735,8 +740,8 @@ def chgumode(client, ircd, recv, override, sourceServer=None, sourceUser=None):
                         updated = []
                         for user in ircd.users:
                             for user in [user for user in ircd.users if 'operwatch' in user.caplist and user not in updated and user.socket]:
-                                common_chan = list(filter(lambda c: user in c.users and client in c.users, ircd.channels))
-                                if not common_chan:
+                                #common_chan = list(filter(lambda c: user in c.users and client in c.users, ircd.channels))
+                                if not [c for c in ircd.channels if user in c.users and client in c.users]:
                                     continue
                                 user._send(':{} UMODE {}{}'.format(client.fullmask(), action, m))
                                 updated.append(user)
@@ -754,13 +759,17 @@ def chgumode(client, ircd, recv, override, sourceServer=None, sourceUser=None):
                 if action == '-' and m in target.modes:
                     if m == 'x':
                         client.setinfo(client.hostname, t='host', source=sourceServer)
+
                     elif m == 'S' and client.server.hostname not in ircd.conf['settings']['ulines']:
                         client.sendraw(ircd.ERR.UMODEUNKNOWNFLAG, 'Mode +{} may only be set by servers'.format(m))
                         continue
+
                     elif m == 'r':
                         target.svid = '*'
+
                     elif m == 's':
                         target.snomasks = ''
+
                     elif m == 'o':
                         target.operflags = []
                         ### Assign a class.
@@ -783,6 +792,7 @@ def chgumode(client, ircd, recv, override, sourceServer=None, sourceUser=None):
                                 modebuf.append(mode)
                                 if mode == 's':
                                     target.snomasks = ''
+
                         if target.swhois:
                             operSwhois = ''
                             if 'swhois' in ircd.conf['opers'][target.operaccount]:
