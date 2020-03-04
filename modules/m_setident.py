@@ -12,7 +12,7 @@ class Setident(ircd.Command):
 
     def execute(self, client, recv):
         if type(client).__name__ == 'Server':
-            source = self
+            source = client
             client = next((u for u in self.ircd.users if u.uid == recv[0][1:] or u.nickname == recv[0][1:]), None)
             if not client:
                 return
