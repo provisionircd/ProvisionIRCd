@@ -18,7 +18,6 @@ from handle.functions import is_sslport, logging
 stats = 'deglpuCGLO'
 
 
-@ircd.Modules.command
 class Stats(ircd.Command):
     """
     View several server stats.
@@ -42,19 +41,17 @@ class Stats(ircd.Command):
             client.sendraw(210, ':G - View the global TKL info')
             client.sendraw(210, ':L - View link all information, including unlinked')
             client.sendraw(210, ':O - Send the oper block list')
-            client.sendraw(219, '* :End of /STATS report')
-            return
+            return client.sendraw(219, '* :End of /STATS report')
 
         elif recv[1] not in stats:
-            client._send(':{} NOTICE {} :* STATS -- Unknown stats "{}"'.format(self.ircd.hostname, client.uid, recv[1]))
-            return
+            return client._send(':{} NOTICE {} :* STATS -- Unknown stats "{}"'.format(self.ircd.hostname, client.uid, recv[1]))
 
         if recv[1] == 'C':
             client.sendraw(210, ':{} socket: {}'.format(self.ircd, self.ircd.socket))
             client.sendraw(210, ':Total connected users in local server.users list: {}'.format(len(self.ircd.users)))
             for u in self.ircd.users:
                 hopcount = 0 if u.server == self.ircd else u.server.hopcount
-                client.sendraw(210, ':            {} ({}) :: refcount: {}, class: {}, hopcount: {}'.format(u, u.ip ,sys.getrefcount(u), u.cls if u.server == self.ircd else 'remote user', hopcount))
+                client.sendraw(210, ':            {} ({}) :: refcount: {}, class: {}, hopcount: {}'.format(u, u.ip, sys.getrefcount(u), u.cls if u.server == self.ircd else 'remote user', hopcount))
             client.sendraw(210, ':Total connected servers in local server.servers list (not including local): {}'.format(len(self.ircd.servers)))
             displayed = []
             for s in self.ircd.servers:
