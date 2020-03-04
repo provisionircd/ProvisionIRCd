@@ -1,36 +1,33 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 /setident command
 """
 
 import ircd
-import sys
-import os
 
-@ircd.Modules.params(1)
-@ircd.Modules.req_modes('o')
-@ircd.Modules.commands('setident')
-def setident(self, localServer, recv):
-    if type(self).__name__ == 'Server':
-        source = self
-        self = list(filter(lambda u: u.uid == recv[0][1:] or u.nickname == recv[0][1:], localServer.users))
-        if not self:
+class Setident(ircd.Command):
+    def __init__(self):
+        self.command = 'setident'
+        self.param = 1
+        self.req_modes = 'o'
+
+    def execute(self, client, recv):
+        if type(client).__name__ == 'Server':
+            source = self
+            client = next((u for u in self.ircd.users if u.uid == recv[0][1:] or u.nickname == recv[0][1:]), None)
+            if not client:
+                return
+            recv = recv[1:]
+            ident = str(recv[1]).strip()
+            client.setinfo(ident, t='ident', source=source)
             return
-        self = self[0]
-        recv = recv[1:]
-        ident = str(recv[1]).strip()
-        self.setinfo(ident, t='ident', source=source)
-        return
-    else:
-        source = self.server
+        else:
+            source = self.ircd
 
-    ident = str(recv[1][:64]).strip()
-    valid = 'abcdefghijklmnopqrstuvwxyz0123456789.-'
-    for c in str(ident):
-        if c.lower() not in valid:
-            ident = ident.replace(c, '')
-    if ident and ident != self.ident:
-        self.setinfo(ident, t='ident', source=source)
-        localServer.notice(self, '*** Your ident is now "{}"'.format(self.ident))
+        ident = str(recv[1][:64]).strip()
+        valid = 'abcdefghijklmnopqrstuvwxyz0123456789.-'
+        for c in str(ident):
+            if c.lower() not in valid:
+                ident = ident.replace(c, '')
+        if ident and ident != client.ident:
+            client.setinfo(ident, t='ident', source=source)
+            self.ircd.notice(client, '*** Your ident is now "{}"'.format(client.ident))
