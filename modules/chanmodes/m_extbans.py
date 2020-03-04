@@ -17,6 +17,9 @@ support for extended bans
 #      +b ~b:R:*!*@annoying.host - bans *!*@annoying.host from the channel, unless the user has a registered nick.
 #                                  this allows for more control against annoying users that keep requesting new IPs from their ISP,
 #                                  forcing them to log in to NickServ before joining the channel.
+# ~L - redirect ban
+#       +b ~L:host:#chan           Redirects everyone with a matching host to another channel.
+#
 
 import ircd
 import time
@@ -26,7 +29,7 @@ from modules.m_joinpart import checkMatch
 
 from handle.functions import match, logging, make_mask
 
-ext_bans = ['T', 't', 'c', 'O', 'a', 'b']
+ext_bans = ['L', 'T', 't', 'c', 'O', 'a', 'b']
 prefix = '~'
 
 def checkExtMatch(type, action, channel, msg):
@@ -163,9 +166,27 @@ def extbans(self, localServer, channel, modebuf, parambuf, action, modebar, para
             setter = self.hostname
 
         if modebar == 'b':
-            if param[:2] not in ['~T', '~c', '~t', '~b']:
+            if param[:2] not in ['~L', '~T', '~c', '~t', '~b']:
                 return
-            if param[:2] == '~T':
+
+            if param[:2] == '~L':
+                ### Channel redirect. ~L:host:#chan
+                if len(param.split(':')) < 3:
+                    return
+                redirect_mask = make_mask(localServer, param.split(':')[1])
+                redirect_chan = param.split(':')[2]
+                param = param[:2]+':'+redirect_mask+':'+redirect_chan
+                if redirect_chan[0] not in localServer.chantypes:
+                    logging.info('Channel {} is invalid for {}{} {}'.format(redirect_chan, action, modebar, param))
+                    return
+                redirect_chan = next((c for c in localServer.channels if c.name.lower() == redirect_chan.lower()), None)
+                if redirect_chan and 'L' in redirect_chan.modes:
+                    logging.info('Channel {} is invalid for {}{} {} (target has +L set)'.format(redirect_chan.name, action, modebar, param))
+                    self.sendraw(690, ':Destination channel already has +L.')
+                    return
+
+
+            elif param[:2] == '~T':
                 ### Text block.
                 if param.split(':')[1] not in ['block', 'replace'] or len(param.split(':')) < 3:
                     return
@@ -178,6 +199,7 @@ def extbans(self, localServer, channel, modebuf, parambuf, action, modebar, para
                         return
                     if not param.split(':')[3]:
                         return
+
             elif param[:2] == '~c':
                 ### Channel block.
                 if len(param.split(':')) < 2:
@@ -261,6 +283,26 @@ def join(self, localServer, channel, **kwargs):
                     self.sendraw(474, '{} :Cannot join channel (+b)'.format(channel.name))
                     return (0, overrides)
 
+
+        for b in [b for b in channel.bans if b[:2] == '~L' and not invite_override and not checkMatch(self, localServer, 'e', channel)]: # ~L:host:#chan
+            redirect_host = b.split(':')[1]
+            redirect_chan = b.split(':')[2]
+            if not next((c for c in localServer.channels if c.name.lower() == redirect_chan.lower()), None):
+                # Redirect channel does not exist
+                pass
+            redir = 0
+            if (match(redirect_host, '{}!{}@{}'.format(self.nickname, self.ident, self.hostname))):
+                redir = 1
+            if (match(redirect_host, '{}!{}@{}'.format(self.nickname, self.ident, self.ip))):
+                redir = 1
+            if (match(redirect_host, '{}!{}@{}'.format(self.nickname, self.ident, self.cloakhost))):
+                redir = 1
+            if redir:
+                self.handle('JOIN', redirect_chan)
+                self.sendraw(471, '{} :Channel is full so you are redirected to {}'.format(channel.name, redirect_chan))
+                return (0, overrides)
+
+
         for b in [b for b in channel.bans if b[:2] == '~t' and not invite_override and not checkMatch(self, localServer, 'e', channel)]:
             mask = b.split(':')[2]
             ban = 0
@@ -279,10 +321,12 @@ def join(self, localServer, channel, **kwargs):
                 oper_class = i.split(':')[1]
                 if 'i' in channel.modes and ('o' in self.modes and (hasattr(self, 'operclass') and match(oper_class, self.operclass))) and 'i' not in overrides:
                     overrides.append('i')
+
             if i.startswith('~a'):
                 account = i.split(':')[1]
                 if 'i' in channel.modes and ('r' in self.modes and (hasattr(self, 'svid') and match(account, self.svid))) and 'b' not in overrides:
                     overrides.append('i')
+
             if i.startswith('~c'):
                 chan_ban = i.split(':')[1]
                 prefix = chan_ban[0] if chan_ban[0] in '+%@&~' else ''
