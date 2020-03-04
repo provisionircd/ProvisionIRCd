@@ -654,16 +654,16 @@ class Server:
 
     def run(self):
         if self.forked:
-            pid = os.fork()
-            if pid:
+            self.pid = os.fork()
+            if self.pid:
                 try:
                     with open(pidfile, 'w') as file:
-                        file.write(str(pid))
+                        file.write(str(self.pid))
                 except Exception as ex:
                     print('Could not write pidfile. Make sure you have write access: {}'.format(ex))
                     sys.exit()
                     return
-                print('PID [{}] forked to the background'.format(pid))
+                print('PID [{}] forked to the background'.format(self.pid))
                 sys.exit()
 
             atexit.register(exit_handler)

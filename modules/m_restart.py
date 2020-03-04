@@ -1,51 +1,35 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
-/die command
+/restart command
 """
 
 import ircd
-import time
+import sys
+import os
 
-from handle.handleModules import UnloadModule
 
-@ircd.Modules.params(1)
-@ircd.Modules.req_modes('o')
-@ircd.Modules.req_flags('restart')
-@ircd.Modules.commands('restart')
-def restart(self, localServer, recv):
-    if recv[1] != localServer.conf['settings']['restartpass']:
-        self.flood_penalty += 500000
-        return self.sendraw(481, ':Permission denied')
+class Restart(ircd.Command):
+    """
+    Restart the server remotely.
+    """
+    def __init__(self):
+        self.command = 'restart'
+        self.params = 1
+        self.req_flags = 'restart'
 
-    reason = 'Restart command received by {} ({}@{})'.format(self.nickname, self.ident, self.hostname)
-    msg = '*** {}'.format(reason)
-    localServer.snotice('s', msg)
+    def execute(self, client, recv):
+        if recv[1] != self.ircd.conf['settings']['restartpass']:
+            client.flood_penalty += 2500001
+            return client.sendraw(self.ERR.NOPRIVILEGES, ':Permission denied')
 
-    for user in [user for user in localServer.users if user.server == localServer]:
-        user.quit(reason=None)
-    for server in list(localServer.servers):
-        server._send(':{} SQUIT {} :{}'.format(localServer.hostname, localServer.hostname, reason))
+        reason = 'RESTART command received by {} ({}@{})'.format(client.nickname, client.ident, client.hostname)
+        msg = '*** {}'.format(reason)
+        self.ircd.snotice('s', msg)
 
-    localServer.running = False
+        for user in [user for user in self.ircd.users if user.server == self.ircd]:
+            user.quit(reason=None)
 
-    for m in list(localServer.modules):
-        name = m.__name__
-        UnloadModule(localServer, name)
+        for server in list(self.ircd.servers):
+            server._send(':{} SQUIT {} :{}'.format(self.ircd.hostname, self.ircd.hostname, reason))
 
-    localServer.commands = []
-    localServer.modules = {}
-    localServer.events = []
-    localServer.user_modes = {}
-    localServer.channel_modes = {}
-
-    for s in localServer.listen_socks:
-        try:
-            s.shutdown(socket.SHUT_RDWR)
-        except:
-            s.close()
-
-    time.sleep(1)
-    S = ircd.Server(conffile=localServer.conffile, forked=localServer.forked)
-    S.run()
+        python = sys.executable
+        os.execl(python, python, *sys.argv)
