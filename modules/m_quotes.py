@@ -205,6 +205,7 @@ A developer only classifies oneself as such if they consider themselves as such.
 "While hunting in Africa, I shot an elephant in my pajamas. How an elephant got into my pajamas I'll never know." - Groucho Marx
 """
 
+
 @ircd.Modules.hooks.local_connect()
 def show_quote(self, localServer):
     quote = random.choice(quotes.split('\n'))
