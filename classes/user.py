@@ -427,7 +427,8 @@ class User:
                 if c:
                     false_cmd = False
                     if c.check(self, parsed):
-                        c.execute(self, parsed)
+                        c.execute(self, parsed) # <--- instant reply from /stats u (where psutil.Process() is being called)
+                        #threading.Thread(target=c.execute, args=([self, parsed])).start() # ~1 second delay in /stats u
 
                 if false_cmd:
                     self.sendraw(ERR.UNKNOWNCOMMAND, '{} :Unknown command'.format(command.upper()))
@@ -779,13 +780,11 @@ class User:
                 if self.socket and reason and not silent:
                     localServer.snotice('c', '*** Client exiting: {} ({}@{}) ({})'.format(self.nickname, self.ident, self.hostname, reason))
 
+            self.registered = False
+
             for channel in iter([channel for channel in self.channels if 'j' in channel.modes]):
                 self.handle('PART', '{}'.format(channel.name))
                 continue
-
-
-
-
 
 
             ### Check module hooks for visible_in_channel()

@@ -243,6 +243,15 @@ class data_handler: #(threading.Thread):
 
                     for s in error:
                         logging.error('Error occurred in {}'.format(s))
+
+                    for s in read:
+                        if type(s).__name__ in ['User', 'Server']:
+                            read_socket(ircd, s)
+                            continue
+                        if self.listen_socks[s] in ['clients', 'servers']:
+                            threading.Thread(target=sock_accept, args=([ircd, s])).start()
+                            continue
+
                     for s in write:
                         check_flood(ircd, s)
                         if type(s).__name__ == 'User' or type(s).__name__ == 'Server':
@@ -256,13 +265,6 @@ class data_handler: #(threading.Thread):
                                 s.quit('Write error: {}'.format(str(ex)))
                                 continue
 
-                    for s in read:
-                        if type(s).__name__ in ['User', 'Server']:
-                            read_socket(ircd, s)
-                            continue
-                        if self.listen_socks[s] in ['clients', 'servers']:
-                            threading.Thread(target=sock_accept, args=([ircd, s])).start()
-                            continue
                     check_loops(ircd)
             except Exception as ex:
                 logging.exception(ex)

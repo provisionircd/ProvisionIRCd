@@ -6,7 +6,7 @@ import ircd
 
 from handle.functions import logging
 
-@ircd.Modules.command
+
 class Motd(ircd.Command):
     """
     Displays the Message of the Day.
