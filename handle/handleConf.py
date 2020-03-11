@@ -416,6 +416,7 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
                     localServer.sslctx[port].load_default_certs(purpose=ssl.Purpose.CLIENT_AUTH)
                     localServer.sslctx[port].load_verify_locations(cafile=localServer.default_ca_file)
                     localServer.sslctx[port].verify_mode = ssl.CERT_NONE
+
                     if 'verify-certs' in localServer.tls_files[port] and localServer.tls_files[port]['verify-certs']:
                         localServer.sslctx[port].verify_mode = ssl.CERT_OPTIONAL
                         logging.warning(f"TLS port {port} will only accept validatable certificates.")

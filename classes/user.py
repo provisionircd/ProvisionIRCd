@@ -360,7 +360,7 @@ class User:
                 #ignore = []
                 if command not in ignore:
                     pass
-                    #_print('> {} :: {}'.format(self.nickname, recv), server=self.server)
+
 
                 # Looking for API calls.
                 if not self.registered:

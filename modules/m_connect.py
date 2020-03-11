@@ -7,6 +7,7 @@ import ircd
 from handle.handleLink import Link
 from handle.functions import logging
 
+
 def connectTo(self, ircd, name, autoLink=False):
     try:
         host, port = ircd.conf['link'][name]['outgoing']['host'], ircd.conf['link'][name]['outgoing']['port']

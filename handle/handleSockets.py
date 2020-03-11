@@ -177,7 +177,6 @@ class data_handler: #(threading.Thread):
 
                 if ircd.use_poll:
                     fdVsEvent = ircd.pollerObject.poll(1000)
-                    #print('y u no read? {}'.format(fdVsEvent))
                     for fd, Event in fdVsEvent:
                         try:
                             s = ircd.fd_to_socket[fd][0]
@@ -231,6 +230,7 @@ class data_handler: #(threading.Thread):
                 else:
                     read_clients = itertools.chain(listen_socks(ircd), users(ircd), servers(ircd))
                     write_clients = itertools.chain(users(ircd, 'w'), servers(ircd, 'w'))
+
                     #print(f"Size of read_clients: {sys.getsizeof(read_clients)}")
                     try:
                         read, write, error = select.select(read_clients, write_clients, read_clients, 1.0)
@@ -244,10 +244,13 @@ class data_handler: #(threading.Thread):
                         logging.exception(ex)
                         continue
 
+
                     for s in error:
                         logging.error('Error occurred in {}'.format(s))
 
                     for s in read:
+                        if s in write: # Write first.
+                            continue
                         if type(s).__name__ in ['User', 'Server']:
                             read_socket(ircd, s)
                             continue
@@ -256,6 +259,7 @@ class data_handler: #(threading.Thread):
                             continue
 
                     for s in write:
+
                         check_flood(ircd, s)
                         if type(s).__name__ == 'User' or type(s).__name__ == 'Server':
                             try:
@@ -267,6 +271,7 @@ class data_handler: #(threading.Thread):
                             except Exception as ex:
                                 s.quit('Write error: {}'.format(str(ex)))
                                 continue
+
 
                     check_loops(ircd)
             except Exception as ex:

@@ -372,6 +372,7 @@ class Server:
         except Exception as ex:
             logging.exception(ex)
 
+
     def parse_command(self, data):
         xwords = data.split(' ')
         words = []
@@ -383,6 +384,7 @@ class Server:
             words.append(word)
         words = list(filter(None, words))
         return words
+
 
     def _send(self, data):
         try:
@@ -401,6 +403,7 @@ class Server:
                     pass
         except Exception as ex:
             logging.exception(ex)
+
 
     def handle_recv(self):
         while self.recvbuffer.find("\n") != -1:
@@ -740,6 +743,7 @@ class Server:
         except Exception as ex:
             logging.exception(ex)
 
+
     def listenToPort(self, port, type):
         try:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -762,6 +766,8 @@ class Server:
             print(e)
             print('Another instance running?')
             sys.exit()
+
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='IRCd.')

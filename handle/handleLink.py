@@ -231,6 +231,7 @@ class Link(threading.Thread):
 
             self.socket.settimeout(5)
             self.socket.connect((self.host, self.port))
+
             selfIntroduction(self.localServer, serv, outgoing=True)
 
             if serv not in self.localServer.introducedTo:
