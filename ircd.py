@@ -601,7 +601,8 @@ class Server:
             if self in localServer.sync_queue:
                 del localServer.sync_queue[self]
 
-            if self.socket and reason:
+            if self.socket and reason and self.sid:
+                logging.debug(f"Sending ERROR from server quit()")
                 self._send(':{} ERROR :Closing link: [{}] ({})'.format(self.sid, self.socket.getpeername()[0] if not self.hostname else self.hostname, reason))
 
             while self.sendbuffer:

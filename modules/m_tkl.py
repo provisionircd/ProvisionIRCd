@@ -1,5 +1,5 @@
 """
-/tkl, /kline, /gline, /zline, /gzline commands (server)
+/tkl (server), /kline, /gline, /zline, /gzline commands
 """
 
 import ircd
@@ -20,7 +20,7 @@ def makerMask(data):
     result = '{}@{}'.format(ident, host)
     return result
 
-@ircd.Modules.command
+
 class Tkl(ircd.Command):
     def __init__(self):
         self.command = 'tkl'
@@ -35,21 +35,21 @@ class Tkl(ircd.Command):
             TKL.remove(client, self.ircd, recv, expire=expire)
 
 
-@ircd.Modules.command
+
 class Zline(ircd.Command):
     """
     Bans a user from a server (zline) or entire network (gzline) by IP address.
     -
-    Syntax: /ZLINE <expire> <nick|ip> <reason>
-    Example: /ZLINE +1d Kevin Be gone.
-    This will remove and ban user Kevin from the server. Ban will expire in 1 day.
+    Syntax: ZLINE <expire> <nick|ip> <reason>
+    Example: ZLINE +1d R00T_UK Be gone.
+    This will remove and ban user R00T_UK from the server. Ban will expire in 1 day.
     Banning on nickname only works when the user is currently online.
     -
-    Expire formats can be: m (minutes), h (hours), d (days), w (weeks), and M (months, 30 days).
-    Stacking, like +1d12h is not yet supported.
+    Expire formats can be: m (minutes), h (hours), d (days), w (weeks), and M (months, 30 days per unit).
+    Stacking (like +1d12h) is not yet supported.
     -
     To remove a global Z:line, use -ip as the parameter.
-    Example: /GZLINE -*@12.34.56.78
+    Example: GZLINE -*@12.34.56.78
     """
     def __init__(self):
         self.command = ['zline', 'gzline']
@@ -61,7 +61,7 @@ class Zline(ircd.Command):
         ### /zline +0 nick/ip reason
         type = 'Z' if recv[0].lower() == 'gzline' else 'z'
         if type == 'Z' and not client.ocheck('o', 'gzline'):
-            return client.sendraw(481, ':Permission denied - You do not have the correct IRC Operator privileges')
+            return client.sendraw(self.ERR.NOPRIVILEGES, ':Permission denied - You do not have the correct IRC Operator privileges')
         try:
 
             if recv[1][0] == '-':
@@ -79,7 +79,7 @@ class Zline(ircd.Command):
                     return
             else:
                 if len(recv) < 3:
-                    return client.sendraw(461, ':{} Not enough parameters.'.format(recv[0].upper()))
+                    return client.sendraw(self.ERR.NEEDMOREPARAMS, ':{} Not enough parameters.'.format(recv[0].upper()))
             mask = None
             if recv[1][0] != '+' or not valid_expire(recv[1].replace('+', '')):
                 return self.ircd.notice(client, '*** Notice -- Invalid expire'.format(client.nickname))
@@ -115,21 +115,21 @@ class Zline(ircd.Command):
 
 
 
-@ircd.Modules.command
+
 class Kline(ircd.Command):
     """
     Bans a user from a server (kline) or entire network (gline) by hostname.
     -
-    Syntax: /KLINE <expire> <nick|host> <reason>
-    Example: /KLINE +1d Kevin Be gone.
+    Syntax: KLINE <expire> <nick|host> <reason>
+    Example: KLINE +1d Kevin Be gone.
     This will remove and ban user Kevin from the server. Ban will expire in 1 day.
     Banning on nickname only works when the user is currently online.
     -
-    Expire formats can be: m (minutes), h (hours), d (days), w (weeks), and M (months, 30 days).
-    Stacking, like +1d12h is not yet supported.
+    Expire formats can be: m (minutes), h (hours), d (days), w (weeks), and M (months, 30 days per unit).
+    Stacking (like +1d12h) is not yet supported.
     -
     To remove a global ban, use -host as the parameter.
-    Example: /GLINE -*@12.34.56.78.prioritytelecom.net
+    Example: GLINE -*@12.34.56.78.prioritytelecom.net
     """
     def __init__(self):
         self.command = ['kline', 'gline']
@@ -140,7 +140,7 @@ class Kline(ircd.Command):
     def execute(self, client, recv):
         type = 'G' if recv[0].lower() == 'gline' else 'g'
         if type == 'G' and not client.ocheck('o', 'gline'):
-            return client.sendraw(481, ':Permission denied - You do not have the correct IRC Operator privileges')
+            return client.sendraw(self.ERR.NOPRIVILEGES, ':Permission denied - You do not have the correct IRC Operator privileges')
         try:
             if recv[1][0] == '-':
                 try:
@@ -156,7 +156,7 @@ class Kline(ircd.Command):
                     return
             else:
                 if len(recv) < 3:
-                    return client.sendraw(461, ':{} Not enough parameters.'.format(recv[0].upper()))
+                    return client.sendraw(self.ERR.NEEDMOREPARAMS, ':{} Not enough parameters.'.format(recv[0].upper()))
             mask = None
             if recv[1][0] != '+' or not valid_expire(recv[1].replace('+', '')):
                 client.server.broadcast([client], 'NOTICE {} :*** Notice -- Invalid expire'.format(client.nickname))

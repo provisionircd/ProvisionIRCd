@@ -10,12 +10,15 @@ from handle.functions import match, logging
 import time
 import re
 
+
 chantypes = '#+&'
 chanlen = 36
+
 
 def init(ircd, reload=False):
     ### Other modules also require this information, like /privmsg and /notice
     ircd.chantypes = chantypes
+
 
 W = '\033[0m'  # white (normal)
 R = '\033[31m' # red
@@ -25,6 +28,7 @@ G2 = '\033[92m' # bright green
 Y = '\033[33m' # yellow
 B = '\033[34m' # blue
 P = '\033[35m' # purple
+
 
 matches = {}
 matches['b'] = 'bans'
@@ -42,7 +46,7 @@ def checkMatch(self, localServer, type, channel):
             return 1
 
 
-@ircd.Modules.command
+
 class Join(ircd.Command):
     """
     Syntax: JOIN <channel> [key]
@@ -184,9 +188,10 @@ class Join(ircd.Command):
                 #if channel.limit != 0 and len(channel.users) >= channel.limit and not invite_override:
                 #print(channel.modes)
                 if 'l' in channel.modes and len(channel.users) >= int(self.ircd.chan_params[channel]['l']) and not invite_override:
-                    if channel.redirect:
-                        client.handle('JOIN', channel.redirect)
-                        client.sendraw(471, '{} :Channel is full so you are redirected to {}'.format(channel.name, channel.redirect))
+                    if 'L' in channel.modes:
+                        redirect_chan = self.ircd.chan_params[channel]['L']
+                        client.handle('JOIN', redirect_chan)
+                        client.sendraw(471, '{} :Channel is full so you are redirected to {}'.format(channel.name, redirect_chan))
                         continue
 
                     client.sendraw(471, '{} :Cannot join channel (+l)'.format(channel.name))
@@ -259,7 +264,7 @@ class Join(ircd.Command):
                     logging.exception(ex)
 
 
-@ircd.Modules.command
+
 class Part(ircd.Command):
     """
     Syntax: PART <channel> [reason]

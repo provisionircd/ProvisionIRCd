@@ -107,6 +107,7 @@ def sock_accept(ircd, s):
             if ircd.use_poll:
                 ircd.fd_to_socket[u.fileno()] = (u.socket, u)
 
+            '''
             try:
                 u.socket.setblocking(1) ### Uncomment this. Why? I don't remember.
             except OSError as ex:
@@ -115,6 +116,8 @@ def sock_accept(ircd, s):
                 #logging.exception(ex)
                 u.quit(ex)
                 return
+            '''
+
             gc.collect()
             if u.fileno() == -1:
                 logging.error('{}Invalid fd for {} -- quit() on user{}'.format(R, u, W))

@@ -244,8 +244,7 @@ class User:
 
                 if self.ssl and self.socket:
                     try:
-                        fp = None
-                        #fp = self.socket.getpeercert(binary_form=True)
+                        fp = self.socket.getpeercert(binary_form=True)
                         if fp:
                             self.fingerprint = hashlib.sha256(repr(fp).encode('utf-8')).hexdigest()
                     except Exception as ex:
@@ -535,7 +534,10 @@ class User:
         if not self.registered:
             for callable in [callable for callable in self.server.hooks if callable[0].lower() == 'pre_local_connect']:
                 try:
-                    callable[2](self, self.server)
+                    success = callable[2](self, self.server)
+                    if not success and success is not None: # Modules need to explicitly return False or 0, not the default None.
+                        logging.debug(f"Connection process denied for user {self} by module: {callable}")
+                        return
                 except Exception as ex:
                     logging.exception(ex)
 
@@ -641,6 +643,7 @@ class User:
                 if self.socket.cipher():
                     cipher = self.socket.cipher()[0]
                     self.send('NOTICE', ':*** You are connected to {} with {}-{}'.format(self.server.hostname, self.socket.version(), cipher))
+
             msg = '*** Client connecting: {u.nickname} ({u.ident}@{u.hostname}) {{{u.cls}}} [{0}{1}]'.format('secure' if self.ssl else 'plain', '' if not cipher else ' '+cipher, u=self)
             self.server.snotice('c', msg)
 
@@ -880,7 +883,10 @@ class User:
         if c:
             try:
                 if c.check(self, parsed):
-                    c.execute(self, parsed)
+                    if not params:
+                        c.execute(self, parsed)
+                    else:
+                        c.execute(self, parsed, **params)
             except Exception as ex:
                 logging.exception(ex)
 

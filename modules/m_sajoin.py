@@ -8,7 +8,7 @@ import re
 import ircd
 import re
 
-@ircd.Modules.command
+
 class Sajoin(ircd.Command):
     """Forcefully join a user into a channel.
     Syntax: SAJOIN <user> <channel>

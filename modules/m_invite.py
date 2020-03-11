@@ -7,7 +7,7 @@ import ircd
 from modules.m_joinpart import checkMatch
 import time
 
-@ircd.Modules.channel_mode
+
 class chmode_i(ircd.ChannelMode):
     def __init__(self):
         self.mode = 'i'

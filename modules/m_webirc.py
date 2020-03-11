@@ -5,6 +5,8 @@ webirc support
 
 import ircd
 
+from handle.functions import cloak
+
 password = "somePassword"
 
 # TODO: limit only to specific origin hosts.
@@ -20,3 +22,4 @@ class Webirc(ircd.Command):
         client.hostname = recv[3] if 'dontresolve' not in self.ircd.conf['settings'] or\
         ('dontresolve' in self.ircd.conf['settings'] and not self.ircd.conf['settings']['dontresolve']) else recv[4]
         client.ip = recv[4]
+        client.cloakhost = cloak(client)

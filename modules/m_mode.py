@@ -531,7 +531,7 @@ class Mode(ircd.Command):
         self.server_support = 1
 
 
-    def execute(self, client, recv, override=True):
+    def execute(self, client, recv, override=False):
         global oper_override
         oper_override = False
         regex = re.compile("\x1d|\x1f|\x02|\x12|\x0f|\x16|\x03(?:\d{1,2}(?:,\d{1,2})?)?", re.UNICODE)
@@ -552,6 +552,7 @@ class Mode(ircd.Command):
                         return
                     processModes(client, self.ircd, channel[0], recv[2:], sourceServer=sourceServer, sourceUser=sourceUser)
                     return
+                override = True
                 recv = recv[1:]
             else:
                 sourceServer = client.server

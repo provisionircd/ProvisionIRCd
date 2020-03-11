@@ -475,28 +475,30 @@ def randomness(string, strict=True):
 
 
 @ircd.Modules.hooks.pre_local_connect()
-def antirandom_nick(client, ircd):
+def antirandom_check(client, ircd):
     nick = client.nickname
     score = randomness(nick.lower())
     if score >= max_score:
         client.quit('Please provide a valid nickname', error=True)
         mask = '{}!{}@{}'.format(nick, '*' if not client.ident else client.ident, client.hostname)
         ircd.snotice('s', '*** Randomness match for {}[{}] with score {} (/nick)'.format(mask, client.ip, score))
+        return 0
 
     if nick[0].isalpha() and nick[1:].isdigit() and len(nick) > 3:
         client.quit('Please provide a valid nickname', error=True)
         ircd.snotice('s', '*** Aleatory match for {}[{}]'.format(nick, client.ip))
+        return 0
 
 
-@ircd.Modules.hooks.pre_local_connect()
-def user(client, ircd):
     ident = client.ident
     score = randomness(ident.lower())
     if score >= max_score+1: ### Less strict for idents.
         client.quit('Please provide a valid ident', error=True)
         ircd.snotice('s', '*** Randomness match for {}[{}] with score {} (/user)'.format(client.fullmask(), client.ip, score))
+        return 0
 
     ### Aleatory checks on ident? Why the hell not.
     if ident[0].isalpha() and ident[1:].isdigit() and len(ident) > 4:
         client.quit('Please provide a valid ident', error=True)
         ircd.snotice('s', '*** Aleatory ident match for {}!{}@*[{}]'.format(client.nickname, ident, client.ip))
+        return 0

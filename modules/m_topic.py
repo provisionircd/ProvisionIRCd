@@ -10,7 +10,6 @@ from handle.functions import checkSpamfilter, logging, save_db
 TOPICLEN = 350
 
 
-@ircd.Modules.command
 class Topic(ircd.Command):
     def __init__(self):
         self.command = 'topic'
@@ -102,7 +101,7 @@ class Topic(ircd.Command):
                 if channel.name[0] != '&':
                     data = ':{} TOPIC {} {} {} :{}'.format(sourceID, channel.name, channel.topic_author, channel.topic_time, channel.topic)
                     self.ircd.new_sync(self.ircd, sourceServer, data)
-                save_data(self.ircd)
+                save_db(self.ircd)
 
         except Exception as ex:
             logging.exception(ex)

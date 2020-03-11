@@ -8,12 +8,11 @@ import datetime
 from handle.functions import logging
 
 
-@ircd.Modules.command
 class Whois(ircd.Command):
     """Displays information about the given user, such as hostmask, channels, idle time, etc...
     Output may vary depending on user- and channel modes.
 
-    Example: /WHOIS Bob
+    Example: WHOIS Bob
     """
 
     def __init__(self):
@@ -46,7 +45,7 @@ class Whois(ircd.Command):
                 sock = user.server if user.server.socket else user.server.introducedBy
                 sock._send(data)
 
-        client.sendraw(311, '{} {} {} * :{}'.format(user.nickname, user.ident, user.cloakhost if 'x' in user.modes else user.hostname, user.realname))
+        client.sendraw(311, '{} {} {} * :{}'.format(user.nickname, user.ident, user.cloakhost, user.realname))
 
         if 'o' in client.modes or user == client:
             client.sendraw(379, '{} :is using modes: +{} {}'.format(user.nickname, user.modes, '+'+user.snomasks if user.snomasks else ''))
@@ -137,11 +136,11 @@ class Whois(ircd.Command):
 
 
 
-@ircd.Modules.command
+
 class Whowas(ircd.Command):
     """Request saved user information for offline users.
     -
-    Example: /WHOWAS ZoeyDeutch
+    Example: WHOWAS ZoeyDeutch
     """
 
     def __init__(self):
@@ -179,6 +178,7 @@ class Whowas(ircd.Command):
             return
 
         self.sendraw(369, '{} :End of /WHOWAS list.'.format(recv[1]))
+
 
 
 @ircd.Modules.hooks.local_quit()
@@ -219,14 +219,14 @@ def savewhowas(self, ircd):
 
 
 
-@ircd.Modules.user_mode
+
 class Umode_c(ircd.UserMode):
     def __init__(self):
         self.mode = 'c'
         self.desc = 'Hide channels in /WHOIS'
 
 
-@ircd.Modules.user_mode
+
 class Umode_W(ircd.UserMode):
     def __init__(self):
         self.mode = 'W'

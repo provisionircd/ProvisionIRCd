@@ -326,9 +326,9 @@ class ChannelMode(BaseMode):
 
         if self.mode not in channel.modes:
             channel.modes += self.mode
-            logging.debug('Channel mode "{}" set on {} (param: {})'.format(self.mode, channel, self.ircd.chan_params[channel][self.mode]))
+            logging.debug('Channel mode "{}" set on {} (param: {})'.format(self.mode, channel, param))
         else:
-            logging.debug('Channel mode "{}" updated on {} (param: {})'.format(self.mode, channel, self.ircd.chan_params[channel][self.mode]))
+            logging.debug('Channel mode "{}" updated on {} (param: {})'.format(self.mode, channel, param))
         return 1
 
 

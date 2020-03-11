@@ -38,5 +38,6 @@ class Sanick(ircd.Command):
             return self.ircd.handle('NOTICE', '{} :*** Nicknames may not start with a number'.format(client.uid))
 
         client.flood_penalty += 100000
+
         p = {'sanick': client}
         target[0].handle('nick', recv[2], params=p)

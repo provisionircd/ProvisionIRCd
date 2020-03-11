@@ -6,7 +6,7 @@ import ircd
 
 from handle.functions import cloak
 
-@ircd.Modules.command
+
 class Cloak(ircd.Command):
     """
     Converts a host or IP to a cloaked version.

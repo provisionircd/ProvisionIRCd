@@ -6,7 +6,7 @@ import ircd
 
 from handle.functions import logging
 
-@ircd.Modules.command
+
 class Pass(ircd.Command):
     """
     Used by clients to authenticate during connection process.

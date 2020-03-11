@@ -165,6 +165,7 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
 
             localServer.default_cert, localServer.default_key = default_cert, default_key
             localServer.default_ca_file = 'ssl/curl-ca-bundle.crt'
+
             for port in tempconf['listen']:
                 localServer.tls_files[port] = {}
                 localServer.tls_files[port]['keypass'] = None
@@ -206,6 +207,9 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
                                 if len(t['keypass']) < 6:
                                     logging.warning(f"Insecure TLS key password for file: '{localServer.tls_files[port]['key']}'")
                                 localServer.tls_files[port]['keypass'] = t['keypass']
+
+                        if 'verify-certs' in t:
+                            localServer.tls_files[port]['verify-certs'] = t['verify-certs']
 
 
         if 'class' not in tempconf:
@@ -412,6 +416,10 @@ def checkConf(localServer, user, confdir, conffile, rehash=False):
                     localServer.sslctx[port].load_default_certs(purpose=ssl.Purpose.CLIENT_AUTH)
                     localServer.sslctx[port].load_verify_locations(cafile=localServer.default_ca_file)
                     localServer.sslctx[port].verify_mode = ssl.CERT_NONE
+                    if 'verify-certs' in localServer.tls_files[port] and localServer.tls_files[port]['verify-certs']:
+                        localServer.sslctx[port].verify_mode = ssl.CERT_OPTIONAL
+                        logging.warning(f"TLS port {port} will only accept validatable certificates.")
+
                     #localServer.sslctx = temp_sslctx
 
                 except PermissionError as ex:
