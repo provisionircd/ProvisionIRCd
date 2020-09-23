@@ -11,7 +11,6 @@ import socket
 from handle.functions import logging
 
 
-@ircd.Modules.command
 class Netinfo(ircd.Command):
     def __init__(self):
         self.command = 'netinfo'
@@ -65,8 +64,8 @@ class Netinfo(ircd.Command):
             elif remotetime < currenttime:
                 self.ircd.snotice('s', '*** (warning) Remote server {}\'s clock is ~{}s behind on ours, this can cause issues and should be fixed!'.format(remotehost, abs(remotetime-currenttime)), local=True)
 
-        if remotename != self.ircd.name and source.name == remotename:
-            self.ircd.snotice('s', '*** Network name mismatch from {} ({} != {})'.format(source.hostname, remotename, self.ircd.name), local=True)
+        if remotename != self.ircd.hostname and source.hostname == remotename:
+            self.ircd.snotice('s', '*** Network name mismatch from {} ({} != {})'.format(source.hostname, remotename, self.ircd.hostname), local=True)
 
         if version != self.ircd.versionnumber.replace('.', '') and remotehost not in self.ircd.conf['settings']['ulines'] and source.name == remotename:
             self.ircd.snotice('s', '*** Remote server {} is using version {}, and we are using version {}, but this should not cause issues.'.format(remotehost, version, self.ircd.versionnumber.replace('.', '')), local=True)

@@ -207,6 +207,6 @@ A developer only classifies oneself as such if they consider themselves as such.
 
 
 @ircd.Modules.hooks.local_connect()
-def show_quote(self, localServer):
+def show_quote(user, ircd):
     quote = random.choice(quotes.split('\n'))
-    localServer.notice(self, quote)
+    ircd.notice(user, quote)

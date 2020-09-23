@@ -127,7 +127,7 @@ class Server:
 
                 self.creationtime = int(time.time())
                 self.versionnumber = '2.0'
-                self.version = 'ProvisionIRCd-{} beta'.format(self.versionnumber)
+                self.version = 'ProvisionIRCd-{}-beta'.format(self.versionnumber)
                 self.hostinfo = 'Python {}'.format(sys.version.split('\n')[0].strip())
 
                 ### Polling does not work.

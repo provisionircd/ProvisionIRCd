@@ -74,6 +74,18 @@ def channels(ircd):
         yield ircd.channels[i]
 
 
+def read_recv(recv):
+    idx = 0
+    for count,line in enumerate(recv.split('\n')):
+        idx += 1
+        line = line.strip()
+        if not line:
+            continue
+        #print(f"+++ inside read_recv(): {recv.split('\n')[count]}")
+        #print(line)
+        #print(line)
+        yield line
+
 
 def sock_accept(ircd, s):
     if ircd.listen_socks[s] == 'clients':
@@ -82,28 +94,28 @@ def sock_accept(ircd, s):
             if ircd.use_poll:
                 ircd.pollerObject.register(conn, READ_ONLY)
             port = conn.getsockname()[1]
-            is_ssl = is_sslport(ircd, port)
+            tls = is_sslport(ircd, port)
             conn_backlog = [user for user in ircd.users if user.socket and not user.registered]
             logging.info('Accepting client on {} -- fd: {}, with IP {}'.format(s, conn.fileno(), addr[0]))
             if len(conn_backlog) > 100:
                 logging.warning('Current connection backlog is >{}, so not allowing any more connections for now. Bye.'.format(len(conn_backlog)))
                 conn.close()
                 return
-            conn.settimeout(10)
-            if is_ssl and not ircd.pre_wrap:
-                is_ssl = 0
+            conn.settimeout(15)
+            if tls and not ircd.pre_wrap:
+                tls = 0
                 version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
                 conn = ircd.sslctx[str(port)].wrap_socket(conn, server_side=True)
-                is_ssl = 1
-                logging.info('Wrapped incoming user socket {} in SSL'.format(conn))
+                tls = 1
+                logging.info('Wrapped incoming user socket {} in TLS'.format(conn))
                 try:
                     fp = conn.getpeercert(True)
                     if fp:
-                        ssl_fingerprint = hashlib.sha256(repr(fp).encode('utf-8')).hexdigest()
-                        logging.info('Fingerprint: {}'.format(ssl_fingerprint))
+                        tls_fingerprint = hashlib.sha256(repr(fp).encode('utf-8')).hexdigest()
+                        logging.info('Fingerprint: {}'.format(tls_fingerprint))
                 except Exception as ex:
                     logging.exception(ex)
-            u = User(ircd, conn, addr, is_ssl)
+            u = User(ircd, conn, addr, tls)
             if ircd.use_poll:
                 ircd.fd_to_socket[u.fileno()] = (u.socket, u)
 
@@ -145,16 +157,16 @@ def sock_accept(ircd, s):
             if ircd.use_poll:
                 ircd.pollerObject.register(conn, READ_ONLY)
             port = conn.getsockname()[1]
-            is_ssl = is_sslport(ircd, port)
-            conn.settimeout(10)
-            if is_ssl and not ircd.pre_wrap:
-                is_ssl = 0
+            tls = is_sslport(ircd, port)
+            conn.settimeout(15)
+            if tls and not ircd.pre_wrap:
+                tls = 0
                 version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
                 conn = ircd.sslctx[str(port)].wrap_socket(conn, server_side=True)
-                is_ssl = 1
-                logging.info('Wrapped incoming server socket {} in SSL'.format(conn))
+                tls = 1
+                logging.info('Wrapped incoming server socket {} in TLS'.format(conn))
 
-            s = Server(origin=ircd, serverLink=True, sock=conn, is_ssl=is_ssl)
+            s = Server(origin=ircd, serverLink=True, sock=conn, is_ssl=tls)
 
         except ssl.SSLError as ex:
             logging.exception(ex)
@@ -272,12 +284,16 @@ class data_handler: #(threading.Thread):
                                 s.quit('Write error: {}'.format(str(ex)))
                                 continue
 
-
                     check_loops(ircd)
+            except KeyboardInterrupt as ex:
+                #cleanup(ircd)
+                os._exit(0)
+                return
+
             except Exception as ex:
                 logging.exception(ex)
                 break
-        sys.exit()
+        os._exit(0)
         logging.warning('data_handler loop broke! This should only happen after /restart.')
 
 
@@ -417,6 +433,7 @@ def check_loops(ircd):
         os.mkdir('db')
 
 
+
 def read_socket(ircd, sock):
     if not hasattr(sock, 'socket'):
         # Client probably repidly disconnected. Possible causes can be ZNC that have not yet accepted new cert.
@@ -430,6 +447,7 @@ def read_socket(ircd, sock):
             buffer_len = 8192 if type(sock).__name__ == 'User' else 65536
         try:
             recv = sock.socket.recv(buffer_len).decode('utf-8')
+
         except UnicodeDecodeError as ex: # Do nothing, skip read.
             logging.debug(f'Unable to read socket {sock}: {ex}')
 

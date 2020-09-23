@@ -12,7 +12,7 @@ from handle.functions import logging
 class usermode_g(ircd.UserMode):
     def __init__(self):
         self.mode = 'g'
-        self.desc = "Only users in your accept-list can message you'"
+        self.desc = "Only users in your accept-list can message you"
         self.support = [('CALLERID',)]
 
 
