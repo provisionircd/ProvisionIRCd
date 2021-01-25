@@ -537,7 +537,7 @@ def checkConf(ircd, user, confdir, conffile, rehash=False):
                         logging.debug('Modes: {}'.format(c.modes))
                         logging.debug('Params: {}'.format(ircd.chan_params[c]))
             except Exception as ex:
-                logging.debug(ex)
+                logging.exception(ex)
 
         # Restore TKL.
         if os.path.exists(ircd.rootdir + '/db/tkl.db') and not ircd.tkl:
