@@ -6,12 +6,13 @@ from classes.modes import UserMode, ChannelMode
 from classes.commands import Command
 from handle.functions import update_support, logging
 
+
 def ListModules(self):
     modules = {}
 
     for file in iter([file for file in os.listdir(self.modules_dir) if not file.startswith('__') and file.startswith('m_')]):
         path = os.path.join(self.modules_dir, file)
-        file = 'modules.'+file.split('.py')[:1][0]
+        file = 'modules.' + file.split('.py')[:1][0]
         modules[file] = path
 
     import ntpath
@@ -39,7 +40,7 @@ def LoadModules(self):
 
 def HookToCore(self, callables, reload=False):
     try:
-        ### Tuple: callables, commands, user_modes, channel_modes, hooks, support, api, module
+        # Tuple: callables, commands, user_modes, channel_modes, hooks, support, api, module
         hooks = []
         commands = callables[0]
         user_modes = callables[1]
@@ -49,7 +50,7 @@ def HookToCore(self, callables, reload=False):
         api = callables[5]
         module = callables[6]
 
-        for c in commands+user_modes+channel_modes:
+        for c in commands + user_modes + channel_modes:
             m = c()
             m.module = module
             m.ircd = self
@@ -65,17 +66,17 @@ def HookToCore(self, callables, reload=False):
                 api_host = None if len(a) < 2 else a[1]
                 api_password = None if len(a) < 3 else a[2]
                 info = (api_cmd, callable, api_host, api_password, module)
-                self.api.append(info) ### (cmd, callable, params, req_modes, req_flags, req_class, module)
-                #logging.info('Hooked API "{}" (host: {}, password: {}) to function {}'.format(api_cmd, api_host, api_password, callable))
+                self.api.append(info)  ### (cmd, callable, params, req_modes, req_flags, req_class, module)
+                # logging.info('Hooked API "{}" (host: {}, password: {}) to function {}'.format(api_cmd, api_host, api_password, callable))
 
         hooks = []
         for callable in [callable for callable in module_hooks if callable not in hooks]:
             hooks.append(callable)
             for h in [h for h in callable.hooks if h]:
-                #print(callable)
+                # print(callable)
                 info = (h[0], h[1], callable, module)
                 self.hooks.append(info)
-                #logging.info('Hooked {}'.format(info))
+                # logging.info('Hooked {}'.format(info))
 
         update_support(self)
 
@@ -99,7 +100,7 @@ def LoadModule(self, name, path, reload=False, module=None):
                 logging.info('Invalid module.')
                 return 'Invalid module'
             callables = FindCallables(self, module)
-            hook_fail = HookToCore(self, callables, reload=reload) ### If None is returned, assume success.
+            hook_fail = HookToCore(self, callables, reload=reload)  ### If None is returned, assume success.
             if hook_fail:
                 logging.debug('Hook failed: {}'.format(hook_fail))
                 UnloadModule(self, name)
@@ -114,18 +115,17 @@ def LoadModule(self, name, path, reload=False, module=None):
     except Exception as ex:
         logging.exception(ex)
         UnloadModule(self, name)
-        #if not reload:
+        # if not reload:
         if not self.running:
             print('Server could not be started due to an error in {}: {}'.format(name, ex))
             sys.exit()
         raise
-        return ex
 
 
 def UnloadModule(self, name):
     try:
         for module in [module for module in list(self.modules) if module.__name__ == name]:
-            ### Tuple: commands, user_modes, channel_modes, hooks, support, api, module
+            # Tuple: commands, user_modes, channel_modes, hooks, support, api, module
             m = module.__name__
             if m == name:
                 '''
@@ -158,7 +158,7 @@ def UnloadModule(self, name):
                 if hasattr(module, 'unload'):
                     try:
                         module.unload(self)
-                    except Excption as ex:
+                    except Exception as ex:
                         logging.exception(ex)
 
                 for function in [function for function in self.modules[module][3] if hasattr(function, 'hooks')]:
@@ -167,7 +167,7 @@ def UnloadModule(self, name):
                         function.hooks.remove(h)
                         if info in self.hooks:
                             self.hooks.remove(info)
-                            #logging.info('Unhooked {}'.format(info))
+                            # logging.info('Unhooked {}'.format(info))
                         else:
                             logging.error('Unable to remove hook {}: not found in hooks list'.format(info))
 
@@ -185,8 +185,8 @@ def UnloadModule(self, name):
 
                 ### Leftover hooks.
                 for h in [h for h in list(self.hooks) if h[2] == module]:
-                   logging.error('Hook {} was not properly removed (or added double). Removing now.'.format(h))
-                   self.hooks.remove(h)
+                    logging.error('Hook {} was not properly removed (or added double). Removing now.'.format(h))
+                    self.hooks.remove(h)
 
                 del self.modules[module]
 
@@ -197,6 +197,7 @@ def UnloadModule(self, name):
     except Exception as ex:
         logging.exception(ex)
         return str(ex)
+
 
 def FindCallables(self, module):
     itervalues = dict.values
@@ -231,13 +232,13 @@ def FindCallables(self, module):
     return info
 
 
-
 def support(*support):
     def add_attribute(function):
         if not hasattr(function, "support"):
             function.support = []
         function.support.extend(support)
         return function
+
     return add_attribute
 
 
@@ -245,17 +246,24 @@ def support(*support):
 def user_mode(cls):
     class umode(UserMode):
         pass
+
     return cls
+
 
 def channel_mode(cls):
     class umode(ChannelMode):
         pass
+
     return cls
+
 
 def command(cls):
     class umode(Command):
         pass
+
     return cls
+
+
 #
 
 
@@ -266,12 +274,8 @@ def api(*args):
             function.api = []
         function.api.append(args)
         return function
+
     return add_attribute
-
-
-
-
-
 
 
 def params(num):
@@ -280,7 +284,9 @@ def params(num):
             function.params = 0
         function.params = num
         return function
+
     return add_attribute
+
 
 def commands(*command_list):
     def add_attribute(function):
@@ -288,15 +294,19 @@ def commands(*command_list):
             function.commands = []
         function.commands.extend(command_list)
         return function
+
     return add_attribute
+
 
 def req_class(req_class):
     def add_attribute(function):
         if not hasattr(function, "req_class"):
-            function.req_class = 'User' # Defaults to User class.
+            function.req_class = 'User'  # Defaults to User class.
         function.req_class = req_class
         return function
+
     return add_attribute
+
 
 def req_modes(*req_modes):
     ### Required modes for command.
@@ -305,7 +315,9 @@ def req_modes(*req_modes):
             function.req_modes = []
         function.req_modes.extend(req_modes)
         return function
+
     return add_attribute
+
 
 def req_flags(*req_flags):
     ### Required flags for command.
@@ -314,7 +326,9 @@ def req_flags(*req_flags):
             function.req_flags = []
         function.req_flags.extend(req_flags)
         return function
+
     return add_attribute
+
 
 def channel_modes(*args):
     ### ('mode', type, level, 'Mode description', class 'user' or None, prefix, 'param desc')
@@ -323,7 +337,9 @@ def channel_modes(*args):
             function.channel_modes = []
         function.channel_modes.append(args)
         return function
+
     return add_attribute
+
 
 def user_modes(*args):
     def add_attribute(function):
@@ -331,7 +347,9 @@ def user_modes(*args):
             function.user_modes = []
         function.user_modes.append(args)
         return function
+
     return add_attribute
+
 
 def events(*command_list):
     def add_attribute(function):
@@ -339,66 +357,69 @@ def events(*command_list):
             function.events = []
         function.events.extend(command_list)
         return function
+
     return add_attribute
 
 
-
-
 import inspect
+
 all_hooks = [
-            'pre_command',
-            'pre_local_join',
-            'local_join',
-            'pre_remote_join', ### Why? Not like you can block a remote join. Oh, for m_delayjoin to hide joins.
-            'remote_join',
-            'channel_create',
-            'pre_local_part',
-            'local_part',
-            'remote_part',
-            'pre_local_kick',
-            'local_kick',
-            'remote_kick',
-            'channel_destroy',
-            'pre_local_nickchange',
-            'local_nickchange',
-            'remote_nickchange',
-            'pre_local_quit',
-            'local_quit',
-            'remote_quit',
-            'pre_chanmsg',
-            'chanmsg',
-            'pre_usermsg',
-            'usermsg',
-            'pre_channotice',
-            'channotice',
-            'pre_usernotice',
-            'usernotice',
-            'pre_local_chanmode',
-            'local_chanmode',
-            'pre_remote_chanmode',
-            'remote_chanmode',
-            'modechar_add',
-            'modechar_del',
-            'pre_local_connect',
-            'local_connect',
-            'remote_connect',
-            'visible_in_channel',
-            'channel_lists_sync',
-            'welcome',
-            'new_connection',
-            'server_link',
-            'rpl',
-            'loop',
-            ]
+    'pre_command',
+    'pre_local_join',
+    'local_join',
+    'pre_remote_join',  ### Why? Not like you can block a remote join. Oh, for m_delayjoin to hide joins.
+    'remote_join',
+    'channel_create',
+    'pre_local_part',
+    'local_part',
+    'remote_part',
+    'pre_local_kick',
+    'local_kick',
+    'remote_kick',
+    'channel_destroy',
+    'pre_local_nickchange',
+    'local_nickchange',
+    'remote_nickchange',
+    'pre_local_quit',
+    'local_quit',
+    'remote_quit',
+    'pre_chanmsg',
+    'chanmsg',
+    'pre_usermsg',
+    'usermsg',
+    'pre_channotice',
+    'channotice',
+    'pre_usernotice',
+    'usernotice',
+    'pre_local_chanmode',
+    'local_chanmode',
+    'pre_remote_chanmode',
+    'remote_chanmode',
+    'modechar_add',
+    'modechar_del',
+    'pre_local_connect',
+    'local_connect',
+    'remote_connect',
+    'visible_in_channel',
+    'channel_lists_sync',
+    'welcome',
+    'new_connection',
+    'server_link',
+    'rpl',
+    'loop',
+]
+
 
 class hooks:
     def test_hook(*h):
         d = inspect.stack()[0][3]
+
         def add(function):
             if not hasattr(function, "hooks"):
                 function.hooks = []
             function.hooks.extend((d, h))
             return function
+
         return add
 
     for hook in all_hooks:

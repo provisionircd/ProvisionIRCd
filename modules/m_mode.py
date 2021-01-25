@@ -4,29 +4,14 @@
 
 import ircd
 
-import os
-import importlib
-import sys
 import time
 import re
 import json
-
-from handle.functions import valid_expire, match, cloak, logging, save_db
+from handle.functions import valid_expire, match, cloak, logging, save_db, make_mask
 from collections import OrderedDict
 
-#W  = '\033[0m'  # white (normal)
-#R  = '\033[31m' # red
-#G  = '\033[32m' # green
-#Y  = '\033[33m' # yellow
-#B  = '\033[34m' # blue
-#P  = '\033[35m' # purple
-
-### Make these global so they can be modified by modules.
-#commandQueue = []
-#modebuf = []
-#parambuf = []
-
 MAXMODES = 24
+
 
 def makeMask(ircd, data):
     if not data:
@@ -67,6 +52,8 @@ def makeMask(ircd, data):
 
 
 oper_override = False
+
+
 def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, sourceUser=None):
     logging.debug('processModes(): {} :: {}'.format(self, recv))
     try:
@@ -81,12 +68,12 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
             displaySource = sourceUser.uid
         else:
             displaySource = sourceUser.sid
-            #if not sourceServer.eos and sourceServer != ircd:
+            # if not sourceServer.eos and sourceServer != ircd:
             #    sync = False
     except Exception as ex:
         logging.exception(ex)
     try:
-        #global modebuf, parambuf, action, prevaction, commandQueue
+        # global modebuf, parambuf, action, prevaction, commandQueue
         modebuf, parambuf, commandQueue = [], [], []
         action = ''
         prevaction = ''
@@ -103,7 +90,7 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
         extban_prefix = None
         if 'EXTBAN' in ircd.support:
             extban_prefix = ircd.support['EXTBAN'][0]
-            #logging.info('Extban prefix set: {}'.format(extban_prefix))
+            # logging.info('Extban prefix set: {}'.format(extban_prefix))
 
         # Setting some mode level shit.
         # +v = 1
@@ -127,11 +114,11 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
             for m in ircd.channel_modes[t]:
                 level = ircd.channel_modes[t][m][0]
                 modeLevel[m] = level
-        for m in [m for m in recv[1] if m in chmodes+'+-' or m in channel.modes]:
+        for m in [m for m in recv[1] if m in chmodes + '+-' or m in channel.modes]:
             param_mode = None
             if m in ircd.parammodes:
-                if (action == '+') or (action == '-' and m not in list(ircd.channel_modes[2])+list(ircd.channel_modes[3])):
-                #if (action == '+') or (action == '-' and m in list(ircd.channel_modes[0])+list(ircd.channel_modes[1])):
+                if (action == '+') or (action == '-' and m not in list(ircd.channel_modes[2]) + list(ircd.channel_modes[3])):
+                    # if (action == '+') or (action == '-' and m in list(ircd.channel_modes[0])+list(ircd.channel_modes[1])):
                     paramcount += 1
                     if len(recv[2:]) > paramcount:
                         param_mode = recv[2:][paramcount]
@@ -141,12 +128,12 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
                         continue
             if m in '+-' and action != m:
                 action = m
-                #logging.debug('Action set: {}'.format(action))
+                # logging.debug('Action set: {}'.format(action))
                 if action != prevaction:
                     if modebuf and modebuf[-1] in '-+':
                         modebuf = modebuf[1:]
                     modebuf.append(action)
-                    #logging.debug('Modebuf now: {}'.format(modebuf))
+                    # logging.debug('Modebuf now: {}'.format(modebuf))
                 prevaction = action
                 continue
 
@@ -156,7 +143,7 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
                 continue
             if m in modeLevel and modeLevel[m] == 7 and type(self).__name__ != 'Server':
                 continue
-            if m not in '+-' and action != prevaction and ( (m in chmodes or m in ircd.chstatus) or (action in '+-' and m in channel.modes) ):
+            if m not in '+-' and action != prevaction and ((m in chmodes or m in ircd.chstatus) or (action in '+-' and m in channel.modes)):
                 modebuf.append(action)
                 prevaction = action
             if m not in ircd.chstatus and m not in '+-':
@@ -164,7 +151,6 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
                     continue
                 elif m in modeLevel and self.chlevel(channel) < modeLevel[m] and modeLevel[m] != 6:
                     oper_override = True
-
 
             if m not in ircd.core_chmodes:
                 c = next((x for x in ircd.channel_mode_class if x.mode == m), None)
@@ -175,12 +161,12 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
                     c.parambuf = parambuf
                     if (action == '+' and c.set_mode(self, channel, param_mode)) or (action == '-' and c.remove_mode(self, channel, param_mode)):
                         pass
-                    #else:
-                        #print('TRIGGER DAN')
-                        #continue
+                    # else:
+                    # print('TRIGGER DAN')
+                    # continue
                 else:
                     # Modules like extbans do not have a mode, so we will check for hooks manually.
-                    for callable in [callable for callable in ircd.hooks if callable[0].lower() == 'pre_'+hook and m in callable[1]]:
+                    for callable in [callable for callable in ircd.hooks if callable[0].lower() == 'pre_' + hook and m in callable[1]]:
                         try:
                             callable[2](self, ircd, channel, modebuf, parambuf, action, m, param_mode)
                         except Exception as ex:
@@ -234,11 +220,10 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
                     modebuf.append(m)
                     parambuf.append(param_mode)
 
-
                 elif m in 'beI':
                     if extban_prefix and param_mode.startswith(extban_prefix):
                         continue
-                    mask = makeMask(ircd, param_mode)
+                    mask = make_mask(ircd, param_mode)
                     if m == 'b':
                         data = channel.bans
                         s = 'ban'
@@ -301,7 +286,7 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
                         channel.temp_status[user][m]['ctime'] = int(time.time()) + timed
                         channel.temp_status[user][m]['action'] = '-'
 
-                if m not in channel.modes and (m in list(ircd.channel_modes[3])+list(ircd.channel_modes[2])):
+                if m not in channel.modes and (m in list(ircd.channel_modes[3]) + list(ircd.channel_modes[2])):
                     ### If the mode is not handled by modules, do it here.
                     if not next((x for x in ircd.channel_mode_class if x.mode == m), None):
                         modebuf.append(m)
@@ -319,8 +304,8 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
                 ###
                 if m in channel.modes:
                     if m == 'l':
-                        #channel.limit = 0
-                        if 'L' in channel.modes: # Also unset -L because we do not need it anymore.
+                        # channel.limit = 0
+                        if 'L' in channel.modes:  # Also unset -L because we do not need it anymore.
                             channel.modes = channel.modes.replace('L', '')
                             modebuf.append('L')
                             parambuf.append(ircd.chan_params[channel]['L'])
@@ -330,20 +315,20 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
                             continue
                         parambuf.append(ircd.chan_params[channel][m])
 
-                    elif m  == 'L':
+                    elif m == 'L':
                         parambuf.append(ircd.chan_params[channel]['L'])
-                        #channel.redirect = None
+                        # channel.redirect = None
 
                     elif m == 'P':
                         if len(channel.users) == 0:
                             ircd.channels.remove(channel)
 
                         try:
-                            with open(ircd.rootdir+'/db/chans.db') as f:
+                            with open(ircd.rootdir + '/db/chans.db') as f:
                                 current_perm = f.read().split('\n')[0]
                                 current_perm = json.loads(current_perm)
                                 del current_perm[channel.name]
-                            with open(ircd.rootdir+'/db/chans.db', 'w+') as f:
+                            with open(ircd.rootdir + '/db/chans.db', 'w+') as f:
                                 json.dump(current_perm, f)
                         except Exception as ex:
                             logging.debug(ex)
@@ -355,7 +340,7 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
                             modebuf.append(m)
 
                 elif m in 'beI':
-                    mask = makeMask(ircd, param_mode)
+                    mask = make_mask(ircd, param_mode)
                     if m == 'b':
                         data = channel.bans
                     elif m == 'e':
@@ -370,7 +355,7 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
                         del data[param_mode]
                         parambuf.append(param_mode)
                         modebuf.append(m)
-                    #continue
+                    # continue
                 elif m in ircd.chstatus:
                     timed = False
                     # -qaohv
@@ -415,7 +400,7 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
 
             if m in ircd.core_chmodes:
                 ### Finally, call modules for core modes.
-                for callable in [callable for callable in ircd.hooks if callable[0].lower() == 'pre_'+hook and m in callable[1]]:
+                for callable in [callable for callable in ircd.hooks if callable[0].lower() == 'pre_' + hook and m in callable[1]]:
                     try:
                         callable[2](self, ircd, channel, modebuf, parambuf, action, m, param_mode)
                     except Exception as ex:
@@ -431,7 +416,6 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
         if channel.name[0] == '&':
             sync = False
 
-
         modes = ''.join(modebuf)
         total_modes, total_params = [], []
         if len(modebuf) > 1:
@@ -446,7 +430,7 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
                     continue
 
                 total_modes.append(m)
-                if m in list(ircd.channel_modes[1])+list(ircd.channel_modes[2]):
+                if m in list(ircd.channel_modes[1]) + list(ircd.channel_modes[2]):
                     # If a module handles a channel mode with a param, but for some reason forgets to add it to the chan_params dict,
                     # we will add it here. It is really important that param-modes have their params saved.
                     if action == '+':
@@ -467,23 +451,17 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
                     except Exception as ex:
                         logging.exception(ex)
 
-
-
-
                 if m in ircd.parammodes and (m not in ircd.channel_modes[2] or action == '+') and len(parambuf) > paramcount:
-                    #logging.debug(f"Paramcount: {paramcount}")
-                    #logging.debug(f"Parambuf: {action}{m} {parambuf}")
+                    # logging.debug(f"Paramcount: {paramcount}")
+                    # logging.debug(f"Parambuf: {action}{m} {parambuf}")
                     total_params.append(parambuf[paramcount])
                     paramcount += 1
-                    #logging.debug(f"Increased paramcount (now={paramcount}) - moving on")
+                    # logging.debug(f"Increased paramcount (now={paramcount}) - moving on")
 
-
-
-
-                totalLength = len(''.join(total_modes)+' '+' '.join(total_params))
+                totalLength = len(''.join(total_modes) + ' ' + ' '.join(total_params))
                 mode_amount = len(re.sub('[+-]', '', ''.join(total_modes)))
                 if mode_amount >= MAXMODES or totalLength >= 400:
-                    all_modes = ''.join(total_modes)+' '+' '.join(total_params)
+                    all_modes = ''.join(total_modes) + ' ' + ' '.join(total_params)
                     if oper_override and type(self).__name__ != 'Server':
                         sourceServer.snotice('s', '*** OperOverride by {} ({}@{}) with MODE {} {}'.format(sourceUser.nickname, sourceUser.ident, sourceUser.hostname, channel.name, all_modes))
                     if sync:
@@ -492,7 +470,7 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
                     total_modes, total_params = [action], []
                     continue
             if len(total_modes) > 1:
-                all_modes = ''.join(total_modes)+' '+' '.join(total_params)
+                all_modes = ''.join(total_modes) + ' ' + ' '.join(total_params)
                 if oper_override and type(self).__name__ != 'Server':
                     sourceServer.snotice('s', '*** OperOverride by {} ({}@{}) with MODE {} {}'.format(sourceUser.nickname, sourceUser.ident, sourceUser.hostname, channel.name, all_modes))
                 if sync:
@@ -505,13 +483,11 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
             save_db(ircd)
 
             # I have these commented out because I no longer use them as globals.
-            #modebuf = []
-            #parambuf = []
+            # modebuf = []
+            # parambuf = []
 
     except Exception as ex:
         logging.exception(ex)
-
-
 
 
 @ircd.Modules.command
@@ -524,12 +500,12 @@ class Mode(ircd.Command):
     Example: MODE #Home +m
              MODE Alice +c
     """
+
     def __init__(self):
         self.command = 'mode'
         self.params = 1
         self.support = [('MAXLIST',), ('PREFIX',), ('MODES', str(MAXMODES),), ('CHANMODES',)]
         self.server_support = 1
-
 
     def execute(self, client, recv, override=False):
         global oper_override
@@ -540,7 +516,7 @@ class Mode(ircd.Command):
             if type(client).__name__ == 'Server':
                 sourceServer = client
                 S = recv[0][1:]
-                sourceUser = [s for s in self.ircd.servers+[self.ircd] if s.sid == S or s.hostname == S]+[u for u in self.ircd.users if u.uid == S or u.nickname == S]
+                sourceUser = [s for s in self.ircd.servers + [self.ircd] if s.sid == S or s.hostname == S] + [u for u in self.ircd.users if u.uid == S or u.nickname == S]
                 if sourceUser:
                     sourceUser = sourceUser[0]
                 else:
@@ -573,7 +549,7 @@ class Mode(ircd.Command):
                     for m in channel.modes:
                         if channel in self.ircd.chan_params and m in self.ircd.chan_params[channel]:
                             show_params.append(self.ircd.chan_params[channel][m])
-                    #client.sendraw(324, '{} +{} {}'.format(channel.name, channel.modes, ' '.join(params) if params and (client in channel.users or 'o' in client.modes) else ''))
+                    # client.sendraw(324, '{} +{} {}'.format(channel.name, channel.modes, ' '.join(params) if params and (client in channel.users or 'o' in client.modes) else ''))
                     client.sendraw(324, '{} +{} {}'.format(channel.name, channel.modes, ' '.join(show_params) if show_params and (client in channel.users or 'o' in client.modes) else ''))
                     client.sendraw(329, '{} {}'.format(channel.name, channel.creation))
                 except Exception as ex:
@@ -591,7 +567,7 @@ class Mode(ircd.Command):
                 return
 
             ######################
-            ### CHANNEL MODES ####
+            # CHANNEL MODES ####
             ######################
             channel = list(filter(lambda c: c.name.lower() == recv[1].lower(), self.ircd.channels))
             if not channel:
@@ -599,12 +575,13 @@ class Mode(ircd.Command):
 
             channel = channel[0]
 
+            # Remove empty/invalid entries.
             for v in [v for v in channel.bans if not v]:
-                del channel.bans[b]
+                del channel.bans[v]
             for v in [v for v in channel.excepts if not v]:
-                del channel.excepts[b]
+                del channel.excepts[v]
             for v in [v for v in channel.invex if not v]:
-                del channel.invex[b]
+                del channel.invex[v]
 
             if type(client).__name__ == 'Server' and not client.eos and client != self.ircd:
                 return
@@ -636,7 +613,7 @@ class Mode(ircd.Command):
 
             if type(client).__name__ != 'Server':
                 if client.chlevel(channel) < 2 and not client.ocheck('o', 'override'):
-                       return client.sendraw(482, '{} :You\'re not a channel operator'.format(channel.name))
+                    return client.sendraw(482, '{} :You\'re not a channel operator'.format(channel.name))
                 elif client.chlevel(channel) < 2:
                     oper_override = True
             processModes(client, self.ircd, channel, recv[1:], sourceServer=sourceServer, sourceUser=sourceUser)
@@ -676,7 +653,6 @@ def chgumode(client, ircd, recv, override, sourceServer=None, sourceUser=None):
                     warn = []
                 continue
 
-
             if m == 'r' and type(client).__name__ != 'Server':
                 if client.server.hostname not in ircd.conf['settings']['ulines']:
                     continue
@@ -691,11 +667,11 @@ def chgumode(client, ircd, recv, override, sourceServer=None, sourceUser=None):
             else:
 
                 for umode in [umode for umode in ircd.user_mode_class if umode.mode == m]:
-                    #logging.debug('/MODE: Found a UserMode class: {}'.format(umode))
+                    # logging.debug('/MODE: Found a UserMode class: {}'.format(umode))
                     umode.modebuf = modebuf
                     if (action == '+' and umode.give_mode(client)) or (action == '-' and umode.take_mode(client)):
-                            #modebuf.append(m)
-                            continue
+                        # modebuf.append(m)
+                        continue
 
                 if m not in '+-' and m not in ircd.user_modes and type(client).__name__ != 'Server':
                     if m not in unknown and not override:
@@ -707,10 +683,9 @@ def chgumode(client, ircd, recv, override, sourceServer=None, sourceUser=None):
                         client.sendraw(ircd.ERR.UMODEUNKNOWNFLAG, 'Mode +{} may only be set by servers'.format(m))
                         warn.append(m)
                     continue
-                    warn = []
+
                 if m in 'ohsqHW' and (not client.operaccount or m not in ircd.conf['opers'][client.operaccount]['modes']) and not override:
                     continue
-
 
                 if action == '+':
                     if m == 'x':
@@ -739,13 +714,12 @@ def chgumode(client, ircd, recv, override, sourceServer=None, sourceUser=None):
 
                     elif m == 'o':
                         updated = []
-                        for user in ircd.users:
-                            for user in [user for user in ircd.users if 'operwatch' in user.caplist and user not in updated and user.socket]:
-                                #common_chan = list(filter(lambda c: user in c.users and client in c.users, ircd.channels))
-                                if not [c for c in ircd.channels if user in c.users and client in c.users]:
-                                    continue
-                                user._send(':{} UMODE {}{}'.format(client.fullmask(), action, m))
-                                updated.append(user)
+                        for user in [user for user in ircd.users if 'operwatch' in user.caplist and user not in updated and user.socket]:
+                            # common_chan = list(filter(lambda c: user in c.users and client in c.users, ircd.channels))
+                            if not [c for c in ircd.channels if user in c.users and client in c.users]:
+                                continue
+                            user._send(':{} UMODE {}{}'.format(client.fullmask(), action, m))
+                            updated.append(user)
 
                     # Handle core modes. These aren't handled by UserMode class.
                     if m not in target.modes:
@@ -755,7 +729,6 @@ def chgumode(client, ircd, recv, override, sourceServer=None, sourceUser=None):
                             target.opermodes += m
                         target.modes += m
                         modebuf.append(m)
-
 
                 if action == '-' and m in target.modes:
                     if m == 'x':
@@ -773,7 +746,7 @@ def chgumode(client, ircd, recv, override, sourceServer=None, sourceUser=None):
 
                     elif m == 'o':
                         target.operflags = []
-                        ### Assign a class.
+                        # Assign a class.
                         for cls in ircd.conf['allow']:
                             clientmaskhost = '{}@{}'.format(target.ident, target.ip)
                             if 'ip' in ircd.conf['allow'][cls]:
@@ -812,13 +785,12 @@ def chgumode(client, ircd, recv, override, sourceServer=None, sourceUser=None):
                         client.operaccount = None
 
                         updated = []
-                        for user in ircd.users:
-                            for user in [user for user in ircd.users if 'operwatch' in user.caplist and user not in updated and user.socket]:
-                                common_chan = list(filter(lambda c: user in c.users and client in c.users, ircd.channels))
-                                if not common_chan:
-                                    continue
-                                user._send(':{} UMODE {}{}'.format(client.fullmask(), action, m))
-                                updated.append(user)
+                        for user in [user for user in ircd.users if 'operwatch' in user.caplist and user not in updated and user.socket]:
+                            common_chan = list(filter(lambda c: user in c.users and client in c.users, ircd.channels))
+                            if not common_chan:
+                                continue
+                            user._send(':{} UMODE {}{}'.format(client.fullmask(), action, m))
+                            updated.append(user)
 
                     # Handle core modes. These aren't handled by UserMode class.
                     if m not in modebuf:
@@ -828,7 +800,7 @@ def chgumode(client, ircd, recv, override, sourceServer=None, sourceUser=None):
                         target.modes = target.modes.replace(mode, '')
 
         if 'o' in target.modes:
-            target.modes = 'o'+target.modes.replace('o', '')
+            target.modes = 'o' + target.modes.replace('o', '')
         if len(modebuf) > 1 and ' '.join(modebuf)[-1] in '+-':
             del modebuf[-1]
         modes = ''.join(modebuf)

@@ -673,8 +673,8 @@ class Server:
             atexit.register(exit_handler)
 
         self.running = 1
-        from handle.handleSockets import data_handler
-        self.datahandler = data_handler(self)
+        from handle.handleSockets import DataHandler
+        self.datahandler = DataHandler(self)
         self.datahandler.run()
         return
 
