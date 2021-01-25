@@ -7,7 +7,7 @@ import gc
 import re
 from ircd import Channel
 import handle.handleModules as Modules
-from handle.functions import _print, logging
+from handle.functions import logging
 
 gc.enable()
 
@@ -435,8 +435,8 @@ def checkConf(ircd, user, confdir, conffile, rehash=False):
 
     except json.JSONDecodeError as ex:
         s = 'Invalid conf format. Make sure the JSON format is correct: {}'.format(ex)
-        _print(s, server=ircd)
         conferr(s)
+        logging.exception(ex)
 
     except Exception as ex:
         # pass

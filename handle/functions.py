@@ -314,10 +314,6 @@ def is_sslport(server, checkport):
     return 'ssl' in set(server.conf['listen'][str(checkport)]['options'])
 
 
-def _print(txt, server=None):
-    write(str(txt), server)
-
-
 def valid_expire(s):
     spu = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800, "M": 2592000}
     if s.isdigit():
@@ -327,31 +323,31 @@ def valid_expire(s):
     return int(s[:-1]) * spu[s[-1]]
 
 
-def checkSpamfilter(self, ircd, target, filterTarget, msg):
+def checkSpamfilter(client, ircd, target, filterTarget, msg):
     try:
-        if type(self).__name__ == 'Server':
+        if type(client).__name__ == 'Server':
             return
-        if 'spamfilter' not in ircd.conf or self.server != ircd or self.ocheck('o', 'override'):
+        if 'spamfilter' not in ircd.conf or client.server != ircd or client.ocheck('o', 'override'):
             return False
         for entry in iter(ircd.conf['spamfilter']):
             # t = ircd.conf['spamfilter'][entry]['type']
             action = ircd.conf['spamfilter'][entry]['action']
             if filterTarget in ircd.conf['spamfilter'][entry]['target'] and match(entry.lower(), msg.lower()):
-                msg = 'Spamfilter match by {} ({}@{}) matching {} [{} {} {}]'.format(self.nickname, self.ident, self.hostname, entry, filterTarget.upper(), target, msg)
+                msg = 'Spamfilter match by {} ({}@{}) matching {} [{} {} {}]'.format(client.nickname, client.ident, client.hostname, entry, filterTarget.upper(), target, msg)
                 ircd.snotice('F', msg)
                 reason = entry
                 if 'reason' in ircd.conf['spamfilter'][entry] and len(ircd.conf['spamfilter'][entry]['reason']) > 0:
                     reason = ircd.conf['spamfilter'][entry]['reason']
                 if action == 'block':
-                    self.sendraw(404, '{} :Spamfilter match: {}'.format(target, reason))
+                    client.sendraw(404, '{} :Spamfilter match: {}'.format(target, reason))
                     return True
                 elif action == 'kill':
-                    ircd.handle('kill', '{} :Spamfilter match: {}'.format(self.nickname, reason))
+                    ircd.handle('kill', '{} :Spamfilter match: {}'.format(client.nickname, reason))
 
                 elif action == 'gzline':
                     duration = ircd.conf['spamfilter'][entry]['duration']
                     duration = valid_expire(duration)
-                    data = '+ Z * {} {} {} {} :{}'.format(self.ip, ircd.hostname, str(int(time.time()) + duration), int(time.time()), 'Spamfilter match: {}'.format(reason))
+                    data = '+ Z * {} {} {} {} :{}'.format(client.ip, ircd.hostname, str(int(time.time()) + duration), int(time.time()), 'Spamfilter match: {}'.format(reason))
                     ircd.handle('tkl', data)
 
     except Exception as ex:

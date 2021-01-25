@@ -41,12 +41,11 @@ class Away(ircd.Command):
             client.sendraw(306, ':You have been marked as being away')
 
         updated = []
-        for user in self.ircd.users:
-            for user in [user for user in self.ircd.users if 'away-notify' in user.caplist and user not in updated and user.socket]:
-                common_chan = list(filter(lambda c: user in c.users and client in c.users, self.ircd.channels))
-                if not common_chan:
-                    continue
-                user._send(':{} AWAY {}'.format(client.fullmask(), '{}'.format(':' + client.away if client.away else '')))
-                updated.append(user)
+        for user in [user for user in self.ircd.users if 'away-notify' in user.caplist and user not in updated and user.socket]:
+            common_chan = list(filter(lambda c: user in c.users and client in c.users, self.ircd.channels))
+            if not common_chan:
+                continue
+            user._send(':{} AWAY {}'.format(client.fullmask(), '{}'.format(':' + client.away if client.away else '')))
+            updated.append(user)
 
         self.ircd.new_sync(self.ircd, sourceServer, data)

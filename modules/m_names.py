@@ -4,7 +4,7 @@
 
 import ircd
 
-from handle.functions import _print
+from handle.functions import logging
 
 
 @ircd.Modules.command
@@ -36,14 +36,14 @@ class Names(ircd.Command):
                     users.append('!' + user.nickname)
                 continue
 
-            ### Check module hooks for visible_in_channel()
+            # Check module hooks for visible_in_channel()
             visible = 1
             if user != client:
                 for callable in [callable for callable in self.ircd.hooks if callable[0].lower() == 'visible_in_channel']:
                     try:
                         visible = callable[2](client, self.ircd, user, channel)
                     except Exception as ex:
-                        _print('Exception in module: {}: {}'.format(callable[2], ex), server=self.ircd)
+                        logging.exception(ex)
             if not visible:
                 continue
 
