@@ -17,7 +17,7 @@ Note: if you want to use Anope, select "unreal40" as the protocol in Anope conf.
 *** Some special features ***
 
 * IRCv3 support for the following CAPs: account-notify, away-notify, server-time, chghost, echo-message, tls, userhost-in-names, extended-join
-  Yes, multi-prefix is missing since it is hardcoded in the core.
+  (multi-prefix is hardcoded in the core)
 
 
 * m_extbans for extended bans similar to UnrealIRCd.
