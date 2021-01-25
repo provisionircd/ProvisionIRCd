@@ -5,7 +5,7 @@ import collections
 import ssl
 import gc
 import re
-import ircd
+from ircd import Channel
 import handle.handleModules as Modules
 from handle.functions import _print, logging
 
@@ -507,7 +507,7 @@ def checkConf(ircd, user, confdir, conffile, rehash=False):
                     perm_data = json.loads(perm_data)
                     # Restoring permanent channels.
                     for chan in [chan for chan in perm_data if chan.lower() not in [c.name.lower() for c in ircd.channels]]:
-                        c = ircd.Channel(chan)
+                        c = Channel(chan)
                         ircd.channels.append(c)
                         ircd.chan_params[c] = {}
                         for callable in [callable for callable in ircd.hooks if callable[0].lower() == 'channel_create']:

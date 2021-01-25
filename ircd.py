@@ -54,6 +54,7 @@ B = '\033[34m'  # blue
 
 
 class Channel:
+    print('HIER?')
     def __init__(self, name, params=None):
         self.name = name
         if not params:
