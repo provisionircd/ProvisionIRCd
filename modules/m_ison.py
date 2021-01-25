@@ -11,6 +11,7 @@ class Ison(ircd.Command):
     Checks to see if a nickname is online.
     Example: /ISON Nick1 SomeOthernick
     """
+
     def __init__(self):
         self.command = 'ison'
         self.params = 1
@@ -30,6 +31,7 @@ class Userhost(ircd.Command):
     Returns the cloaked userhost of the given user.
     Example: /USERHOST John
     """
+
     def __init__(self):
         self.command = 'userhost'
         self.params = 1
@@ -39,7 +41,7 @@ class Userhost(ircd.Command):
         for nick in recv[1:]:
             users = filter(lambda u: u.nickname.lower() == nick.lower() and u.registered, self.ircd.users)
             for user in users:
-                h = '{}*=+{}@{}'.format(user.nickname,user.ident,user.cloakhost if 'o' not in self.modes else user.hostname)
+                h = '{}*=+{}@{}'.format(user.nickname, user.ident, user.cloakhost if 'o' not in self.modes else user.hostname)
                 if h not in hosts:
                     hosts.append(h)
         client.sendraw(self.RPL.USERHOST, ':{}'.format(' '.join(hosts)))

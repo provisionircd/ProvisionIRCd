@@ -4,12 +4,14 @@
 
 import ircd
 
+
 @ircd.Modules.command
 class Chghost(ircd.Command):
     """
     Changes a users' cloak host.
     Syntax: CHGHOST <user> <newhost>
     """
+
     def __init__(self):
         self.command = 'chghost'
         self.req_modes = 'o'

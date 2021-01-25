@@ -11,13 +11,14 @@ class Motd(ircd.Command):
     """
     Displays the Message of the Day.
     """
+
     def __init__(self):
         self.command = 'motd'
 
     def execute(self, client, recv):
         if type(client).__name__ == 'Server':
             if len(recv) == 1:
-                with open(self.ircd.confdir+'ircd.motd') as f:
+                with open(self.ircd.confdir + 'ircd.motd') as f:
                     b_motd = bytes(f.read(), 'utf-8')
                     logging.debug('Sending to remote: {}'.format(b_motd))
                     client._send('MOTD {}'.format(b_motd))
@@ -35,7 +36,7 @@ class Motd(ircd.Command):
         else:
             if len(recv) == 1:
                 client.sendraw(self.RPL.MOTDSTART, '{} Message of the Day'.format(self.ircd.hostname))
-                with open(self.ircd.confdir+'ircd.motd') as f:
+                with open(self.ircd.confdir + 'ircd.motd') as f:
                     for line in f.read().split('\n'):
                         client.sendraw(self.RPL.MOTD, ':- {}'.format(line))
                     client.sendraw(self.RPL.ENDOFMOTD, ':End of Message of the Day.')
@@ -45,7 +46,7 @@ class Motd(ircd.Command):
                     server_exists = [server for server in self.ircd.servers if server.hostname.lower() == remoteserver]
                     if not server_exists and remoteserver != self.ircd.hostname:
                         return client.sendraw(402, '{} :No such server'.format(remoteserver))
-                    if not server_exists[0].socket: ### Will fix hops later.
+                    if not server_exists[0].socket:  ### Will fix hops later.
                         return self.ircd.notice(client, '* You can only request remote MOTDs from directly linked servers.')
                     if 'o' not in client.modes:
                         client.flood_penalty += 50000

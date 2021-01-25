@@ -3,6 +3,7 @@
 """
 
 import ircd
+
 try:
     import bcrypt
 except:
@@ -14,11 +15,11 @@ class Mkpasswd(ircd.Command):
     Generated a bcrypt password from a string.
     Example: /MKPASSWD hunter2
     """
+
     def __init__(self):
         self.command = 'mkpasswd'
         self.req_modes = 'o'
         self.params = 1
-
 
     def execute(self, client, recv):
         try:

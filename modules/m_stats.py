@@ -2,18 +2,17 @@
 /stats command
 """
 
+import datetime
+import os
+import sys
+import time
+
 import ircd
 
-import sys
-import os
-import time
-import datetime
 try:
     import psutil
 except ImportError:
     pass
-
-from handle.functions import is_sslport, logging
 
 stats = 'deglpuCGLO'
 
@@ -22,11 +21,11 @@ class Stats(ircd.Command):
     """
     View several server stats.
     """
+
     def __init__(self):
         self.command = 'stats'
         self.req_modes = 'o'
         self.req_flags = 'stats'
-
 
     def execute(self, client, recv):
         if len(recv) == 1:
@@ -100,13 +99,13 @@ class Stats(ircd.Command):
                 for mask in self.ircd.tkl[type]:
                     display = mask.split('@')[1] if type == 'Q' else mask
                     t = self.ircd.tkl[type][mask]
-                    client.sendraw(223, '{} {} {} {} {} :{}'.format(type, display, int(t['expire'])-int(time.time()) if t['expire'] != '0' else '0', t['ctime'], t['setter'], t['reason']))
+                    client.sendraw(223, '{} {} {} {} {} :{}'.format(type, display, int(t['expire']) - int(time.time()) if t['expire'] != '0' else '0', t['ctime'], t['setter'], t['reason']))
 
         elif recv[1] in 'lL':
             for link in self.ircd.conf['link']:
                 t = self.ircd.conf['link'][link]
                 name = link
-                if recv[1] == 'l' and not [ s for s in self.ircd.servers if s.hostname == name]:
+                if recv[1] == 'l' and not [s for s in self.ircd.servers if s.hostname == name]:
                     continue
                 link_class = t['class']
                 incoming_host = t['incoming']['host']
@@ -123,16 +122,16 @@ class Stats(ircd.Command):
             for sock in self.ircd.listen_socks:
                 ip, port = sock.getsockname()
                 options = ', '.join(self.ircd.conf['listen'][str(port)]['options'])
-                total_clients = [s for s in self.ircd.users+self.ircd.servers if s.socket]
+                total_clients = [s for s in self.ircd.users + self.ircd.servers if s.socket]
                 port_clients = [client for client in total_clients if (client.socket.getsockname()[1] == port or client.socket.getpeername()[1] == port)]
                 client.sendraw(210, '{} {}:{} [options: {}], used by {} client{}'.format(recv[1], ip, port, options, len(port_clients), 's' if len(port_clients) != 1 else ''))
 
         elif recv[1] == 'G':
-            for type in [type for type in self.ircd.tkl if type in 'gGZQ']: # G should also see g (local)
+            for type in [type for type in self.ircd.tkl if type in 'gGZQ']:  # G should also see g (local)
                 for mask in self.ircd.tkl[type]:
                     display = mask.split('@')[1] if type == 'Q' else mask
                     t = self.ircd.tkl[type][mask]
-                    client.sendraw(223, '{} {} {} {} {} :{}'.format(type, display, int(t['expire'])-int(time.time()) if t['expire'] != '0' else '0', t['ctime'], t['setter'], t['reason']))
+                    client.sendraw(223, '{} {} {} {} {} :{}'.format(type, display, int(t['expire']) - int(time.time()) if t['expire'] != '0' else '0', t['ctime'], t['setter'], t['reason']))
 
         elif recv[1] == 'O':
             for oper in self.ircd.conf['opers']:
@@ -145,7 +144,7 @@ class Stats(ircd.Command):
             try:
                 pid = os.getpid()
                 py = psutil.Process(pid)
-                memoryUse = float(py.memory_info()[0] /2.**20)
+                memoryUse = float(py.memory_info()[0] / 2. ** 20)
                 memoryUse = "%.2f" % memoryUse
                 client.sendraw(242, ':RAM usage: {} MB'.format(memoryUse))
             except:

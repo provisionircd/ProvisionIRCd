@@ -1,48 +1,42 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import os
-import sys
-import time
-import ssl
-import gc
-gc.enable()
-import socket
-import importlib
 import argparse
 import atexit
-import handle.handleConf
-import handle.handleModules as Modules
-from handle.handleLink import Link as link
-from collections import OrderedDict
+import gc
+import os
 import select
+import socket
+import sys
+import time
+from collections import OrderedDict
+from handle.functions import match, is_sslport, update_support, logging
+import handle.handleConf
+from classes import user
+from classes.modes import UserMode, ChannelMode
+from classes.commands import Command
+import handle.handleModules as Modules
+from classes.rpl import ERR, RPL
+
 try:
     import objgraph
 except:
     pass
 
+gc.enable()
 
 version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
 if int(version) < 36:
     print('Python version 3.6 or higher is required.')
     sys.exit()
 
-
 path = os.path.abspath(__file__)
 dir_path = os.path.dirname(path)
 os.chdir(dir_path)
-pidfile = dir_path+'/process.pid'
+pidfile = dir_path + '/process.pid'
 
-### Import classes.
-from classes import user
 User = user.User
 
-
-from classes.modes import UserMode, ChannelMode
-from classes.commands import Command
-from classes.rpl import ERR, RPL
-
-from handle.functions import _print, match, is_sslport, update_support, logging
 
 def exit_handler():
     try:
@@ -53,9 +47,11 @@ def exit_handler():
     finally:
         sys.exit()
 
+
 W = '\033[0m'  # white (normal)
-R2 = '\033[91m' # bright red
-B = '\033[34m' # blue
+R2 = '\033[91m'  # bright red
+B = '\033[34m'  # blue
+
 
 class Channel:
     def __init__(self, name, params=None):
@@ -77,13 +73,15 @@ class Channel:
     def __repr__(self):
         return "<Channel '{}'>".format(self.name)
 
+
 READ_ONLY = (
-    select.POLLIN |
-    select.POLLPRI |
-    select.POLLHUP |
-    select.POLLERR
+        select.POLLIN |
+        select.POLLPRI |
+        select.POLLHUP |
+        select.POLLERR
 )
 READ_WRITE = READ_ONLY | select.POLLOUT
+
 
 class Server:
     def __init__(self, conffile=None, forked=False, origin=None, serverLink=False, sock=None, is_ssl=False):
@@ -94,16 +92,14 @@ class Server:
         self.hopcount = 0
         if not serverLink:
             try:
-                #global server
-                #server = self
                 self.forked = forked
                 self.hostname = '*'
                 from handle.functions import initlogging
                 initlogging(self)
                 self.listen_socks = {}
                 self.rootdir = dir_path
-                self.confdir = dir_path+'/conf/'
-                self.modules_dir = dir_path+'/modules/'
+                self.confdir = dir_path + '/conf/'
+                self.modules_dir = dir_path + '/modules/'
                 self.tls_files = {}
                 self.conffile = conffile
                 self.ERR = ERR
@@ -130,13 +126,13 @@ class Server:
                 self.version = 'ProvisionIRCd-{}-beta'.format(self.versionnumber)
                 self.hostinfo = 'Python {}'.format(sys.version.split('\n')[0].strip())
 
-                ### Polling does not work.
-                self.use_poll = 0 ### Polling does not work.
-                self.pre_wrap = 0 ### Polling does not work. Also pre-wrapping may cause memleak? Not sure, needs checking. It will prevent you from reloading certs.
+                # Polling does not work.
+                self.use_poll = 0  # Polling does not work.
+                self.pre_wrap = 0  # Polling does not work. Also pre-wrapping may cause memleak? Not sure, needs checking. It will prevent you from reloading certs.
                 if self.use_poll:
                     self.pollerObject = select.poll()
                     self.fd_to_socket = {}
-                ### Polling does not work.
+                # Polling does not work.
 
                 self.socket = None
                 self.introducedBy = None
@@ -166,44 +162,44 @@ class Server:
                 }
 
                 self.channel_modes = {
-                ### +v = 1
-                ### +h = 2
-                ### +o = 3
-                ### +a = 4
-                ### +q = 5
-                ### oper = 6
-                ### server = 7
-                            0: {
-                                "b": (2, "Bans the given hostmask from the channel", "<nick!ident@host>"),
-                                "e": (2, "Users matching an except can go through channel bans", "<nick!ident@host>"),
-                                "I": (2, "Matching users can go through channel mode +i", "<nick!ident@host>"),
-                                },
-                            1: {
-                                "k": (2, "User must give a key in order to join the channel", "<key>"),
-                                "L": (5, "When the channel is full, redirect users to another channel (requires +l)", "<chan>"),
-                                },
-                            2: {
-                                "l": (2, "Set a channel user limit", "[number]"),
-                                },
-                            3: {
-                                "m": (2, "Moderated channel, need +v or higher to talk"),
-                                "n": (2, "No outside messages allowed"),
-                                "j": (3, "Quits appear as parts"),
-                                "p": (3, "Private channel"),
-                                "r": (7, "Channel is registered"),
-                                "s": (3, "Channel is secret"),
-                                "t": (3, "Only +h or higher can change topic"),
-                                "z": (3, "Requires SSL to join the channel"),
-                                "C": (2, "CTCPs are not allowed in the channel"),
-                                "N": (4, "Nickchanges are not allowed in the channel"),
-                                "O": (6, "Only IRCops can join"),
-                                "P": (6, "Permanent channel"),
-                                "Q": (4, "No kicks allowed"),
-                                "R": (3, "You must be registered to join the channel"),
-                                "T": (2, "Notices are not allowed in the channel"),
-                                "V": (3, "Invite is not permitted on the channel"),
-                                },
-                        }
+                    # +v = 1
+                    # +h = 2
+                    # +o = 3
+                    # +a = 4
+                    # +q = 5
+                    # oper = 6
+                    # server = 7
+                    0: {
+                        "b": (2, "Bans the given hostmask from the channel", "<nick!ident@host>"),
+                        "e": (2, "Users matching an except can go through channel bans", "<nick!ident@host>"),
+                        "I": (2, "Matching users can go through channel mode +i", "<nick!ident@host>"),
+                    },
+                    1: {
+                        "k": (2, "User must give a key in order to join the channel", "<key>"),
+                        "L": (5, "When the channel is full, redirect users to another channel (requires +l)", "<chan>"),
+                    },
+                    2: {
+                        "l": (2, "Set a channel user limit", "[number]"),
+                    },
+                    3: {
+                        "m": (2, "Moderated channel, need +v or higher to talk"),
+                        "n": (2, "No outside messages allowed"),
+                        "j": (3, "Quits appear as parts"),
+                        "p": (3, "Private channel"),
+                        "r": (7, "Channel is registered"),
+                        "s": (3, "Channel is secret"),
+                        "t": (3, "Only +h or higher can change topic"),
+                        "z": (3, "Requires SSL to join the channel"),
+                        "C": (2, "CTCPs are not allowed in the channel"),
+                        "N": (4, "Nickchanges are not allowed in the channel"),
+                        "O": (6, "Only IRCops can join"),
+                        "P": (6, "Permanent channel"),
+                        "Q": (4, "No kicks allowed"),
+                        "R": (3, "You must be registered to join the channel"),
+                        "T": (2, "Notices are not allowed in the channel"),
+                        "V": (3, "Invite is not permitted on the channel"),
+                    },
+                }
 
                 self.core_chmodes = 'vhoaq'
                 chmodes_string = ''
@@ -215,44 +211,42 @@ class Server:
                     chmodes_string += ','
                 logging.info('Core modes set: {}'.format(self.core_chmodes))
                 self.chmodes_string = chmodes_string[:-1]
-                #self.snomasks = 'cdfjkostzCFGNQS'
+                # self.snomasks = 'cdfjkostzCFGNQS'
 
-                ## TODO: { "c": (desc, flags) },
+                # TODO: { "c": (desc, flags) },
                 self.snos = {
                     # 1 = local
-                            "d": ("Can read local connect/disconnect notices", (1,3)),
-                            "o": ("See oper-up notices", (0,2)),
-                        }
-
+                    "d": ("Can read local connect/disconnect notices", (1, 3)),
+                    "o": ("See oper-up notices", (0, 2)),
+                }
 
                 self.snomasks = {
-                                "c": "Can read local connect/disconnect notices",
-                                "d": "Can see DNSNL hits",
-                                "f": "See flood alerts",
-                                "k": "View kill notices",
-                                "o": "See oper-up notices",
-                                "s": "General server notices",
-                                "t": "Trash notices (unimportant stuff)",
-                                "C": "Can read global connect/disconnect notices",
-                                "F": "View spamfilter matches",
-                                "G": "View TKL usages",
-                                "N": "Can see nick changes",
-                                "Q": "View Q:line rejections",
-                                "S": "Can see /sanick, /sajoin, and /sapart usage",
-                                }
+                    "c": "Can read local connect/disconnect notices",
+                    "d": "Can see DNSNL hits",
+                    "f": "See flood alerts",
+                    "k": "View kill notices",
+                    "o": "See oper-up notices",
+                    "s": "General server notices",
+                    "t": "Trash notices (unimportant stuff)",
+                    "C": "Can read global connect/disconnect notices",
+                    "F": "View spamfilter matches",
+                    "G": "View TKL usages",
+                    "N": "Can see nick changes",
+                    "Q": "View Q:line rejections",
+                    "S": "Can see /sanick, /sajoin, and /sapart usage",
+                }
 
                 self.chstatus = 'yqaohv'
                 self.chprefix = OrderedDict(
-                                    [
-                                    ('y', '!'),
-                                    ('q', '~'),
-                                    ('a', '&'),
-                                    ('o', '@'),
-                                    ('h', '%'),
-                                    ('v', '+')
-                                    ])
+                    [
+                        ('y', '!'),
+                        ('q', '~'),
+                        ('a', '&'),
+                        ('o', '@'),
+                        ('h', '%'),
+                        ('v', '+')
+                    ])
                 self.chprefix = OrderedDict(self.chprefix)
-                chprefix_string = ''
                 first = '('
                 second = ''
                 for key in self.chprefix:
@@ -265,23 +259,20 @@ class Server:
                     for m in [m for m in self.channel_modes[x] if str(x) in '012' and m not in self.parammodes]:
                         self.parammodes += m
                 self.chan_params = {}
-                self.maxlist = {}
-                self.maxlist['b'] = 500
-                self.maxlist['e'] = 500
-                self.maxlist['I'] = 500
+                self.maxlist = {'b': 500, 'e': 500, 'I': 500}
                 self.maxlist_string = "b:{s[b]},e:{s[e]},I:{s[I]}".format(s=self.maxlist)
                 self.servers = []
                 self.running = 0
                 self.caps = [
-                            'account-notify',
-                            'away-notify',
-                            'server-time',
-                            'chghost',
-                            'echo-message',
-                            'userhost-in-names',
-                            'extended-join',
-                            'operwatch'
-                    ]
+                    'account-notify',
+                    'away-notify',
+                    'server-time',
+                    'chghost',
+                    'echo-message',
+                    'userhost-in-names',
+                    'extended-join',
+                    'operwatch'
+                ]
 
                 validconf = handle.handleConf.checkConf(self, None, self.confdir, self.conffile)
 
@@ -337,12 +328,12 @@ class Server:
 
     def __del__(self):
         pass
-        #logging.debug('Server {} closed'.format(self))
+        # logging.debug('Server {} closed'.format(self))
 
     def fileno(self):
         return self.socket.fileno()
 
-    def new_sync(self, localServer, skip, data, direct=None):
+    def new_sync(self, ircd, skip, data, direct=None):
         try:
             if type(skip) != list:
                 skip = [skip]
@@ -352,39 +343,38 @@ class Server:
             if data.split()[1] in ['UID', 'SID']:
                 data = data.split()
                 data = '{} {} {}'.format(' '.join(data[:3]), str(int(data[3]) + 1), ' '.join(data[4:]))
-            if direct: ### Private messages and notices. direct represents the target.server
+            if direct:  # Private messages and notices. direct represents the target.server
                 dest = direct if direct.socket else direct.uplink
-                #if direct.socket:
-                    #logging.info('Directly linked to us, no more hops needed.')
+                # if direct.socket:
+                # logging.info('Directly linked to us, no more hops needed.')
                 if not direct.socket:
                     logging.info('Server has hopcount of {d.hopcount}, sending to {d.uplink} first.'.format(d=direct))
                 dest._send(data)
                 return
 
-            for server in [server for server in localServer.servers if server and server.socket and server not in skip]:
+            for server in [server for server in ircd.servers if server and server.socket and server not in skip]:
                 if not server.eos:
-                    if server not in localServer.sync_queue:
-                        localServer.sync_queue[server] = []
-                    localServer.sync_queue[server].append(data)
+                    if server not in ircd.sync_queue:
+                        ircd.sync_queue[server] = []
+                    ircd.sync_queue[server].append(data)
                     logging.info('{}Added to {} sync queue because they are not done syncing: {}{}'.format(R2, server, data, W))
                     continue
                 server._send(data)
         except Exception as ex:
             logging.exception(ex)
 
-
-    def parse_command(self, data):
+    @staticmethod
+    def parse_command(data):
         xwords = data.split(' ')
         words = []
         for i in range(len(xwords)):
             word = xwords[i]
             if word.startswith(':'):
-                words.append(' '.join([word[1:]] + xwords[i+1:]))
+                words.append(' '.join([word[1:]] + xwords[i + 1:]))
                 break
             words.append(word)
         words = list(filter(None, words))
         return words
-
 
     def _send(self, data):
         try:
@@ -397,19 +387,18 @@ class Server:
                 try:
                     if data.split()[0] not in ['PING', 'PONG']:
                         if len(data) > 1 and data.split()[1] not in ignore:
-                            #pass
+                            # pass
                             logging.info('{}{} <<<-- {}{}'.format(B, self.hostname if self.hostname != '' else self, data, W))
                 except:
                     pass
         except Exception as ex:
             logging.exception(ex)
 
-
     def handle_recv(self):
         while self.recvbuffer.find("\n") != -1:
             try:
                 recv = self.recvbuffer[:self.recvbuffer.find("\n")]
-                self.recvbuffer = self.recvbuffer[self.recvbuffer.find("\n")+1:]
+                self.recvbuffer = self.recvbuffer[self.recvbuffer.find("\n") + 1:]
                 recvNoStrip = recv.replace('\r', '').split(' ')
                 recv = recv.split()
                 if not recv:
@@ -421,7 +410,7 @@ class Server:
                 localServer = self.localServer
                 try:
                     ignore = ['ping', 'pong', 'privmsg', 'notice']
-                    #ignore = []
+                    # ignore = []
                     if command.lower() not in ignore and recv[1].lower() not in ignore:
                         logging.info('{}{} -->>> {}{}'.format(B, self.hostname if self.hostname != '' else self, ' '.join(recvNoStrip), W))
                         pass
@@ -445,7 +434,7 @@ class Server:
                         ip, port = self.socket.getpeername()
                         # The error is outgoing and will be displayed on the REMOTE server.
                         error = 'Link denied for {}[{}:{}]: they are missing modules: {}'.format(
-                        self.hostname, ip, port,  ', '.join(missing_mods)  )
+                            self.hostname, ip, port, ', '.join(missing_mods))
 
                         string = ', '.join(missing_mods)
                         self._send(':{} ERROR :{}'.format(localServer.sid, error))
@@ -466,7 +455,7 @@ class Server:
                     target = serv[0]
                     token = recv[1]
                     if token == 'AU':
-                        ### Send PRIVMSG to all users with given usermode.
+                        # Send PRIVMSG to all users with given usermode.
                         users = list(filter(lambda u: recv[2] in u.modes, localServer.users))
                         for user in users:
                             target.broadcast([user], 'PRIVMSG {} {}'.format(user.uid, ' '.join(recv[3:])))
@@ -474,14 +463,13 @@ class Server:
                     elif token == 'Ss':
                         if serv[0] and not serv[0].eos and not serv[0].introducedBy.eos:
                             continue
-                        ### Send NOTICE to all users with given snomask.
+                        # Send NOTICE to all users with given snomask.
                         msg = ' '.join(recv[3:])[1:]
                         localServer.snotice(recv[2], msg, sync=False, source=serv[0])
 
                 elif prefix == ':':
                     source = command[1:]
                     command = recv[1]
-                    token = recv[1]
 
                     if command == 'BW' or command == 'BV' or command == 'SVSSNO':
                         source = list(filter(lambda u: u.uid == recv[0][1:] or u.nickname == recv[0][1:], localServer.users))
@@ -496,7 +484,8 @@ class Server:
                                 continue
                             if snoset == '+' and 'm' not in source[0].snomasks:
                                 source[0].snomasks += m
-                            elif snoset == '-':source[0].snomasks = source[0].snomasks.replace(m, '')
+                            elif snoset == '-':
+                                source[0].snomasks = source[0].snomasks.replace(m, '')
                         if command == 'BW':
                             source[0]._send(':{} MODE +s :{}'.format(source[0].server.hostname, recv[2:]))
                             source[0].sendraw(8, 'Server notice mask (+{})'.format(source[0].snomasks))
@@ -504,13 +493,11 @@ class Server:
 
                     c = next((x for x in localServer.command_class if command.upper() in list(x.command)), None)
                     if c:
-                        false_cmd = False
                         if c.check(self, recvNoStrip):
                             try:
                                 c.execute(self, recvNoStrip)
                             except Exception as ex:
                                 logging.exception(ex)
-
 
                     for callable in [callable for callable in localServer.commands if callable[0].lower() == command.lower()]:
                         try:
@@ -523,7 +510,6 @@ class Server:
                 else:
                     c = next((x for x in localServer.command_class if command.upper() in list(x.command)), None)
                     if c:
-                        false_cmd = False
                         if c.check(self, recvNoStrip):
                             try:
                                 c.execute(self, recvNoStrip)
@@ -580,7 +566,7 @@ class Server:
                 elif self.hostname in localServer.pendingLinks:
                     placeholder = "Unable to connect to"
                     t = 2
-                elif not self.eos: # and 'link' in localServer.conf and self.hostname in localServer.conf['link']:
+                elif not self.eos:  # and 'link' in localServer.conf and self.hostname in localServer.conf['link']:
                     placeholder = "Link denied for"
                     t = 3
                 if placeholder:
@@ -679,7 +665,7 @@ class Server:
         return
 
     def handle(self, cmd, data, kwargs=None):
-        p = ' '.join([':'+self.sid, cmd.upper(), data]).split()
+        p = ' '.join([':' + self.sid, cmd.upper(), data]).split()
         try:
             c = next((x for x in self.localServer.command_class if cmd.upper() in list(x.command)), None)
             if c:
@@ -689,8 +675,7 @@ class Server:
                     else:
                         c.execute(self, p)
         except Exception as ex:
-           logging.exception(ex)
-
+            logging.exception(ex)
 
     def broadcast(self, users, data, source=None):
         if source:
@@ -712,7 +697,7 @@ class Server:
             if sno:
                 if sno in localServer.snos:
                     flags = localServer.snos[sno][1]
-                    #print('Flags for {}: {}'.format(sno, flags))
+                    # print('Flags for {}: {}'.format(sno, flags))
 
             users = list(filter(lambda u: 'o' in u.modes and 's' in u.modes and sno in u.snomasks, localServer.users))
             for user in users:
@@ -733,7 +718,7 @@ class Server:
                     displaySource = self.hostname
                 user._send(':{} NOTICE {} :{}'.format(displaySource, user.nickname, msg))
 
-            localsno = ['d', 'j', 't', 'G'] ### I removed 's' from localsno. See you soon.
+            localsno = ['d', 'j', 't', 'G']  # I removed 's' from localsno. See you soon.
             if sno not in localsno and sync and not local:
                 if sno == 'c':
                     sno = 'C'
@@ -743,7 +728,6 @@ class Server:
         except Exception as ex:
             logging.exception(ex)
 
-
     def listenToPort(self, port, type):
         try:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -751,13 +735,13 @@ class Server:
             self.sock.bind(("", port))
             self.sock.listen(5)
             if is_sslport(self, port) and self.pre_wrap:
-                ### SSL port. certfile="ssl/server.crt", keyfile="ssl/server.key", ca_certs="ssl/client.crt"
+                # SSL port. certfile="ssl/server.crt", keyfile="ssl/server.key", ca_certs="ssl/client.crt"
                 self.sock = self.sslctx.wrap_socket(self.sock, server_side=True)
-            if self.use_poll: ### Polling does not work.
+            if self.use_poll:  # Polling does not work.
                 self.pollerObject.register(self.sock, select.POLLIN)
                 self.fd_to_socket[self.sock.fileno()] = (self.sock, self)
             print('Server listening on port {} :: {} ({})'.format(port, 'SSL' if is_sslport(self, port) else 'insecure', type))
-            #print('Sockets{} pre-wrapped. Polling: {}'.format(' not' if not self.pre_wrap else '', 'yes' if self.use_poll else 'no'))
+            # print('Sockets{} pre-wrapped. Polling: {}'.format(' not' if not self.pre_wrap else '', 'yes' if self.use_poll else 'no'))
             return self.sock
         except Exception as ex:
             exc_type, exc_obj, exc_tb = sys.exc_info()
@@ -768,14 +752,14 @@ class Server:
             sys.exit()
 
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='IRCd.')
     parser.add_argument('-c', '--conf', help='Conf file.')
-    parser.add_argument('--nofork', help='No fork.',action='store_true')
+    parser.add_argument('--nofork', help='No fork.', action='store_true')
     try:
         mkp = 1
         import bcrypt
+
         parser.add_argument('--mkpasswd', help='Generate bcrypt password')
     except ImportError:
         mkp = 0
@@ -783,7 +767,7 @@ if __name__ == "__main__":
     if not mkp:
         args.mkpasswd = None
     if args.mkpasswd:
-        hashed = bcrypt.hashpw(args.mkpasswd.encode('utf-8'),bcrypt.gensalt(10)).decode('utf-8')
+        hashed = bcrypt.hashpw(args.mkpasswd.encode('utf-8'), bcrypt.gensalt(10)).decode('utf-8')
         print('Your salted password: {}'.format(hashed))
         sys.exit()
 

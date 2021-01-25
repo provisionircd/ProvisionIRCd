@@ -4,6 +4,7 @@
 
 import ircd
 
+
 class Sethost(ircd.Command):
     def __init__(self):
         self.command = 'sethost'

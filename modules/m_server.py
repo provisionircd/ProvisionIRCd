@@ -3,17 +3,18 @@
 """
 
 import ircd
+
 Server = ircd.Server
 
 from handle.functions import match, logging
 from handle.handleLink import syncData, selfIntroduction
 
 W = '\033[0m'  # white (normal)
-R = '\033[31m' # red
-G = '\033[32m' # green
-Y = '\033[33m' # yellow
-B = '\033[34m' # blue
-P = '\033[35m' # purple
+R = '\033[31m'  # red
+G = '\033[32m'  # green
+Y = '\033[33m'  # yellow
+B = '\033[34m'  # blue
+P = '\033[35m'  # purple
 
 
 class Server(ircd.Command):
@@ -22,9 +23,8 @@ class Server(ircd.Command):
         self.req_class = 'Server'
         self.params = 4
 
-
     def execute(self, client, recv):
-        exists = [s for s in self.ircd.servers+[self.ircd] if s.hostname.lower() == recv[2].lower()]
+        exists = [s for s in self.ircd.servers + [self.ircd] if s.hostname.lower() == recv[2].lower()]
         if exists and client != exists[0]:
             logging.error('Server {} already exists on this network2'.format(recv[2]))
             client.quit('Server already exists on this network')
@@ -41,13 +41,13 @@ class Server(ircd.Command):
             tempName = ' '.join(recv).split(':')[-2]
             client.hostname = tempName.split()[-2].strip()
             client.hopcount = int(tempName.split()[-1])
-            client.name = ' '.join(recv[1:]).split(':')[1] # ' '.join(recv[4:])
+            client.name = ' '.join(recv[1:]).split(':')[1]  # ' '.join(recv[4:])
             client.rawname = ' '.join(recv[3:])
             if client.name.startswith(':'):
                 client.name = client.name[1:]
 
             logging.info('{}Hostname for {} set: {}{}'.format(G, client, client.hostname, W))
-            if [s for s in self.ircd.servers+[self.ircd] if s.hostname.lower() == client.hostname.lower() and s != client]:
+            if [s for s in self.ircd.servers + [self.ircd] if s.hostname.lower() == client.hostname.lower() and s != client]:
                 logging.error('Server {} already exists on this network'.format(client.hostname))
                 error = 'Error connecting to server {}[{}:{}]: server {} already exists on remote network'.format(client.hostname, ip, port, client.hostname)
                 client._send(':{} ERROR :{}'.format(self.ircd.sid, error))
@@ -114,14 +114,12 @@ class Server(ircd.Command):
             return
 
 
-
 @ircd.Modules.command
 class Sid(ircd.Command):
     def __init__(self):
         self.command = 'sid'
         self.params = 4
         self.req_class = 'Server'
-
 
     def execute(self, client, recv):
         uplink = [s for s in self.ircd.servers if s.sid == recv[0][1:]]

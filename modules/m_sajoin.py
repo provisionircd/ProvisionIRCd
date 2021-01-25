@@ -2,17 +2,16 @@
 /sajoin command
 """
 
-import ircd
 import re
 
 import ircd
-import re
 
 
 class Sajoin(ircd.Command):
     """Forcefully join a user into a channel.
     Syntax: SAJOIN <user> <channel>
     """
+
     def __init__(self):
         self.command = 'sajoin'
         self.params = 2

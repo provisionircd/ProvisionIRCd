@@ -4,6 +4,7 @@
 
 import ircd
 
+
 @ircd.Modules.command
 class Swhois(ircd.Command):
     def __init__(self):

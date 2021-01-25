@@ -2,15 +2,17 @@
 /restart command
 """
 
-import ircd
-import sys
 import os
+import sys
+
+import ircd
 
 
 class Restart(ircd.Command):
     """
     Restart the server remotely.
     """
+
     def __init__(self):
         self.command = 'restart'
         self.params = 1

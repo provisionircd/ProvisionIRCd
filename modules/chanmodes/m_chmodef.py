@@ -2,8 +2,9 @@
 provides chmode +f (flood control)
 """
 
-import ircd
 import time
+
+import ircd
 from handle.functions import logging
 
 defAction = {
@@ -26,33 +27,34 @@ Example:    +f 10:m:5:m:2 (10 messages in 5 sec, will set +m for 2 minutes)
 
 helpop = {"chmodef": info}
 
+
 @ircd.Modules.hooks.loop()
 def checkExpiredFloods(ircd):
     ### Checking for timed-out flood protection.
     channels = (channel for channel in ircd.channels if chmode in channel.modes and 'm' in channel.chmodef)
     for chan in channels:
         if chan.chmodef['m']['action'] == 'm' and 'm' in chan.modes:
-            if chan.chmodef['m']['actionSet'] and int(time.time()) - chan.chmodef['m']['actionSet'] > chan.chmodef['m']['duration']*60:
+            if chan.chmodef['m']['actionSet'] and int(time.time()) - chan.chmodef['m']['actionSet'] > chan.chmodef['m']['duration'] * 60:
                 ircd.handle('MODE', '{} -m'.format(chan.name))
                 chan.chmodef['m']['actionSet'] = None
 
         for user in (user for user in chan.users if user in dict(chan.messageQueue)):
             if time.time() - chan.messageQueue[user]['ctime'] > chan.chmodef['m']['time']:
-                #print('Resetting flood for {} on {}'.format(user,chan))
+                # print('Resetting flood for {} on {}'.format(user,chan))
                 del chan.messageQueue[user]
 
     channels = (channel for channel in ircd.channels if chmode in channel.modes and 'j' in channel.chmodef)
     for chan in channels:
         for entry in (entry for entry in dict(chan.joinQueue)):
             if int(time.time()) - chan.joinQueue[entry]['ctime'] > chan.chmodef['j']['time']:
-                #print('Resetting flood for {} on {}'.format(user, chan))
+                # print('Resetting flood for {} on {}'.format(user, chan))
                 del chan.joinQueue[entry]
         if chan.chmodef['j']['action'] == 'i' and 'i' in chan.modes:
-            if chan.chmodef['j']['actionSet'] and int(time.time()) - chan.chmodef['j']['actionSet'] > chan.chmodef['j']['duration']*60:
+            if chan.chmodef['j']['actionSet'] and int(time.time()) - chan.chmodef['j']['actionSet'] > chan.chmodef['j']['duration'] * 60:
                 ircd.handle('MODE', '{} -i'.format(chan.name))
                 chan.chmodef['j']['actionSet'] = None
         elif chan.chmodef['j']['action'] == 'R' and 'R' in chan.modes:
-            if chan.chmodef['j']['actionSet'] and int(time.time()) - chan.chmodef['j']['actionSet'] > chan.chmodef['j']['duration']*60:
+            if chan.chmodef['j']['actionSet'] and int(time.time()) - chan.chmodef['j']['actionSet'] > chan.chmodef['j']['duration'] * 60:
                 ircd.handle('MODE', '{} -R'.format(chan.name))
                 chan.chmodef['j']['actionSet'] = None
 
@@ -89,16 +91,16 @@ def chmodef_dictset(self, ircd, channel):
 @ircd.Modules.hooks.local_join()
 def join(self, ircd, channel):
     if chmode in channel.modes and 'j' in channel.chmodef and not self.ocheck('o', 'override') and self.server.eos:
-            r = int(round(time.time() * 1000))
-            channel.joinQueue[r] = {}
-            channel.joinQueue[r]['ctime'] = int(time.time())
-            if len(channel.joinQueue) > channel.chmodef['j']['amount']:
-                channel.joinQueue = {}
-                if channel.chmodef['j']['action'] == 'i':
-                    ircd.handle('MODE', '{} +i'.format(channel.name))
-                elif channel.chmodef['j']['action'] == 'R':
-                    ircd.handle('MODE', '{} +R'.format(channel.name))
-                channel.chmodef['j']['actionSet'] = int(time.time())
+        r = int(round(time.time() * 1000))
+        channel.joinQueue[r] = {}
+        channel.joinQueue[r]['ctime'] = int(time.time())
+        if len(channel.joinQueue) > channel.chmodef['j']['amount']:
+            channel.joinQueue = {}
+            if channel.chmodef['j']['action'] == 'i':
+                ircd.handle('MODE', '{} +i'.format(channel.name))
+            elif channel.chmodef['j']['action'] == 'R':
+                ircd.handle('MODE', '{} +R'.format(channel.name))
+            channel.chmodef['j']['actionSet'] = int(time.time())
 
 
 @ircd.Modules.hooks.modechar_del()
@@ -120,7 +122,7 @@ class chmodef(ircd.ChannelMode):
 
 
 ### Types: 0 = mask, 1 = require param, 2 = optional param, 3 = no param, 4 = special user channel-mode.
-#@ircd.Modules.channel_modes(chmode, 2, 3, 'Set flood protection for your channel (/helpop chmodef for more info)', None, None, '[params]') ### ('mode', type, level, 'Mode description', class 'user' or None, prefix, 'param desc')
+# @ircd.Modules.channel_modes(chmode, 2, 3, 'Set flood protection for your channel (/helpop chmodef for more info)', None, None, '[params]') ### ('mode', type, level, 'Mode description', class 'user' or None, prefix, 'param desc')
 @ircd.Modules.hooks.pre_local_chanmode(chmode)
 @ircd.Modules.hooks.pre_remote_chanmode(chmode)
 def addmode_f(self, ircd, channel, modebuf, parambuf, action, modebar, param):
@@ -134,12 +136,12 @@ def addmode_f(self, ircd, channel, modebuf, parambuf, action, modebar, param):
                 return 0
             if p[0] == '-':
                 type = p[1]
-                #logging.debug('Removing flood type: ', type)
+                # logging.debug('Removing flood type: ', type)
                 if type not in floodTypes or type not in channel.chmodef:
                     logging.debug('Type {} not found in {}'.format(type, channel.chmodef))
                     return 0
                 del channel.chmodef[type]
-                #logging.debug('Success! Returning {}'.format(type))
+                # logging.debug('Success! Returning {}'.format(type))
                 if len(channel.chmodef) == 0:
                     logging.debug(f'No more protections set. Removing "{chmode}" completely.')
                     self.handle('MODE', '{} -{}'.format(channel.name, chmode))
@@ -189,13 +191,13 @@ def addmode_f(self, ircd, channel, modebuf, parambuf, action, modebar, param):
                     try:
                         duration = p.split(':')[4]
                         if not duration.isdigit():
-                            #logging.debug('Invalid duration "{}" unsetting action'.format(duration))
+                            # logging.debug('Invalid duration "{}" unsetting action'.format(duration))
                             fAction = None
                         else:
                             duration = int(duration)
-                            #logging.debug('Duration for {} set to: {}'.format(fAction, duration))
+                            # logging.debug('Duration for {} set to: {}'.format(fAction, duration))
                     except Exception as ex:
-                        #logging.debug('Alternative action was given, but no duration. Unsetting action')
+                        # logging.debug('Alternative action was given, but no duration. Unsetting action')
                         fAction = None
 
             channel.chmodef[type] = {}

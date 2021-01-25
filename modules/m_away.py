@@ -7,12 +7,12 @@ from handle.functions import checkSpamfilter
 
 AWAYLEN = 307
 
+
 @ircd.Modules.command
 class Away(ircd.Command):
     def __init__(self):
         self.command = 'away'
-        self.support = [ ('AWAYLEN', AWAYLEN) ]
-
+        self.support = [('AWAYLEN', AWAYLEN)]
 
     def execute(self, client, recv):
         if type(client).__name__ == 'Server':
@@ -46,7 +46,7 @@ class Away(ircd.Command):
                 common_chan = list(filter(lambda c: user in c.users and client in c.users, self.ircd.channels))
                 if not common_chan:
                     continue
-                user._send(':{} AWAY {}'.format(client.fullmask(), '{}'.format(':'+client.away if client.away else '')))
+                user._send(':{} AWAY {}'.format(client.fullmask(), '{}'.format(':' + client.away if client.away else '')))
                 updated.append(user)
 
         self.ircd.new_sync(self.ircd, sourceServer, data)

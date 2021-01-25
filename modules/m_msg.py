@@ -2,12 +2,10 @@
 /privmsg and /notice commands
 """
 
-import ircd
-
-from handle.functions import match, checkSpamfilter, logging
-
 import time
-import re
+
+import ircd
+from handle.functions import checkSpamfilter, logging
 
 MAXTARGETS = 20
 
@@ -17,20 +15,20 @@ class Privmsg(ircd.Command):
     Send a direct message to a channel or user.
     Syntax: PRIVMSG <target> <msg>
     """
+
     def __init__(self):
         self.command = ['privmsg', 'msg']
         self.support = [('MAXTARGETS', MAXTARGETS)]
 
-
     def execute(self, client, recv, override=False):
-        #print(f": /privmsg: {client} :: {recv}")
+        # print(f": /privmsg: {client} :: {recv}")
         if type(client).__name__ == 'Server':
             sourceServer = client
             sourceID = client.sid
             override = 1
             if client != self.ircd:
                 S = recv[0][1:]
-                source = [s for s in self.ircd.servers+[self.ircd] if s.sid == S or s.hostname == S]+[u for u in self.ircd.users if u.uid == S or u.nickname == S]
+                source = [s for s in self.ircd.servers + [self.ircd] if s.sid == S or s.hostname == S] + [u for u in self.ircd.users if u.uid == S or u.nickname == S]
                 client = source[0]
                 sourceID = client.uid if type(client).__name__ == 'User' else client.sid
             recv = recv[1:]
@@ -119,7 +117,6 @@ class Privmsg(ircd.Command):
                         client.sendraw(self.ERR.CANNOTSENDTOCHAN, '{} :Cannot send to channel (+m)'.format(channel.name))
                         continue
 
-
                 if type(client).__name__ == 'User' and client.server == self.ircd:
                     block_msg = 0
                     for callable in [callable for callable in self.ircd.hooks if callable[0].lower() == 'pre_chanmsg']:
@@ -152,7 +149,6 @@ class Privmsg(ircd.Command):
                             logging.exception(ex)
 
 
-
 @ircd.Modules.command
 class Notice(ircd.Command):
     """
@@ -167,7 +163,7 @@ class Notice(ircd.Command):
         if type(client).__name__ == 'Server':
             sourceServer = client
             S = recv[0][1:]
-            source = [s for s in self.ircd.servers+[self.ircd] if s.sid == S or s.hostname == S]+[u for u in self.ircd.users if u.uid == S or u.nickname == S]
+            source = [s for s in self.ircd.servers + [self.ircd] if s.sid == S or s.hostname == S] + [u for u in self.ircd.users if u.uid == S or u.nickname == S]
             if not source:
                 return
             client = source[0]
@@ -196,7 +192,7 @@ class Notice(ircd.Command):
 
         for target in recv[1].split(',')[:MAXTARGETS]:
             if target[0] == '$' and sourceServer != self.ircd:
-                server = list(filter(lambda s: s.hostname.lower() == target[1:].lower(), self.ircd.servers+[self.ircd]))[0]
+                server = list(filter(lambda s: s.hostname.lower() == target[1:].lower(), self.ircd.servers + [self.ircd]))[0]
                 if server == self.ircd:
                     for user in (user for user in self.ircd.users if user.server == server):
                         client.broadcast([user], 'NOTICE ${} :{}'.format(server.hostname.lower(), msg))
@@ -212,7 +208,6 @@ class Notice(ircd.Command):
                 user = user[0]
                 if type(client).__name__ == 'User' and checkSpamfilter(client, self.ircd, user.nickname, 'private', msg):
                     continue
-
 
                 if type(client).__name__ == 'User' and client.server == self.ircd:
                     block_msg = 0
@@ -253,7 +248,6 @@ class Notice(ircd.Command):
 
                 if type(client).__name__ == 'User' and checkSpamfilter(client, self.ircd, channel.name, 'channel', msg):
                     continue
-
 
                 if type(client).__name__ == 'User' and client.server == self.ircd:
                     block_msg = 0

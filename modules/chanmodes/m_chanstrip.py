@@ -2,8 +2,10 @@
 provides chmode +S (strip messages)
 """
 
-import ircd
 import re
+
+import ircd
+
 
 class Chmode_S(ircd.ChannelMode):
     def __init__(self):

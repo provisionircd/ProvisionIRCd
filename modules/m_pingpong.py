@@ -2,11 +2,11 @@
 ping/pong handler
 """
 
-import ircd
 import time
 
-from handle.handleLink import syncData
+import ircd
 from handle.functions import logging
+from handle.handleLink import syncData
 
 
 @ircd.Modules.command
@@ -14,18 +14,18 @@ class Ping(ircd.Command):
     """
     Ping/pong
     """
+
     def __init__(self):
         self.command = 'ping'
         self.params = 1
 
-
     def execute(self, client, recv):
         if type(client).__name__ == 'Server':
-            dest = list(filter(lambda s: s.sid == recv[3] or s.hostname == recv[3], self.ircd.servers+[self.ircd]))
+            dest = list(filter(lambda s: s.sid == recv[3] or s.hostname == recv[3], self.ircd.servers + [self.ircd]))
             if not dest:
                 logging.error('Server {} requested a PING to unknown server {}'.format(client, recv[3]))
                 return
-            source = list(filter(lambda s: s.sid == recv[2] or s.hostname == recv[2], self.ircd.servers+[self.ircd]))[0]
+            source = list(filter(lambda s: s.sid == recv[2] or s.hostname == recv[2], self.ircd.servers + [self.ircd]))[0]
 
             if source not in self.ircd.syncDone:
                 local_only = False
@@ -49,10 +49,10 @@ class Pong(ircd.Command):
     """
     Reply to a PING command.
     """
+
     def __init__(self):
         self.command = 'pong'
         self.params = 1
-
 
     def execute(self, client, recv):
         if type(client).__name__ == 'Server':

@@ -2,13 +2,11 @@
 provides chmode +H (backlog support)
 """
 
-import ircd
-import re
 import time
 from datetime import datetime
 
+import ircd
 from handle.functions import logging
-
 
 chmode = 'H'
 
@@ -26,13 +24,15 @@ class chmode_H(ircd.ChannelMode):
 @ircd.Modules.hooks.loop()
 def checkExpiredBacklog(localServer):
     for chan in [channel for channel in localServer.channels if chmode in channel.modes and hasattr(channel, 'msg_backlog') and channel.msg_backlog['lines']]:
-        latest_date = chan.msg_backlog['lines'][-1][1]/10
+        latest_date = chan.msg_backlog['lines'][-1][1] / 10
         expire = chan.msg_backlog['expire'] * 60
         if float(datetime.utcnow().strftime("%s.%f")) - latest_date > expire:
-            chan.msg_backlog['lines'] = [] # Remove all lines.
+            chan.msg_backlog['lines'] = []  # Remove all lines.
 
 
 ircd.Modules.hooks.channel_destroy()
+
+
 def destroy(self, localServer, channel):
     if chmode in channel.modes:
         channel.backlog = {}
@@ -43,11 +43,11 @@ def history_msg(self, localServer, channel, msg):
     try:
         if chmode not in channel.modes:
             return
-        limit = channel.msg_backlog['limit'] # Max lines to remember.
+        limit = channel.msg_backlog['limit']  # Max lines to remember.
         expire = channel.msg_backlog['expire'] * 60
         while len(channel.msg_backlog['lines']) >= limit:
             channel.msg_backlog['lines'] = channel.msg_backlog['lines'][1:]
-        utc_time = float(datetime.utcnow().strftime("%s.%f"))*10
+        utc_time = float(datetime.utcnow().strftime("%s.%f")) * 10
         data = (self.fullmask(), utc_time, msg)
         if channel.msg_backlog['lines']:
             channel.msg_backlog['previous_last'] = channel.msg_backlog['lines'][-1]
@@ -87,11 +87,11 @@ def chmode_H2(self, localServer, channel, modebuf, parambuf, action, modebar, pa
             channel.msg_backlog['limit'] = limit
             channel.msg_backlog['expire'] = expire
             channel.msg_backlog['lines'] = []
-            #modebuf.append(modebar)
-            #parambuf.append(param)
-            #channel.modes += modebar
+            # modebuf.append(modebar)
+            # parambuf.append(param)
+            # channel.modes += modebar
             # Actually we should also add the chan_param here. BUT MEH FUCK IT.
-            #return 0
+            # return 0
         else:
             channel.msg_backlog = {}
     except Exception as ex:
@@ -118,9 +118,9 @@ def show_history(self, localServer, channel):
             self._send(':{} PRIVMSG {} :Displaying backlog for {}'.format(localServer.hostname, channel.name, channel.name))
             for entry in channel.msg_backlog['lines']:
                 prefix = ''
-                timestamp = int(entry[1]/10)
+                timestamp = int(entry[1] / 10)
                 if 'server-time' in self.caplist:
-                    prefix = '@time={}.{}Z '.format(time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(timestamp)), round(entry[1]%1000))
+                    prefix = '@time={}.{}Z '.format(time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(timestamp)), round(entry[1] % 1000))
                 data = '{}:{} PRIVMSG {} :{}'.format(prefix, entry[0], channel.name, entry[2])
                 self._send(data)
             self._send(':{} PRIVMSG {} :Done displaying last {} messages.'.format(localServer.hostname, channel.name, len(channel.msg_backlog['lines'])))

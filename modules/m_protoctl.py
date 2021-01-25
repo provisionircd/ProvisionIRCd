@@ -4,17 +4,16 @@
 
 import ircd
 
-from handle.functions import logging, update_support
+from handle.functions import logging
 
-W  = '\033[0m'  # white (normal)
-P  = '\033[35m' # purple
+W = '\033[0m'  # white (normal)
+P = '\033[35m'  # purple
 
 
 class Protoctl(ircd.Command):
     def __init__(self):
         self.command = 'protoctl'
         self.req_class = 'Server'
-
 
     def execute(self, client, recv):
         if not hasattr(client, 'protoctl'):
@@ -30,7 +29,7 @@ class Protoctl(ircd.Command):
                     if cap == 'EAUTH' and param:
                         client.hostname = param.split(',')[0]
                         logging.info('Hostname set from EAUTH: {}'.format(client.hostname))
-                        if [s for s in self.ircd.servers+[self.ircd] if s.hostname.lower() == client.hostname.lower() and s != client]:
+                        if [s for s in self.ircd.servers + [self.ircd] if s.hostname.lower() == client.hostname.lower() and s != client]:
                             ip, port = client.socket.getpeername()
                             error = 'Error connecting to server {}[{}:{}]: server already exists on remote network'.format(self.ircd.hostname, ip, port)
                             client._send(':{} ERROR :{}'.format(self.ircd.sid, error))
@@ -55,7 +54,7 @@ class Protoctl(ircd.Command):
                             # The error is outgoing and will be displayed on the REMOTE server.
                             ip, port = client.socket.getpeername()
                             error = 'Link denied for {}[{}:{}]: they are missing channel modes: {}'.format(
-                            client.hostname, ip, port, ', '.join(missing_modes) )
+                                client.hostname, ip, port, ', '.join(missing_modes))
 
                             client._send(':{} ERROR :{}'.format(self.ircd.sid, error))
 
@@ -71,7 +70,7 @@ class Protoctl(ircd.Command):
                         if remote_prefix != local_prefix:
                             ip, port = client.socket.getpeername()
                             error = 'Link denied for {}[{}:{}]: extban prefixes are not the same. We have: {} but they have: {}'.format(
-                            client.hostname, ip, port, remote_prefix, local_prefix )
+                                client.hostname, ip, port, remote_prefix, local_prefix)
 
                             client._send(':{} ERROR :extban prefixes are not the same. We have: {} but they have: {}'.format(self.ircd.sid, remote_prefix, local_prefix))
                             client.quit('extban prefixes are not the same. We have: {} but they have: {}'.format(local_prefix, remote_prefix))
@@ -83,7 +82,7 @@ class Protoctl(ircd.Command):
                             missing_ext_types.append(m)
                         if missing_ext_types:
                             error = 'Link denied for {}[{}:{}]: they are missing ext bans: {}'.format(
-                            client.hostname, ip, port, ', '.join(missing_ext_types)  )
+                                client.hostname, ip, port, ', '.join(missing_ext_types))
                             client._send(':{} ERROR :{}'.format(self.ircd.sid, error))
                             client.quit('we are missing ext bans: {}'.format(', '.join(missing_ext_types)))
                             return

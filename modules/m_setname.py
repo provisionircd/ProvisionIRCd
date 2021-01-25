@@ -4,10 +4,12 @@
 
 import ircd
 
+
 class Setname(ircd.Command):
     """
     Changes your real name (GECOS field).
     """
+
     def __init__(self):
         self.command = 'setname'
         self.params = 1

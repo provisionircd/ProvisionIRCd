@@ -2,14 +2,14 @@
 webstats support
 """
 
+import time
+
 import ircd
 from handle.functions import logging, match
-import time
 
 # API calls are special requests that you can send to the server upon establishing a connection.
 # If successful, the IRCd will return a JSON dict with your requested data.
 # The connection will be terminated immediately after the response.
-
 
 
 # This is a dictionary of IP addresses that are allowed to make this API call.
@@ -18,9 +18,9 @@ import time
 # Order matters! It wil use the first matching rate_limit, so always keep your
 # public rate_limit at the bottom.
 allowed_ips = {
-                "84.106.*.*": {"rate_limit": (100,3600,) },
-                "*": {"rate_limit": (10,3600,) },
-        }
+    "84.106.*.*": {"rate_limit": (100, 3600,)},
+    "*": {"rate_limit": (10, 3600,)},
+}
 
 
 # First parameter is the name of the API call, in this case WEBSTATS. This is required.
@@ -38,12 +38,12 @@ def process_webstats(self, localServer, recv):
     if "rate_limit" in allowed_ips[ip[0]]:
         rate_limit = allowed_ips[ip[0]]["rate_limit"]
     else:
-        rate_limit = (9999, 1) # 2 Unlimited.
+        rate_limit = (9999, 1)  # 2 Unlimited.
     ip = recv[1]
     if ip not in localServer.webstats_ip_requests:
         localServer.webstats_ip_requests[ip] = {}
         localServer.webstats_ip_requests[ip]['calls'] = {}
-        localServer.webstats_ip_requests[ip]['ctime'] = int(time.time()) # First API call for this IP.
+        localServer.webstats_ip_requests[ip]['ctime'] = int(time.time())  # First API call for this IP.
     logging.debug('Rate limit: {}'.format(rate_limit))
     ago = int(time.time()) - localServer.webstats_ip_requests[ip]['ctime']
     if len(localServer.webstats_ip_requests[ip]['calls']) >= rate_limit[0]:

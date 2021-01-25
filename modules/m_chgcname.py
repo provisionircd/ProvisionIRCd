@@ -11,11 +11,11 @@ class Chgcname(ircd.Command):
     Change channel name capitalisation.
     Example: /CHGCNAME #home #Home
     """
+
     def __init__(self):
         self.command = 'chgcname'
         self.params = 2
         self.req_modes = 'o'
-
 
     def execute(self, client, recv):
         if type(self).__name__ == 'Server':

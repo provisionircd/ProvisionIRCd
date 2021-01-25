@@ -5,17 +5,16 @@
 import ircd
 
 from handle.functions import logging
-from handle.handleLink import syncData
 
-W  = '\033[0m'  # white (normal)
-Y  = '\033[33m' # yellow
+W = '\033[0m'  # white (normal)
+Y = '\033[33m'  # yellow
+
 
 @ircd.Modules.command
 class Eos(ircd.Command):
     def __init__(self):
         self.command = 'eos'
         self.req_class = 'Server'
-
 
     def execute(self, client, recv):
         source = list(filter(lambda s: s.sid == recv[0][1:], self.ircd.servers))

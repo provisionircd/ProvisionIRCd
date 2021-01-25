@@ -2,10 +2,10 @@
 /invite command
 """
 
-import ircd
-
-from modules.m_joinpart import checkMatch
 import time
+
+import ircd
+from modules.m_joinpart import checkMatch
 
 
 class chmode_i(ircd.ChannelMode):
@@ -21,6 +21,7 @@ class Invite(ircd.Command):
     Invites a user to a channel.
     Syntax: /INVITE <user> <channel>
     """
+
     def __init__(self):
         self.command = 'invite'
         self.params = 2
@@ -103,11 +104,10 @@ class Invite(ircd.Command):
         self.ircd.new_sync(self.ircd, sourceServer, data)
 
 
-
 @ircd.Modules.hooks.loop()
 def expired_invites(ircd):
     ### Expire all invites after 6 hours.
     for chan in [channel for channel in ircd.channels if len(channel.invites) > 0]:
         for invite in dict(chan.invites):
-            if time.time() - chan.invites[invite]['ctime'] > 3600.0*6:
+            if time.time() - chan.invites[invite]['ctime'] > 3600.0 * 6:
                 del chan.invites[invite]

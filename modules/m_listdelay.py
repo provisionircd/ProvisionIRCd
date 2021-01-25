@@ -2,10 +2,12 @@
 blocks /list commands for newly connected users
 """
 
-import ircd
 import time
 
+import ircd
+
 delay = 60
+
 
 @ircd.Modules.hooks.pre_command('list')
 def delaylist(client, localServer, recv):

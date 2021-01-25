@@ -2,17 +2,20 @@
 /rehash command
 """
 
+import gc
+
 import ircd
 
-import gc
 gc.enable()
 from handle.handleConf import checkConf
+
 
 @ircd.Modules.command
 class Rehash(ircd.Command):
     """
     Reloads the configuration files in memory.
     """
+
     def __init__(self):
         self.command = 'rehash'
         self.req_flags = 'rehash'

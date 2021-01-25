@@ -4,6 +4,7 @@
 
 import ircd
 
+
 @ircd.Modules.command
 class Clones(ircd.Command):
     def __init__(self):

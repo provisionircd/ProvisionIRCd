@@ -5,7 +5,6 @@
 import ircd
 
 
-
 @ircd.Modules.user_mode
 class umode_w(ircd.UserMode):
     def __init__(self):

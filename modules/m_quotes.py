@@ -2,8 +2,9 @@
 random quote on connect
 """
 
-import ircd
 import random
+
+import ircd
 
 quotes = """
 Men are from Mars. Women are from Venus. Computers are from hell.

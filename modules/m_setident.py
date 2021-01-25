@@ -4,6 +4,7 @@
 
 import ircd
 
+
 class Setident(ircd.Command):
     def __init__(self):
         self.command = 'setident'

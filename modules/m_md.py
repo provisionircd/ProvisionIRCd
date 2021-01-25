@@ -20,9 +20,9 @@ class Md(ircd.Command):
                 return
             if recv[4] == 'certfp':
                 user[0].fingerprint = recv[5][1:]
-                #print('SSL fingerprint for remote user {} set: {}'.format(user[0].nickname, user[0].fingerprint))
+                # print('SSL fingerprint for remote user {} set: {}'.format(user[0].nickname, user[0].fingerprint))
             elif recv[4] == 'operaccount':
                 user[0].operaccount = recv[5][1:]
-                #print('Oper account for remote user {} set: {}'.format(user[0].nickname, user[0].operaccount))
+                # print('Oper account for remote user {} set: {}'.format(user[0].nickname, user[0].operaccount))
 
         self.ircd.new_sync(self.ircd, client, ' '.join(recv))

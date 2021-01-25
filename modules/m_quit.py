@@ -11,9 +11,9 @@ class Quit(ircd.Command):
     Disconnect from the network.
     Syntax: QUIT [reason]
     """
+
     def __init__(self):
         self.command = 'quit'
-
 
     def execute(self, client, recv, showPrefix=True):
         source = None
@@ -49,5 +49,5 @@ class Quit(ircd.Command):
         if 'static-quit' in self.ircd.conf['settings'] and self.ircd.conf['settings']['static-quit']:
             reason = self.ircd.conf['settings']['static-quit']
 
-        reason = '{}{}'.format(quitprefix+': ' if client.server == self.ircd and showPrefix else '', reason)
+        reason = '{}{}'.format(quitprefix + ': ' if client.server == self.ircd and showPrefix else '', reason)
         client.quit(reason, error=False)

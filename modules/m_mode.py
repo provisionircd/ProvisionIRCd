@@ -2,13 +2,13 @@
 /mode command
 """
 
-import ircd
-
-import time
-import re
 import json
-from handle.functions import valid_expire, match, cloak, logging, save_db, make_mask
+import re
+import time
 from collections import OrderedDict
+
+import ircd
+from handle.functions import valid_expire, match, cloak, logging, save_db, make_mask
 
 MAXMODES = 24
 
@@ -149,7 +149,7 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
             if m not in ircd.chstatus and m not in '+-':
                 if m in modeLevel and self.chlevel(channel) < modeLevel[m] and not self.ocheck('o', 'override'):
                     continue
-                elif m in modeLevel and self.chlevel(channel) < modeLevel[m] and modeLevel[m] != 6:
+                elif m in modeLevel and self.chlevel(channel) < modeLevel[m] != 6:
                     oper_override = True
 
             if m not in ircd.core_chmodes:
@@ -173,9 +173,7 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
                             logging.exception(ex)
 
             if action == '+' and (m in chmodes or type(self).__name__ == 'Server'):
-                ###
-                ### SETTING CHANNEL MODES
-                ###
+                # SETTING CHANNEL MODES
                 if m == 'l' and len(recv) > 2:
                     if not param_mode.isdigit():
                         continue
@@ -194,7 +192,6 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
                         channel.modes += m
                     modebuf.append(m)
                     parambuf.append(param_mode)
-
 
                 elif m == 'L':
                     param_mode = param_mode.split(',')[0]
@@ -287,7 +284,7 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
                         channel.temp_status[user][m]['action'] = '-'
 
                 if m not in channel.modes and (m in list(ircd.channel_modes[3]) + list(ircd.channel_modes[2])):
-                    ### If the mode is not handled by modules, do it here.
+                    # If the mode is not handled by modules, do it here.
                     if not next((x for x in ircd.channel_mode_class if x.mode == m), None):
                         modebuf.append(m)
                         channel.modes += m
@@ -299,9 +296,7 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
                             commandQueue.append(cmd)
 
             elif action == '-' and ((m in chmodes or m in channel.modes) or type(self).__name__ == 'Server'):
-                ###
-                ### REMOVING CHANNEL MODES
-                ###
+                # REMOVING CHANNEL MODES
                 if m in channel.modes:
                     if m == 'l':
                         # channel.limit = 0
@@ -399,7 +394,7 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
                         channel.temp_status[user][m]['action'] = '+'
 
             if m in ircd.core_chmodes:
-                ### Finally, call modules for core modes.
+                # Finally, call modules for core modes.
                 for callable in [callable for callable in ircd.hooks if callable[0].lower() == 'pre_' + hook and m in callable[1]]:
                     try:
                         callable[2](self, ircd, channel, modebuf, parambuf, action, m, param_mode)
@@ -417,9 +412,8 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
             sync = False
 
         modes = ''.join(modebuf)
-        total_modes, total_params = [], []
+        # total_modes, total_params = [], []
         if len(modebuf) > 1:
-            mode_limit = modes.replace('+', '').replace('-', '')
             total_modes, total_params = [], []
             paramcount = 0
             action = ''
@@ -481,10 +475,6 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
                 ircd.handle(cmd, data)
 
             save_db(ircd)
-
-            # I have these commented out because I no longer use them as globals.
-            # modebuf = []
-            # parambuf = []
 
     except Exception as ex:
         logging.exception(ex)

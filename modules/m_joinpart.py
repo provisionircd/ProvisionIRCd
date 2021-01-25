@@ -10,7 +10,6 @@ from handle.functions import match, logging
 import time
 import re
 
-
 chantypes = '#+&'
 chanlen = 36
 
@@ -21,19 +20,20 @@ def init(ircd, reload=False):
 
 
 W = '\033[0m'  # white (normal)
-R = '\033[31m' # red
-R2 = '\033[91m' # bright red
-G = '\033[32m' # green
-G2 = '\033[92m' # bright green
-Y = '\033[33m' # yellow
-B = '\033[34m' # blue
-P = '\033[35m' # purple
-
+R = '\033[31m'  # red
+R2 = '\033[91m'  # bright red
+G = '\033[32m'  # green
+G2 = '\033[92m'  # bright green
+Y = '\033[33m'  # yellow
+B = '\033[34m'  # blue
+P = '\033[35m'  # purple
 
 matches = {}
 matches['b'] = 'bans'
 matches['e'] = 'excepts'
 matches['I'] = 'invex'
+
+
 def checkMatch(self, localServer, type, channel):
     if type not in matches or not hasattr(channel, matches[type]):
         return
@@ -46,17 +46,16 @@ def checkMatch(self, localServer, type, channel):
             return 1
 
 
-
 class Join(ircd.Command):
     """
     Syntax: JOIN <channel> [key]
     Joins a given channel with optional [key].
     """
+
     def __init__(self):
         self.command = 'join'
         self.params = 1
         self.support = [('CHANTYPES', str(chantypes)), ('CHANNELLEN', str(chanlen))]
-
 
     def execute(self, client, recv, override=False, skipmod=None, sourceServer=None):
         hook = 'local_join'
@@ -87,7 +86,7 @@ class Join(ircd.Command):
             if channel and client in channel[0].users or not chan:
                 continue
 
-            #if len(chan) == 1 and not override:
+            # if len(chan) == 1 and not override:
             #    continue
 
             continueLoop = False
@@ -144,7 +143,7 @@ class Join(ircd.Command):
                 kwargs = {}
                 if override:
                     kwargs['override'] = True
-                for callable in [callable for callable in self.ircd.hooks if callable[0].lower() == 'pre_'+hook and callable[3] != skipmod]:
+                for callable in [callable for callable in self.ircd.hooks if callable[0].lower() == 'pre_' + hook and callable[3] != skipmod]:
                     try:
                         success, overrides = callable[2](client, self.ircd, channel, **kwargs)
                         if not success:
@@ -185,8 +184,8 @@ class Join(ircd.Command):
                         continue
                     continue
 
-                #if channel.limit != 0 and len(channel.users) >= channel.limit and not invite_override:
-                #print(channel.modes)
+                # if channel.limit != 0 and len(channel.users) >= channel.limit and not invite_override:
+                # print(channel.modes)
                 if 'l' in channel.modes and len(channel.users) >= int(self.ircd.chan_params[channel]['l']) and not invite_override:
                     if 'L' in channel.modes:
                         redirect_chan = self.ircd.chan_params[channel]['L']
@@ -197,7 +196,7 @@ class Join(ircd.Command):
                     client.sendraw(471, '{} :Cannot join channel (+l)'.format(channel.name))
                     continue
 
-                #if channel.key and key != channel.key and not invite_override:
+                # if channel.key and key != channel.key and not invite_override:
                 if 'k' in channel.modes and key != self.ircd.chan_params[channel]['k'] and not invite_override:
                     ### Check key based on modes that require params.
                     client.sendraw(475, '{} :Cannot join channel (+k)'.format(channel.name))
@@ -227,7 +226,7 @@ class Join(ircd.Command):
                 for callable in [callable for callable in self.ircd.hooks if callable[0].lower() == 'visible_in_channel']:
                     try:
                         visible = callable[2](u, self.ircd, client, channel)
-                        #logging.debug('/JOIN: Can {} see {} ? :: {}'.format(u, client, visible))
+                        # logging.debug('/JOIN: Can {} see {} ? :: {}'.format(u, client, visible))
                     except Exception as ex:
                         logging.exception(ex)
                     if not visible:
@@ -236,7 +235,7 @@ class Join(ircd.Command):
                         logging.debug('{} returned {}'.format(callable, visible))
                         break
 
-            #print('Broadcasting join to: {}'.format(broadcast))
+            # print('Broadcasting join to: {}'.format(broadcast))
             for user in broadcast:
                 data = ':{}!{}@{} JOIN {}{}'.format(client.nickname, client.ident, client.cloakhost, channel.name, ' {} :{}'.format(client.svid, client.realname) if 'extended-join' in user.caplist else '')
                 user._send(data)
@@ -264,7 +263,6 @@ class Join(ircd.Command):
                     logging.exception(ex)
 
 
-
 class Part(ircd.Command):
     """
     Syntax: PART <channel> [reason]
@@ -274,7 +272,6 @@ class Part(ircd.Command):
     def __init__(self):
         self.command = 'part'
         self.ircd = ircd
-
 
     def execute(self, client, recv, reason=None):
         if type(client).__name__ == 'Server':
@@ -314,14 +311,14 @@ class Part(ircd.Command):
             channel.usermodes.pop(client)
             channel.users.remove(client)
 
-            broadcast = list(channel.users)+[client]
+            broadcast = list(channel.users) + [client]
             ### Check module hooks for visible_in_channel()
             for u in [u for u in broadcast if u != client]:
                 visible = 1
                 for callable in [callable for callable in self.ircd.hooks if callable[0].lower() == 'visible_in_channel']:
                     try:
                         visible = callable[2](u, self.ircd, client, channel)
-                        #logging.debug('/PART: Can {} see {} ? :: {}'.format(u, client, visible))
+                        # logging.debug('/PART: Can {} see {} ? :: {}'.format(u, client, visible))
                     except Exception as ex:
                         logging.exception(ex)
                     if not visible:

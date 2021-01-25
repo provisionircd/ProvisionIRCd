@@ -2,9 +2,10 @@
 /oper command
 """
 
+import re
+
 import ircd
 
-import re
 try:
     import bcrypt
 except ImportError:
@@ -18,10 +19,10 @@ class Oper(ircd.Command):
 
     Syntax: OPER <username> <password>
     """
+
     def __init__(self):
         self.command = 'oper'
         self.params = 2
-
 
     def execute(self, client, recv):
         if 'o' in client.modes:
@@ -39,8 +40,8 @@ class Oper(ircd.Command):
 
         if self.ircd.conf['opers'][recv[1]]['password'].startswith('$2b$') and len(self.ircd.conf['opers'][recv[1]]['password']) > 58:
             logging.debug('Detected bcrypt for /oper')
-            password = recv[2].encode('utf-8') ### Bytes password, plain.
-            hashed = self.ircd.conf['opers'][recv[1]]['password'].encode('utf-8') ### Bytes password, hashed.
+            password = recv[2].encode('utf-8')  ### Bytes password, plain.
+            hashed = self.ircd.conf['opers'][recv[1]]['password'].encode('utf-8')  ### Bytes password, hashed.
             if not bcrypt.checkpw(password, hashed):
                 client.flood_penalty += 350000
                 client.sendraw(self.ERR.NOOPERHOST, ':No O:lines for your host')
@@ -71,8 +72,8 @@ class Oper(ircd.Command):
 
         if not hostMatch:
             client.flood_penalty += 350000
-            client.sendraw(self.ERR.NOOPERHOST,':No O:lines for your host')
-            msg = '*** Failed oper attempt by {} [{}] ({}@{}): host does not match'.format(client.nickname, recv[1], client.ident,client.hostname)
+            client.sendraw(self.ERR.NOOPERHOST, ':No O:lines for your host')
+            msg = '*** Failed oper attempt by {} [{}] ({}@{}): host does not match'.format(client.nickname, recv[1], client.ident, client.hostname)
             return self.ircd.snotice('o', msg)
 
         operClass = self.ircd.conf['opers'][recv[1]]['class']
@@ -94,8 +95,8 @@ class Oper(ircd.Command):
             for flag in [flag for flag in all_flags if flag.lower() not in client.operflags]:
                 client.operflags.append(flag.lower())
 
-            ### Do not automatically set following modes: gqrzH
-            modes = 'o'+re.sub('[ogqrzH]', '', self.ircd.conf['opers'][recv[1]]['modes'])
+            # Do not automatically set following modes: gqrzH
+            modes = 'o' + re.sub('[ogqrzH]', '', self.ircd.conf['opers'][recv[1]]['modes'])
             client.opermodes = ''
             for m in [m for m in modes if m in self.ircd.user_modes]:
                 client.opermodes += m
@@ -119,7 +120,7 @@ class Oper(ircd.Command):
                 client.setinfo(self.ircd.conf['opers'][recv[1]]['operhost'], t='host', source=self.ircd)
 
             p = {'override': True}
-            client.handle('MODE', '{} +{} {}'.format(client.nickname, client.opermodes, '+'+snomasks if snomasks else ''), params=p)
+            client.handle('MODE', '{} +{} {}'.format(client.nickname, client.opermodes, '+' + snomasks if snomasks else ''), params=p)
             client.sendraw(self.RPL.YOUREOPER, ':You are now an IRC Operator.')
             client.flood_penalty = 0
             msg = '*** {} ({}@{}) [{}] is now an IRC Operator (+{})'.format(client.nickname, client.ident, client.hostname, client.operaccount, client.opermodes)

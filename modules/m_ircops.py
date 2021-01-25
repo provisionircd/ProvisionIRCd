@@ -9,6 +9,7 @@ class Ircops(ircd.Command):
     """
     Displays all online IRC Operators.
     """
+
     def __init__(self):
         self.command = 'ircops'
 

@@ -2,10 +2,9 @@
 /sqline command (server)
 """
 
-import ircd
 import time
 
-from handle.functions import TKL
+import ircd
 
 
 @ircd.Modules.command

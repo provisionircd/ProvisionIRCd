@@ -3,9 +3,8 @@
 """
 
 import ircd
-
-from handle.handleLink import Link
 from handle.functions import logging
+from handle.handleLink import Link
 
 
 def connectTo(self, ircd, name, autoLink=False):
@@ -25,7 +24,6 @@ def connectTo(self, ircd, name, autoLink=False):
         logging.exception(ex)
 
 
-
 class Connect(ircd.Command):
     """
     Used by IRC Operators to request a link with a pre-configured server.
@@ -33,6 +31,7 @@ class Connect(ircd.Command):
 
     Note that <servername> should match a server in your configuration file.
     """
+
     def __init__(self):
         self.command = 'connect'
         self.params = 1

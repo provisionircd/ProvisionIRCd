@@ -11,10 +11,10 @@ class User(ircd.Command):
     """
     Used to register your connection to the server
     """
+
     def __init__(self):
         self.command = 'user'
         self.params = 4
-
 
     def execute(self, client, recv):
         if type(client).__name__ == 'Server':
@@ -42,7 +42,7 @@ class User(ircd.Command):
             if 'ip' in t:
                 clientmask = '{}@{}'.format(client.ident, client.ip)
                 isMatch = match(t['ip'], clientmask)
-            if 'hostname' in t and not isMatch: # Try with hostname. IP has higher priority.
+            if 'hostname' in t and not isMatch:  # Try with hostname. IP has higher priority.
                 clientmask = '{}@{}'.format(client.ident, client.hostname)
                 isMatch = match(t['hostname'], clientmask)
             if isMatch:

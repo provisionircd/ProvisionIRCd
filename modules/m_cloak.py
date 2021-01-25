@@ -12,6 +12,7 @@ class Cloak(ircd.Command):
     Converts a host or IP to a cloaked version.
     Syntax: CLOAK <host/IP>
     """
+
     def __init__(self):
         self.command = 'cloak'
         self.req_modes = 'o'

@@ -10,10 +10,10 @@ class Cycle(ircd.Command):
     """
     Parts and rejoins the channel.
     """
+
     def __init__(self):
         self.command = 'cycle'
         self.params = 1
-
 
     def execute(self, client, recv):
         for chan in recv[1].split(','):

@@ -2,11 +2,10 @@
 /nick command
 """
 
-import ircd
-
 import time
-from handle.functions import match
 
+import ircd
+from handle.functions import match
 
 NICKLEN = 33
 
@@ -16,11 +15,11 @@ class Nick(ircd.Command):
     Changes your nickname. Users you share a channel with will be notified of this change.
     Syntax: /NICK <newnick>
     """
+
     def __init__(self):
         self.command = 'nick'
         self.params = 1
-        self.support = [('NICKLEN', NICKLEN),]
-
+        self.support = [('NICKLEN', NICKLEN), ]
 
     def execute(self, client, recv, override=False, sanick=False):
         if type(client).__name__ == 'Server':
@@ -67,7 +66,7 @@ class Nick(ircd.Command):
             client.flood_penalty += 150000
             return client.sendraw(438, '{} :Nick change too fast. Please wait a while before attempting again.'.format(nick))
 
-        inUse =  list(filter(lambda u: u.nickname.lower() == nick.lower(), self.ircd.users))
+        inUse = list(filter(lambda u: u.nickname.lower() == nick.lower(), self.ircd.users))
         if inUse and nick == client.nickname:
             ### Exact nick.
             return
@@ -91,12 +90,12 @@ class Nick(ircd.Command):
                 if u not in users and u != client:
                     users.append(u)
 
-            if sourceServer == self.ircd: ### pre_local_nickchanage
+            if sourceServer == self.ircd:  ### pre_local_nickchanage
                 success = 1
-                for callable in [callable for callable in self.ircd.hooks if callable[0].lower() == 'pre_'+hook]:
+                for callable in [callable for callable in self.ircd.hooks if callable[0].lower() == 'pre_' + hook]:
                     try:
                         success = callable[2](client, self.ircd)
-                        if not success and success is not None: ### None will default to True.
+                        if not success and success is not None:  ### None will default to True.
                             break
                     except Exception as ex:
                         logging.exception(ex)
@@ -130,10 +129,10 @@ class Nick(ircd.Command):
                     for callable in [callable for callable in self.ircd.hooks if callable[0].lower() == 'visible_in_channel']:
                         try:
                             visible = callable[2](u, self.ircd, client, channel)
-                            #logging.debug('Is {} visible for {} on {}? :: {}'.format(client.nickname, u.nickname, channel.name, visible))
+                            # logging.debug('Is {} visible for {} on {}? :: {}'.format(client.nickname, u.nickname, channel.name, visible))
                         except Exception as ex:
                             logging.exception(ex)
-                    if visible: ### Break out of the channels loop. No further checks are required.
+                    if visible:  ### Break out of the channels loop. No further checks are required.
                         break
                 if not visible:
                     logging.debug('User {} is not allowed to see {} on any channel, not sending nickchange.'.format(u.nickname, client.nickname))

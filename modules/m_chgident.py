@@ -11,6 +11,7 @@ class Chgident(ircd.Command):
     Changes the ident (username) part of a user.
     Syntax: CHGIDENT <target> <newident>
     """
+
     def __init__(self):
         self.command = 'chgident'
         self.req_modes = 'o'

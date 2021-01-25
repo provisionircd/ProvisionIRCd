@@ -8,17 +8,18 @@ from handle.functions import logging
 
 KICKLEN = 312
 
+
 @ircd.Modules.command
 class Kick(ircd.Command):
     """Syntax: KICK <channel> <user> [reason]
 
     As a channel operator, you kick users from your channel.
     """
+
     def __init__(self):
         self.command = 'kick'
         self.params = 2
         self.support = [('KICKLEN', KICKLEN,)]
-
 
     def execute(self, client, recv, override=False, sync=True):
         oper_override = False
@@ -27,7 +28,7 @@ class Kick(ircd.Command):
             override = True
             sourceServer = client
             S = recv[0][1:]
-            source = [s for s in self.ircd.servers+[self.ircd] if s.sid == S or s.hostname == S]+[u for u in self.ircd.users if u.uid == S or u.nickname == S]
+            source = [s for s in self.ircd.servers + [self.ircd] if s.sid == S or s.hostname == S] + [u for u in self.ircd.users if u.uid == S or u.nickname == S]
             client = source[0]
             recv = recv[1:]
             if type(client).__name__ == 'User':
@@ -67,7 +68,7 @@ class Kick(ircd.Command):
             return client.sendraw(441, '{} :User {} isn\'t on that channel'.format(channel.name, user.nickname))
 
         if (user.chlevel(channel) > client.chlevel(channel) or 'q' in user.modes) and not client.ocheck('o', 'override') and not override:
-            return client.sendraw(972, '{} :You cannot kick {}{}'.format(channel.name, user.nickname,' (+q)' if 'q' in user.modes else ''))
+            return client.sendraw(972, '{} :You cannot kick {}{}'.format(channel.name, user.nickname, ' (+q)' if 'q' in user.modes else ''))
 
         elif user.chlevel(channel) > client.chlevel(channel) or 'q' in user.modes:
             oper_override = True

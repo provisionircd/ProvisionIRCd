@@ -13,10 +13,10 @@ class Names(ircd.Command):
     Lists all users on the given channel.
     Syntax: NAMES <channel>
     """
+
     def __init__(self):
         self.command = 'names'
         self.params = 1
-
 
     def execute(self, client, recv, override=False, flood_safe=False):
         channel = list(filter(lambda c: c.name.lower() == recv[1].lower(), self.ircd.channels))
@@ -33,7 +33,7 @@ class Names(ircd.Command):
                 if not client.ocheck('o', 'stealth'):
                     continue
                 else:
-                    users.append('!'+user.nickname)
+                    users.append('!' + user.nickname)
                 continue
 
             ### Check module hooks for visible_in_channel()
@@ -55,7 +55,7 @@ class Names(ircd.Command):
             if 'userhost-in-names' in client.caplist:
                 string = '!{}@{}'.format(user.ident, user.cloakhost)
             entry = '{}{}'.format(user.nickname, string)
-            users.append(prefix+''+entry)
+            users.append(prefix + '' + entry)
 
             if flood_safe:
                 client.flood_safe = True

@@ -2,10 +2,12 @@
 provides chmode +c (block colors)
 """
 
-import ircd
 import re
 
+import ircd
+
 chmode = 'c'
+
 
 class Chmode_c(ircd.ChannelMode):
     def __init__(self):

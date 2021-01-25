@@ -2,10 +2,11 @@
 /tkl (server), /kline, /gline, /zline, /gzline commands
 """
 
-import ircd
 import time
-import datetime
+
+import ircd
 from handle.functions import TKL, logging, valid_expire
+
 
 def makerMask(data):
     ident = data.split('@')[0]
@@ -26,14 +27,12 @@ class Tkl(ircd.Command):
         self.command = 'tkl'
         self.req_class = 'Server'
 
-
     def execute(self, client, recv, expire=False):
         if recv[2] == '+':
             TKL.add(client, self.ircd, recv)
             ### TKL add.
         elif recv[2] == '-':
             TKL.remove(client, self.ircd, recv, expire=expire)
-
 
 
 class Zline(ircd.Command):
@@ -51,11 +50,11 @@ class Zline(ircd.Command):
     To remove a global Z:line, use -ip as the parameter.
     Example: GZLINE -*@12.34.56.78
     """
+
     def __init__(self):
         self.command = ['zline', 'gzline']
         self.req_flags = 'zline|gzline'
         self.params = 1
-
 
     def execute(self, client, recv):
         ### /zline +0 nick/ip reason
@@ -114,8 +113,6 @@ class Zline(ircd.Command):
             logging.exception(ex)
 
 
-
-
 class Kline(ircd.Command):
     """
     Bans a user from a server (kline) or entire network (gline) by hostname.
@@ -131,11 +128,11 @@ class Kline(ircd.Command):
     To remove a global ban, use -host as the parameter.
     Example: GLINE -*@12.34.56.78.prioritytelecom.net
     """
+
     def __init__(self):
         self.command = ['kline', 'gline']
         self.req_flags = 'kline|gline'
         self.params = 1
-
 
     def execute(self, client, recv):
         type = 'G' if recv[0].lower() == 'gline' else 'g'
@@ -151,7 +148,7 @@ class Kline(ircd.Command):
                     return client.server.notice(client, '*** Notice -- No such {}:line: {}'.format('G' if type == 'G' else 'K', mask))
                 else:
                     data = '- {} {} {}'.format(type, mask.split('@')[0], mask.split('@')[1])
-                    #TKL.remove(self.ircd, data)
+                    # TKL.remove(self.ircd, data)
                     self.ircd.handle('tkl', data)
                     return
             else:
@@ -165,9 +162,9 @@ class Kline(ircd.Command):
                 if recv[1][1:] == '0':
                     expire = '0'
                 else:
-                    expire = int(time.time()) + valid_expire(recv[1].replace('+',''))
+                    expire = int(time.time()) + valid_expire(recv[1].replace('+', ''))
 
-            if len(recv[2].replace('*','')) <= 5 and ('@' in recv[2] or '*' in recv[2]):
+            if len(recv[2].replace('*', '')) <= 5 and ('@' in recv[2] or '*' in recv[2]):
                 client.server.broadcast([client], 'NOTICE {} :*** Notice -- Host range is too small'.format(client.nickname))
                 return
 
@@ -187,8 +184,8 @@ class Kline(ircd.Command):
             else:
                 mask = makerMask(recv[2])
             if mask:
-                data = '+ {} {} {} {} {} {} :{}'.format(type, mask.split('@')[0], mask.split('@')[1], client.fullrealhost(), expire, int(time.time()),reason)
-                #TKL.add(self.ircd,data)
+                data = '+ {} {} {} {} {} {} :{}'.format(type, mask.split('@')[0], mask.split('@')[1], client.fullrealhost(), expire, int(time.time()), reason)
+                # TKL.add(self.ircd,data)
                 self.ircd.handle('tkl', data)
 
         except Exception as ex:

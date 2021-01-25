@@ -4,6 +4,7 @@
 
 import ircd
 
+
 @ircd.Modules.command
 class Svsnick(ircd.Command):
     def __init__(self):
@@ -12,7 +13,7 @@ class Svsnick(ircd.Command):
 
     def execute(self, client, recv):
         S = recv[0][1:]
-        source = [s for s in self.ircd.servers+[ircd] if s.sid == S or s.hostname == S]+[u for u in ircd.users if u.uid == S or u.nickname == S]
+        source = [s for s in self.ircd.servers + [ircd] if s.sid == S or s.hostname == S] + [u for u in ircd.users if u.uid == S or u.nickname == S]
         if not source:
             return
         source = source[0]

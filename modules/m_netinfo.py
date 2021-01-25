@@ -2,12 +2,10 @@
 /netinfo command (server)
 """
 
-import ircd
-
-import time
 import hashlib
-import socket
+import time
 
+import ircd
 from handle.functions import logging
 
 
@@ -17,10 +15,9 @@ class Netinfo(ircd.Command):
         self.req_class = 'Server'
         self.params = 1
 
-
     def execute(self, client, recv):
         sid = recv[0][1:]
-        #source = list(filter(lambda s: s.sid == recv[0][1:], self.ircd.servers))[0]
+        # source = list(filter(lambda s: s.sid == recv[0][1:], self.ircd.servers))[0]
         source = [s for s in self.ircd.servers if s.sid == sid]
         if not source:
             logging.error('Received NETINFO from unknown server with SID: {}'.format(sid))
@@ -48,21 +45,21 @@ class Netinfo(ircd.Command):
 
         if not source.socket:
             source.netinfo = True
-            #self.ircd.replyPing[source] = True
-            #print('Server {} will now reply to PING requests from {} (NETINFO)'.format(self.ircd.hostname,source.hostname))
+            # self.ircd.replyPing[source] = True
+            # print('Server {} will now reply to PING requests from {} (NETINFO)'.format(self.ircd.hostname,source.hostname))
             return
 
         remotehost = source.hostname
-        if abs(remotetime-currenttime) > 10:
-            if abs(remotetime-currenttime) > 120:
+        if abs(remotetime - currenttime) > 10:
+            if abs(remotetime - currenttime) > 120:
                 err = 'ERROR :Link denied due to incorrect clocks. Please make sure both clocks are synced!'
                 client._send(err)
                 client.quit(err)
                 return
             if remotetime > currenttime:
-                self.ircd.snotice('s', '*** (warning) Remote server {}\'s clock is ~{}s ahead on ours, this can cause issues and should be fixed!'.format(remotehost, abs(remotetime-currenttime)), local=True)
+                self.ircd.snotice('s', '*** (warning) Remote server {}\'s clock is ~{}s ahead on ours, this can cause issues and should be fixed!'.format(remotehost, abs(remotetime - currenttime)), local=True)
             elif remotetime < currenttime:
-                self.ircd.snotice('s', '*** (warning) Remote server {}\'s clock is ~{}s behind on ours, this can cause issues and should be fixed!'.format(remotehost, abs(remotetime-currenttime)), local=True)
+                self.ircd.snotice('s', '*** (warning) Remote server {}\'s clock is ~{}s behind on ours, this can cause issues and should be fixed!'.format(remotehost, abs(remotetime - currenttime)), local=True)
 
         if remotename != self.ircd.hostname and source.hostname == remotename:
             self.ircd.snotice('s', '*** Network name mismatch from {} ({} != {})'.format(source.hostname, remotename, self.ircd.hostname), local=True)

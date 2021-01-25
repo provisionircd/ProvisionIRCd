@@ -11,10 +11,10 @@ class Pass(ircd.Command):
     """
     Used by clients to authenticate during connection process.
     """
+
     def __init__(self):
         self.command = 'pass'
         self.params = 1
-
 
     def execute(self, client, recv):
         source = recv[0][1:]

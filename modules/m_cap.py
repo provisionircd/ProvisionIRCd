@@ -6,11 +6,11 @@ import ircd
 
 from handle.functions import logging
 
+
 @ircd.Modules.command
 class Cap(ircd.Command):
     def __init__(self):
         self.command = 'cap'
-
 
     def execute(self, client, recv):
         if type(client).__name__ == 'Server':

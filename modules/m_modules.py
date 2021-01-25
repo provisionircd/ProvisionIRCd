@@ -18,8 +18,8 @@ class Modules(ircd.Command):
                 info = ' '.join(m.__doc__.split('\n'))
             for c in self.ircd.commands:
                 if c[5] == m:
-                    cmds += '{}'.format(', ' if cmds else '') + '/'+c[0]
-            #if cmds:
+                    cmds += '{}'.format(', ' if cmds else '') + '/' + c[0]
+            # if cmds:
             #    info = '{}{}'.format(info if info else '', '(Command: {})'.format(cmds))
 
             msg = '* {}{}'.format(m.__name__, ' -- {}'.format(info) if info else '')

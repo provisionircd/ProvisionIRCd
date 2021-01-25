@@ -2,20 +2,19 @@
 /sjoin command (server)
 """
 
-import ircd
 import re
-import os
-import sys
+
+import ircd
 
 Channel = ircd.Channel
 
 from modules.m_mode import processModes
 from handle.functions import logging
 
-W  = '\033[0m'  # white (normal)
-R  = '\033[31m' # red
-G  = '\033[32m' # green
-Y  = '\033[33m' # yellow
+W = '\033[0m'  # white (normal)
+R = '\033[31m'  # red
+G = '\033[32m'  # green
+Y = '\033[33m'  # yellow
 
 
 @ircd.Modules.command
@@ -23,7 +22,6 @@ class Sjoin(ircd.Command):
     def __init__(self):
         self.command = 'sjoin'
         self.req_class = 'Server'
-
 
     def execute(self, client, recv):
         raw = ' '.join(recv)
@@ -48,10 +46,10 @@ class Sjoin(ircd.Command):
         banlist = []
         excepts = []
         invex = []
-        mod_list_data = [] ### Store temp data from mods list types.
+        mod_list_data = []  ### Store temp data from mods list types.
         c = 0
         if recv[4].startswith('+'):
-            modes = recv[4].replace('+','')
+            modes = recv[4].replace('+', '')
         else:
             modes = ''
         for pos in [pos for pos in recv[1:] if pos]:
@@ -80,26 +78,20 @@ class Sjoin(ircd.Command):
                 except Exception as ex:
                     logging.exception(ex)
 
-
-
             # Custom list. In the beginning of SJOIN args.
             custom_mode_list = {}
-            list_prefix = pos[0] # Like ^
-
+            list_prefix = pos[0]  # Like ^
 
             for m in [m for m in self.ircd.channel_mode_class if m.type == 0 and m.mode_prefix == list_prefix]:
                 # 2020/02/29 05:31:20 DEBUG [m_sjoin]: Set lokale <ChannelMode 'w'>
                 prefix = m.mode_prefix
                 mode = m.mode
-                custom_mode_list[mode] = [] # Params for mode, like +w (whitelist)
+                custom_mode_list[mode] = []  # Params for mode, like +w (whitelist)
                 p = pos[1:]
                 custom_mode_list[mode].append(p)
                 logging.debug(f"Appended {p} to '{mode}' (list_name={m.list_name}) custom mode list.")
 
                 continue
-
-
-
 
         data = []
 
@@ -122,12 +114,11 @@ class Sjoin(ircd.Command):
             if not userClass:
                 logging.error('{}ERROR: could not fetch userclass for remote user {}. Looks like the user did not sync correctly. Maybe nick collision, or remote leftover from a netsplit.{}'.format(R, membernick, W))
                 ##continue
-                #source.quit('ERROR: could not fetch userclass for remote user {}. Looks like the user did not sync correctly. Maybe nick collision, or remote leftover from a netsplit.'.format(membernick))
+                # source.quit('ERROR: could not fetch userclass for remote user {}. Looks like the user did not sync correctly. Maybe nick collision, or remote leftover from a netsplit.'.format(membernick))
                 continue
 
             userClass = userClass[0]
             p = {'override': True, 'sourceServer': client}
-
 
             # Making the remote client join local channel, creating if needed.
 
@@ -138,7 +129,6 @@ class Sjoin(ircd.Command):
             if not local_chan:
                 logging.error(f"ERROR: Could not find or create local channel: {channel}")
                 return 0
-
 
             if len(local_chan.users) == 1:
                 ### Channel did not exist on self.ircd. Hook channel_create? Sure, why not.
@@ -162,7 +152,6 @@ class Sjoin(ircd.Command):
                     giveModes.append('v')
                     giveParams.append(userClass.nickname)
 
-
         if timestamp < local_chan.creation and not source.eos:
             # Remote channel is dominant. Replacing modes with remote channel
             # Clear the local modes.
@@ -172,7 +161,7 @@ class Sjoin(ircd.Command):
             local_chan.name = channel
             pc = 5
             for m in local_chan.modes:
-                if m not in modes and m in list(self.ircd.channel_modes[2])+list(self.ircd.channel_modes[3]):
+                if m not in modes and m in list(self.ircd.channel_modes[2]) + list(self.ircd.channel_modes[3]):
                     removeModes.append(m)
                     continue
                 ### Remote info is different, remove old one first.
@@ -211,8 +200,6 @@ class Sjoin(ircd.Command):
                 removeModes.append('I')
                 removeParams.append(I)
 
-
-
             # Remove modulair lists.
             for m in [m for m in self.ircd.channel_mode_class if m.type == 0]:
                 # Remove modulair lists.
@@ -226,10 +213,6 @@ class Sjoin(ircd.Command):
                     removeModes.append(mode)
                     removeParams.append(param)
 
-
-
-
-
             # Send all remote modes to local_chan
             for b in [b for b in banlist if b not in local_chan.bans]:
                 giveModes.append('b')
@@ -239,22 +222,16 @@ class Sjoin(ircd.Command):
                 giveModes.append('e')
                 giveParams.append(e)
 
-
             for m in custom_mode_list:
                 for p in custom_mode_list[m]:
                     logging.debug(f"[SJOIN RT] Syncing from remote: +{m} {p}")
                     giveModes.append(m)
                     giveParams.append(p)
 
-
             # ???
             for I in [I for I in invex if I not in local_chan.invex]:
                 giveModes.append('I')
                 giveParams.append(I)
-
-
-
-
 
             for m in [m for m in self.ircd.modules if hasattr(m, 'list_name') and hasattr(local_chan, m.list_name)]:
                 remote_temp = []
@@ -269,11 +246,9 @@ class Sjoin(ircd.Command):
                 giveModes.append(entry[0])
                 giveParams.append(entry[1])
 
-
-
             data = []
             data.append(local_chan.name)
-            modes = '{}{}'.format('-'+''.join(removeModes) if removeModes else '', '+'+''.join(giveModes) if giveModes else '')
+            modes = '{}{}'.format('-' + ''.join(removeModes) if removeModes else '', '+' + ''.join(giveModes) if giveModes else '')
             data.append(modes)
             for p in removeParams:
                 data.append(p)
@@ -313,7 +288,6 @@ class Sjoin(ircd.Command):
                             pc += 1
                         continue
 
-
                 for b in [b for b in banlist if b not in local_chan.bans]:
                     giveModes.append('b')
                     giveParams.append(b)
@@ -326,21 +300,15 @@ class Sjoin(ircd.Command):
                     giveModes.append('I')
                     giveParams.append(I)
 
-
-
                 for m in custom_mode_list:
                     for p in custom_mode_list[m]:
                         logging.debug(f"[SJOIN merge] Appending modes: +{m} {p}")
                         giveModes.append(m)
                         giveParams.append(p)
 
-
-
-
-
                 data = []
                 data.append(local_chan.name)
-                modes = '{}'.format('+'+''.join(giveModes) if giveModes else '')
+                modes = '{}'.format('+' + ''.join(giveModes) if giveModes else '')
                 data.append(modes)
                 for p in removeParams:
                     data.append(p)

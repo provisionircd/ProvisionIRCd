@@ -3,17 +3,17 @@
 """
 
 import ircd
-import time
+
 
 @ircd.Modules.command
 class List(ircd.Command):
     """
     Request a list of all channels on the network
     """
+
     def __init__(self):
         self.command = 'list'
         self.support = [('SAFELIST',), ('ELIST', 'U')]
-
 
     def execute(self, client, recv):
         client.flood_safe = True

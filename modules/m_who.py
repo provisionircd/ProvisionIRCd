@@ -3,20 +3,19 @@
 """
 
 import ircd
-import time
 
+import time
 from handle.functions import match, logging
 
 WHO_FLAGS = {
-        'A': 'Account match',
-        'a': 'Filters on away status',
-        'h': 'Filters by hostname',
-        'o': 'Show only IRC operators',
-        'r': 'Filter by realname',
-        's': 'Filter by server',
-        'u': 'Filter by username/ident'
-    }
-
+    'A': 'Account match',
+    'a': 'Filters on away status',
+    'h': 'Filters by hostname',
+    'o': 'Show only IRC operators',
+    'r': 'Filter by realname',
+    's': 'Filter by server',
+    'u': 'Filter by username/ident'
+}
 
 
 class Who(ircd.Command):
@@ -37,6 +36,7 @@ class Who(ircd.Command):
      u <ident>      = Filter by username/ident.
     -
     """
+
     def __init__(self):
         self.command = 'who'
         self.support = [('WHO',)]
@@ -46,34 +46,34 @@ class Who(ircd.Command):
             client.flood_safe = True
         who = []
         if len(recv) == 1 or recv[1] == '*':
-            mask = '*' ### Match all.
+            mask = '*'  ### Match all.
         else:
             mask = recv[1]
-            ### This parameter contains a comma-separated list of query filters,
-            ### such as nicknames, channel names or wild-card masks which are matched against all clients currently on-line.
+            # This parameter contains a comma-separated list of query filters,
+            # such as nicknames, channel names or wild-card masks which are matched against all clients currently on-line.
         flags = ''
         if len(recv) > 2:
             flags = recv[2]
         params = '' if len(recv) < 3 else recv[3:]
-        #logging.debug('WHO mask: {}'.format(mask))
+        # logging.debug('WHO mask: {}'.format(mask))
         for user in iter(self.ircd.users):
             continue_loop = 0
             chan = '*'
             if not iter([c for c in self.ircd.channels if client in c.users and user in c.users]) and 'i' in client.modes and not 'o' in client.modes and user != client:
                 continue
-                #logging.debug('Checking mask: {}'.format(m))
-            if (mask[0] not in self.ircd.chantypes+'*' or mask.lower() not in iter([c.name.lower() for c in self.ircd.channels])) and mask not in [user.nickname, '*']:
+                # logging.debug('Checking mask: {}'.format(m))
+            if (mask[0] not in self.ircd.chantypes + '*' or mask.lower() not in iter([c.name.lower() for c in self.ircd.channels])) and mask not in [user.nickname, '*']:
                 continue
 
             modes = ''
 
-            if mask[0] in self.ircd.chantypes+'*':
-                ### Mask is a channel.
+            if mask[0] in self.ircd.chantypes + '*':
+                # Mask is a channel.
                 if mask.lower() not in iter([c.name.lower() for c in user.channels]) and mask != '*':
                     continue
                 else:
                     channel = next((c for c in self.ircd.channels if c.name.lower() == mask.lower()), None)
-                    modes = ''.join([ {'q': '~', 'a': '&', 'o': '@', 'h': '%', 'v': ''}[x] for x in channel.usermodes[user] ])
+                    modes = ''.join([{'q': '~', 'a': '&', 'o': '@', 'h': '%', 'v': ''}[x] for x in channel.usermodes[user]])
                     chan = channel.name
 
             paramcount = 0
@@ -92,9 +92,9 @@ class Who(ircd.Command):
                     neg_match.append(f)
 
                 if f in 'Ahrsu':
-                    ## ['WHO', '#Home', '%cuhsnfdar']
+                    # ['WHO', '#Home', '%cuhsnfdar']
                     if not params:
-                        #logging.debug('Found arg flag but no params found')
+                        # logging.debug('Found arg flag but no params found')
                         continue
                     param = params[paramcount]
                     logging.debug('Param set: {}'.format(param))
@@ -140,13 +140,12 @@ class Who(ircd.Command):
                     if (action == '+' and match(param, user.ident)) or (action == '-' and not match(param, user.ident)):
                         user_match.append(f)
 
-            #logging.debug('User {} must match these flags: {}'.format(user.nickname, pos_match))
-            #logging.debug('User {} must NOT match these flags: {}'.format(user.nickname, neg_match))
-            #logging.debug('User {} has these matches: {}'.format(user.nickname, user_match))
-            diff = set(pos_match+neg_match).difference(set(user_match))
+            # logging.debug('User {} must match these flags: {}'.format(user.nickname, pos_match))
+            # logging.debug('User {} must NOT match these flags: {}'.format(user.nickname, neg_match))
+            # logging.debug('User {} has these matches: {}'.format(user.nickname, user_match))
+            diff = set(pos_match + neg_match).difference(set(user_match))
             if diff or user in who:
                 continue
-
 
             who.append(user)
             if user.channels and chan == '*':
@@ -174,10 +173,7 @@ class Who(ircd.Command):
                     continue
 
                 chan = channel.name
-                modes = ''.join([ {'q': '~', 'a': '&', 'o': '@', 'h': '%', 'v': ''}[x] for x in channel.usermodes[user] ])
-
-
-
+                modes = ''.join([{'q': '~', 'a': '&', 'o': '@', 'h': '%', 'v': ''}[x] for x in channel.usermodes[user]])
 
             if 'x' in user.modes:
                 modes += 'x'

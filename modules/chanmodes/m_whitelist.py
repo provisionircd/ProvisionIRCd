@@ -2,24 +2,24 @@
 provides chmode +w (white list)
 """
 
-import ircd
-import time
-import os
-import sys
 import re
-from handle.functions import logging, match, make_mask
+import time
 from collections import OrderedDict
 
+import ircd
+from handle.functions import logging, match, make_mask
+
 chmode = 'w'
+
 
 class Chmode_w(ircd.ChannelMode):
     def __init__(self):
         self.mode = chmode
-        self.type = 0 # +beI family
+        self.type = 0  # +beI family
         self.level = 5
         self.desc = 'Maintain a "whitelist" for your channel (/helpop whitelist for more info)'
         self.param_help = '<level>:<nick!ident@host>'
-        self.mode_prefix = '^' ### This is used in SJOIN to indicate that it is a whitelist-entry.
+        self.mode_prefix = '^'  ### This is used in SJOIN to indicate that it is a whitelist-entry.
         self.list_name = 'whitelist'
 
 
@@ -75,7 +75,6 @@ def join(self, ircd, channel):
         ircd.handle('MODE', '{} {} {}'.format(channel.name, total_modes, total_params))
 
 
-
 @ircd.Modules.hooks.pre_remote_chanmode('w')
 @ircd.Modules.hooks.pre_local_chanmode('w')
 def whitelist_mode(self, localServer, channel, modebuf, parambuf, action, modebar, param):
@@ -92,8 +91,8 @@ def whitelist_mode(self, localServer, channel, modebuf, parambuf, action, modeba
             return
         valid = re.findall("^([1-9][0-9]{0,3}):(.*)", param)
         if not valid:
-           logging.info('Invalid param for {}{}: {}'.format(action, modebar, param))
-           return 0
+            logging.info('Invalid param for {}{}: {}'.format(action, modebar, param))
+            return 0
 
         mask = make_mask(localServer, param.split(':')[1])
         logging.info('Param for {}{} set: {}'.format(action, modebar, param))
@@ -127,7 +126,6 @@ def whitelist_mode(self, localServer, channel, modebuf, parambuf, action, modeba
 
     except Exception as ex:
         logging.exception(ex)
-
 
 
 @ircd.Modules.hooks.channel_destroy()

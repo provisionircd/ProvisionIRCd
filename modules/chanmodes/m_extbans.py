@@ -21,16 +21,16 @@ support for extended bans
 #       +b ~L:host:#chan           Redirects everyone with a matching host to another channel.
 #
 
-import ircd
-import time
 import re
+import time
 
-from modules.m_joinpart import checkMatch
-
+import ircd
 from handle.functions import match, logging, make_mask
+from modules.m_joinpart import checkMatch
 
 ext_bans = ['L', 'T', 't', 'c', 'O', 'a', 'b']
 prefix = '~'
+
 
 def checkExtMatch(type, action, channel, msg):
     try:
@@ -66,14 +66,14 @@ def checkExtMatch(type, action, channel, msg):
                     ### This just works, so don't mess it up.
                     m = ban.split(':', 2)[2]
                     if m.startswith(':'):
-                        search = ':'+m.split(':')[1]
+                        search = ':' + m.split(':')[1]
                         replaceWith = m.split(':', 2)[2]
                     else:
                         search = m.split(':')[0]
                         if m.split(':')[1] != '':
                             replaceWith = m.split(':')[1]
                         else:
-                            replaceWith = ':'+m.split(':', 2)[2]
+                            replaceWith = ':' + m.split(':', 2)[2]
 
                     did_replace = 0
                     try:
@@ -102,7 +102,7 @@ def checkExtMatch(type, action, channel, msg):
                                 elif not word.islower():
                                     temp = re.search(temp, word, flags=re.IGNORECASE).group()
                                 did_replace = True
-                                #tempMsg = tempMsg.replace(temp, replaceWith)
+                                # tempMsg = tempMsg.replace(temp, replaceWith)
                                 tempMsg = tempMsg.replace(word, replaceWith)
 
                             if did_replace:
@@ -114,8 +114,9 @@ def checkExtMatch(type, action, channel, msg):
     except Exception as ex:
         logging.exception(ex)
 
+
 def char_repeat(string, char, amount):
-    for word in [word for word in string.split(' ') if '://' not in word and 'www.' not in word]: ### Excluding urls.
+    for word in [word for word in string.split(' ') if '://' not in word and 'www.' not in word]:  ### Excluding urls.
         if char == '*':
             for c in 'abcdefghijklmnopqrstuwvwxyz,.?!1234567890:':
                 if word.lower().count(c.lower()) >= int(amount):
@@ -124,6 +125,7 @@ def char_repeat(string, char, amount):
             if word.count(char.lower()) >= int(amount):
                 return True
     return False
+
 
 @ircd.Modules.hooks.loop()
 def checkExpiredBans(localServer):
@@ -139,14 +141,14 @@ def checkExpiredBans(localServer):
         if len(remove_bans[chan]) < 1:
             continue
         bans = ' '.join(remove_bans[chan])
-        tmodes = 'b'*len(remove_bans[chan])
+        tmodes = 'b' * len(remove_bans[chan])
         localServer.handle('MODE', '{} -{} {} 0'.format(chan.name, tmodes, bans))
 
 
-@ircd.Modules.support(('EXTBAN='+prefix+','+str(''.join(ext_bans)), True)) ### (support string, boolean if support must be sent to other servers)
+@ircd.Modules.support(('EXTBAN=' + prefix + ',' + str(''.join(ext_bans)), True))  ### (support string, boolean if support must be sent to other servers)
 @ircd.Modules.hooks.pre_local_chanmode('beI')
 @ircd.Modules.hooks.pre_remote_chanmode('beI')
-#def extbans(self, localServer, channel, modes, params, modebuf, parambuf):
+# def extbans(self, localServer, channel, modes, params, modebuf, parambuf):
 def extbans(self, localServer, channel, modebuf, parambuf, action, modebar, param):
     try:
         if modebar not in 'beI' or action != '+':
@@ -155,7 +157,7 @@ def extbans(self, localServer, channel, modebuf, parambuf, action, modebar, para
             logging.error('ERROR: invalid param received for {}{}: {}'.format(action, modebar, param))
             return
         if not re.findall("(^{}[{}]):(.*)".format(prefix, ''.join(ext_bans)), param):
-            #logging.info('Param {} is invalid for {}{}'.format(param, action, modebar))
+            # logging.info('Param {} is invalid for {}{}'.format(param, action, modebar))
             return
 
         logging.info('Param for {}{} set: {}'.format(action, modebar, param))
@@ -175,7 +177,7 @@ def extbans(self, localServer, channel, modebuf, parambuf, action, modebar, para
                     return
                 redirect_mask = make_mask(localServer, param.split(':')[1])
                 redirect_chan = param.split(':')[2]
-                param = param[:2]+':'+redirect_mask+':'+redirect_chan
+                param = param[:2] + ':' + redirect_mask + ':' + redirect_chan
                 if redirect_chan[0] not in localServer.chantypes:
                     logging.info('Channel {} is invalid for {}{} {}'.format(redirect_chan, action, modebar, param))
                     return
@@ -283,8 +285,7 @@ def join(self, localServer, channel, **kwargs):
                     self.sendraw(474, '{} :Cannot join channel (+b)'.format(channel.name))
                     return (0, overrides)
 
-
-        for b in [b for b in channel.bans if b[:2] == '~L' and not invite_override and not checkMatch(self, localServer, 'e', channel)]: # ~L:host:#chan
+        for b in [b for b in channel.bans if b[:2] == '~L' and not invite_override and not checkMatch(self, localServer, 'e', channel)]:  # ~L:host:#chan
             redirect_host = b.split(':')[1]
             redirect_chan = b.split(':')[2]
             if not next((c for c in localServer.channels if c.name.lower() == redirect_chan.lower()), None):
@@ -301,7 +302,6 @@ def join(self, localServer, channel, **kwargs):
                 self.handle('JOIN', redirect_chan)
                 self.sendraw(471, '{} :Channel is full so you are redirected to {}'.format(channel.name, redirect_chan))
                 return (0, overrides)
-
 
         for b in [b for b in channel.bans if b[:2] == '~t' and not invite_override and not checkMatch(self, localServer, 'e', channel)]:
             mask = b.split(':')[2]

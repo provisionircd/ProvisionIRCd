@@ -7,7 +7,8 @@ import ircd
 from handle.functions import logging
 
 W = '\033[0m'  # white (normal)
-R = '\033[31m' # red
+R = '\033[31m'  # red
+
 
 @ircd.Modules.command
 class Squit(ircd.Command):
@@ -15,7 +16,6 @@ class Squit(ircd.Command):
         self.command = 'squit'
         self.params = 2
         self.req_flags = 'squit'
-
 
     def execute(self, client, recv):
         if type(client).__name__ == 'Server':
@@ -34,7 +34,7 @@ class Squit(ircd.Command):
             server.quit(' '.join(recv[3:]), source=source, squit=False)
             return
 
-        reason = '[{}] {}'.format(client.nickname,' '.join(recv[2:]))
+        reason = '[{}] {}'.format(client.nickname, ' '.join(recv[2:]))
 
         name = recv[1]
 

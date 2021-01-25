@@ -2,8 +2,10 @@
 /starttls command
 """
 
-import ircd
 import ssl
+
+import ircd
+
 
 @ircd.Modules.command
 class Starttls(ircd.Command):
@@ -16,7 +18,7 @@ class Starttls(ircd.Command):
             return
         try:
             if not client.ssl:
-                #client.sendraw(670, ':STARTTLS successful, proceed with TLS handshake')
+                # client.sendraw(670, ':STARTTLS successful, proceed with TLS handshake')
                 client.socket.send(bytes(':{} 670 {} :STARTTLS successful, proceed with TLS handshake\r\n'.format(self.ircd.hostname, client.nickname), 'utf-8'))
                 sslctx = ssl.SSLContext(ssl.PROTOCOL_TLS)
                 sslctx.load_cert_chain(certfile=self.ircd.default_cert, keyfile=self.ircd.default_key)

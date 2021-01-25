@@ -2,9 +2,9 @@
 /topic command
 """
 
-import ircd
-
 import time
+
+import ircd
 from handle.functions import checkSpamfilter, logging, save_db
 
 TOPICLEN = 350
@@ -14,7 +14,7 @@ class Topic(ircd.Command):
     def __init__(self):
         self.command = 'topic'
         self.params = 1
-        self.support = [('TOPICLEN', str(TOPICLEN)),]
+        self.support = [('TOPICLEN', str(TOPICLEN)), ]
 
     def execute(self, client, recv, override=0):
         text = None
@@ -23,7 +23,7 @@ class Topic(ircd.Command):
                 override = True
                 sourceServer = client
                 S = recv[0][1:]
-                source = [s for s in self.ircd.servers+[self.ircd] if s.sid == S or s.hostname == S]+[u for u in self.ircd.users if u.uid == S or u.nickname == S]
+                source = [s for s in self.ircd.servers + [self.ircd] if s.sid == S or s.hostname == S] + [u for u in self.ircd.users if u.uid == S or u.nickname == S]
                 source = source[0]
                 if type(source).__name__ == 'User':
                     sourceID = source.uid

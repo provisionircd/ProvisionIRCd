@@ -2,9 +2,9 @@
 /watch command
 """
 
-import ircd
 import time
 
+import ircd
 from handle.functions import logging
 
 MAXWATCH = 256
@@ -24,8 +24,7 @@ class Watch(ircd.Command):
 
     def __init__(self):
         self.command = 'watch'
-        self.support = [ ('WATCH', MAXWATCH), ('WATCHOPTS', 'A') ]
-
+        self.support = [('WATCH', MAXWATCH), ('WATCHOPTS', 'A')]
 
     def execute(self, client, recv, override=False, s_sync=True):
         if int(time.time()) - client.signon < 10:
@@ -47,7 +46,7 @@ class Watch(ircd.Command):
                     if entry[0] not in '+-':
                         if entry == 'C':
                             client.watchC = True
-                            if len(recv) == 2: ### Clear.
+                            if len(recv) == 2:  ### Clear.
                                 client.watchlist = []
                                 logging.debug('Watchlist of {} cleared.'.format(client))
                         elif entry == 'S':
@@ -96,6 +95,7 @@ class Watch(ircd.Command):
 
         except Exception as ex:
             logging.exception(ex)
+
 
 def init(ircd, reload=False):
     ircd.maxwatch = MAXWATCH

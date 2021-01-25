@@ -2,18 +2,20 @@
 provides channel properties with /prop command aaaa
 """
 
-import ircd
-import time
 import re
-from handle.functions import logging, match
-#from modules.m_mode import makeMask
-#from collections import OrderedDict
+import time
+
+import ircd
+from handle.functions import logging
+
+# from modules.m_mode import makeMask
+# from collections import OrderedDict
 
 ### Dictionary of properties. name: chlevel
 properties = {
-                "rejoindelay": 3,
-                "nomasshighlight": 3
-             }
+    "rejoindelay": 3,
+    "nomasshighlight": 3
+}
 
 '''
 named_modes = {
@@ -76,6 +78,7 @@ def prop_mode(self, localServer, channel, modebuf, parambuf, action, m, param):
     except Exception as ex:
         logging.exception(ex)
 '''
+
 
 @ircd.Modules.params(1)
 @ircd.Modules.commands('prop')
@@ -140,7 +143,6 @@ def prop(self, localServer, recv):
 
     except Exception as ex:
         logging.exception(ex)
-
 
 
 @ircd.Modules.hooks.channel_create()

@@ -3,8 +3,9 @@
 """
 
 import ircd
-import time
+
 import datetime
+import time
 from handle.functions import logging
 
 
@@ -18,10 +19,9 @@ class Whois(ircd.Command):
     def __init__(self):
         self.command = 'whois'
 
-
     def execute(self, client, recv):
-        #localServer = self.ircd
-        #self = user
+        # localServer = self.ircd
+        # self = user
         if len(recv) < 2:
             self.sendraw(431, ':No nickname given')
             return
@@ -36,9 +36,9 @@ class Whois(ircd.Command):
 
         if 'W' in user.modes and user != client:
             msg = '*** Notice -- {s.nickname} ({s.ident}@{s.hostname}) did a /WHOIS on you.'.format(s=client)
-            #us = list(filter(lambda u: u.nickname == user.nickname and user.server == self.ircd, self.ircd.users)) # Wat?
-            #u = [u for u in self.ircd.users if u.nickname == user.nickname]
-            if user.server == self.ircd: # Local
+            # us = list(filter(lambda u: u.nickname == user.nickname and user.server == self.ircd, self.ircd.users)) # Wat?
+            # u = [u for u in self.ircd.users if u.nickname == user.nickname]
+            if user.server == self.ircd:  # Local
                 client.server.broadcast([user], 'NOTICE {} :{}'.format(user.nickname, msg))
             else:
                 data = ':{} NOTICE {} :{}'.format(self.ircd.hostname, user.nickname, msg)
@@ -48,7 +48,7 @@ class Whois(ircd.Command):
         client.sendraw(311, '{} {} {} * :{}'.format(user.nickname, user.ident, user.cloakhost, user.realname))
 
         if 'o' in client.modes or user == client:
-            client.sendraw(379, '{} :is using modes: +{} {}'.format(user.nickname, user.modes, '+'+user.snomasks if user.snomasks else ''))
+            client.sendraw(379, '{} :is using modes: +{} {}'.format(user.nickname, user.modes, '+' + user.snomasks if user.snomasks else ''))
 
         if ('o' in client.modes or user == client) and user.server.hostname not in self.ircd.conf['settings']['ulines'] and 'S' not in user.modes:
             client.sendraw(378, '{} :is connecting from *@{} {}'.format(user.nickname, user.hostname, user.ip))
@@ -118,10 +118,10 @@ class Whois(ircd.Command):
             if user.fingerprint:
                 client.sendraw(276, '{} :has client certificate fingerprint {}'.format(user.nickname, user.fingerprint))
 
-        ### Read below.
-        if 'H' not in user.modes or 'o' in client.modes: ### TODO: only exclude oper-whois on +H. Other swhois should be visible.
+        # Read below.
+        if 'H' not in user.modes or 'o' in client.modes:  ### TODO: only exclude oper-whois on +H. Other swhois should be visible.
             for line in user.swhois:
-                client.sendraw(320, '{} :{}'.format(user.nickname,line))
+                client.sendraw(320, '{} :{}'.format(user.nickname, line))
 
         if hasattr(user, 'svid') and user.svid != '*':
             client.sendraw(330, '{} {} :is using acount'.format(user.nickname, user.svid))
@@ -135,8 +135,6 @@ class Whois(ircd.Command):
         client.sendraw(318, '{} :End of /WHOIS list.'.format(user.nickname))
 
 
-
-
 class Whowas(ircd.Command):
     """Request saved user information for offline users.
     -
@@ -145,7 +143,6 @@ class Whowas(ircd.Command):
 
     def __init__(self):
         self.command = 'whowas'
-
 
     def execute(self, client, recv):
         if len(recv) < 2:
@@ -180,7 +177,6 @@ class Whowas(ircd.Command):
         self.sendraw(369, '{} :End of /WHOWAS list.'.format(recv[1]))
 
 
-
 @ircd.Modules.hooks.local_quit()
 @ircd.Modules.hooks.remote_quit()
 @ircd.Modules.hooks.local_nickchange()
@@ -193,8 +189,7 @@ def savewhowas(self, ircd):
             ircd.whowas = {}
         if self.nickname not in ircd.whowas:
             ircd.whowas[self.nickname] = []
-        whowasInfo = {}
-        whowasInfo[self.nickname] = {}
+        whowasInfo = {self.nickname: {}}
         whowasInfo[self.nickname]['ident'] = self.ident
         whowasInfo[self.nickname]['cloakhost'] = self.cloakhost
         whowasInfo[self.nickname]['realname'] = self.realname
@@ -211,20 +206,17 @@ def savewhowas(self, ircd):
             info = list(ircd.whowas[nick])
             for data in info:
                 signoff = data['signoff']
-                if int(time.time()) - signoff > 3600*24*30: ### 1 month expire?
+                if int(time.time()) - signoff > 3600 * 24 * 30:  ### 1 month expire?
                     ircd.whowas[nick].remove(data)
 
     except Exception as ex:
         logging.exception(ex)
 
 
-
-
 class Umode_c(ircd.UserMode):
     def __init__(self):
         self.mode = 'c'
         self.desc = 'Hide channels in /WHOIS'
-
 
 
 class Umode_W(ircd.UserMode):

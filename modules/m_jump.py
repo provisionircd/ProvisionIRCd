@@ -4,6 +4,7 @@
 
 import ircd
 
+
 @ircd.Modules.command
 class Jump(ircd.Command):
     """
@@ -11,6 +12,7 @@ class Jump(ircd.Command):
     This will only work with some clients, like mIRC
     Syntax: JUMP <nick> <server:port>
     """
+
     def __init__(self):
         self.command = 'jump'
         self.req_flags = 'jump'
@@ -33,7 +35,7 @@ class Jump(ircd.Command):
         validPort = False
         server = recv[2]
         if '.' not in server:
-            return client._send(':{} NOTICE {} :Invalid server "{}"'.format(self.ircd.hostname, source.uid,server))
+            return client._send(':{} NOTICE {} :Invalid server "{}"'.format(self.ircd.hostname, source.uid, server))
 
         port = recv[3]
         if '+' in port and port.startswith('+'):
@@ -51,8 +53,8 @@ class Jump(ircd.Command):
         reason = 'User has been redirected to another server ([{} {}])'.format(server, port)
         msg = '*** {} ({}@{}) used JUMP to attempt to redirect {} to {} {}'.format(source.nickname, source.ident, source.hostname, target.nickname, server, port)
         self.ircd.snotice('s', msg)
-        #data = ':{} NOTICE {} :*** Notice -- You are being redirected to {}, so goodbye'.format(self.ircd.hostname, target.uid, server)
-        #target._send(data)
-        target.sendraw('010', '{} {}'.format(server,port))
-        data = ':{} {}'.format(source.uid,' '.join(recv))
+        # data = ':{} NOTICE {} :*** Notice -- You are being redirected to {}, so goodbye'.format(self.ircd.hostname, target.uid, server)
+        # target._send(data)
+        target.sendraw('010', '{} {}'.format(server, port))
+        data = ':{} {}'.format(source.uid, ' '.join(recv))
         self.ircd.new_sync(self.ircd, sourceServer, data)

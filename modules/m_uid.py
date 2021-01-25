@@ -7,14 +7,14 @@ import ircd
 from handle.functions import logging
 
 W = '\033[0m'  # white (normal)
-R = '\033[31m' # red
+R = '\033[31m'  # red
+
 
 @ircd.Modules.command
 class Uid(ircd.Command):
     def __init__(self):
         self.command = 'uid'
         self.req_class = 'Server'
-
 
     def execute(self, client, recv):
         nick = recv[2]

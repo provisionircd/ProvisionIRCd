@@ -2,14 +2,16 @@
 /die command
 """
 
-import ircd
 import os
+
+import ircd
 
 
 class Die(ircd.Command):
     """
     Shutdown the server remotely.
     """
+
     def __init__(self):
         self.command = 'die'
         self.params = 1

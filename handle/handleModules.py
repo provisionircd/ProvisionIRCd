@@ -1,9 +1,8 @@
+import importlib
+import inspect
 import os
 import sys
-import importlib
 
-from classes.modes import UserMode, ChannelMode
-from classes.commands import Command
 from handle.functions import update_support, logging
 
 
@@ -66,7 +65,7 @@ def HookToCore(self, callables, reload=False):
                 api_host = None if len(a) < 2 else a[1]
                 api_password = None if len(a) < 3 else a[2]
                 info = (api_cmd, callable, api_host, api_password, module)
-                self.api.append(info)  ### (cmd, callable, params, req_modes, req_flags, req_class, module)
+                self.api.append(info)  # (cmd, callable, params, req_modes, req_flags, req_class, module)
                 # logging.info('Hooked API "{}" (host: {}, password: {}) to function {}'.format(api_cmd, api_host, api_password, callable))
 
         hooks = []
@@ -183,7 +182,7 @@ def UnloadModule(self, name):
                         except ValueError:
                             logging.error('Callable {} not found in API list.'.format(a))
 
-                ### Leftover hooks.
+                # Leftover hooks.
                 for h in [h for h in list(self.hooks) if h[2] == module]:
                     logging.error('Hook {} was not properly removed (or added double). Removing now.'.format(h))
                     self.hooks.remove(h)
@@ -244,31 +243,19 @@ def support(*support):
 
 # Try commenting out class and pass. We still needs support and api
 def user_mode(cls):
-    class umode(UserMode):
-        pass
-
     return cls
 
 
 def channel_mode(cls):
-    class umode(ChannelMode):
-        pass
-
     return cls
 
 
 def command(cls):
-    class umode(Command):
-        pass
-
     return cls
 
 
-#
-
-
 def api(*args):
-    ### ('command', host=None, password=None)
+    # ('command', host=None, password=None)
     def add_attribute(function):
         if not hasattr(function, "api"):
             function.api = []
@@ -287,7 +274,7 @@ def params(num):
 
     return add_attribute
 
-
+"""
 def commands(*command_list):
     def add_attribute(function):
         if not hasattr(function, "commands"):
@@ -309,7 +296,7 @@ def req_class(req_class):
 
 
 def req_modes(*req_modes):
-    ### Required modes for command.
+    # Required modes for command.
     def add_attribute(function):
         if not hasattr(function, "req_modes"):
             function.req_modes = []
@@ -320,7 +307,7 @@ def req_modes(*req_modes):
 
 
 def req_flags(*req_flags):
-    ### Required flags for command.
+    # Required flags for command.
     def add_attribute(function):
         if not hasattr(function, "req_flags"):
             function.req_flags = []
@@ -331,7 +318,7 @@ def req_flags(*req_flags):
 
 
 def channel_modes(*args):
-    ### ('mode', type, level, 'Mode description', class 'user' or None, prefix, 'param desc')
+    # ('mode', type, level, 'Mode description', class 'user' or None, prefix, 'param desc')
     def add_attribute(function):
         if not hasattr(function, "channel_modes"):
             function.channel_modes = []
@@ -359,15 +346,13 @@ def events(*command_list):
         return function
 
     return add_attribute
-
-
-import inspect
+"""
 
 all_hooks = [
     'pre_command',
     'pre_local_join',
     'local_join',
-    'pre_remote_join',  ### Why? Not like you can block a remote join. Oh, for m_delayjoin to hide joins.
+    'pre_remote_join',  # Why? Not like you can block a remote join. Oh, for m_delayjoin to hide joins.
     'remote_join',
     'channel_create',
     'pre_local_part',

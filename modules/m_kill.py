@@ -6,12 +6,14 @@ import ircd
 
 from handle.functions import match
 
+
 @ircd.Modules.command
 class Kill(ircd.Command):
     """
     Forcefully disconnect a user from the server.
     Syntax: /KILL <user> <reason>
     """
+
     def __init__(self):
         self.command = ['kill', 'avadakedavra']
         self.req_flags = 'localkill|globalkill'
@@ -24,7 +26,7 @@ class Kill(ircd.Command):
                 return
 
             S = recv[0][1:]
-            source = [s for s in self.ircd.servers+[self.ircd] if s.sid == S or s.hostname == S]+[u for u in self.ircd.users if u.uid == S or u.nickname == S]
+            source = [s for s in self.ircd.servers + [self.ircd] if s.sid == S or s.hostname == S] + [u for u in self.ircd.users if u.uid == S or u.nickname == S]
             if not source:
                 return
             source = source[0]
@@ -71,7 +73,7 @@ class Kill(ircd.Command):
         self.ircd.snotice('k', msg)
 
         quitmsg = '[{}] {} kill by {} ({})'.format(client.server.hostname, 'Local' if target[0].server == self.ircd else 'Global', client.nickname, reason)
-        #data = ':{} KILL {} :{}'.format(client.uid, target[0].uid, quitmsg)
+        # data = ':{} KILL {} :{}'.format(client.uid, target[0].uid, quitmsg)
         data = ':{} KILL {} :{}'.format(client.uid, target[0].uid, reason)
         self.ircd.new_sync(self.ircd, client.server, data)
         target[0].quit(quitmsg, kill=True)
