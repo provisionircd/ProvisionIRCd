@@ -10,13 +10,17 @@ import socket
 import sys
 import time
 from collections import OrderedDict
-from handle.functions import match, is_sslport, update_support, logging
+
 import handle.handleConf
-from classes import user
-from classes.modes import UserMode, ChannelMode
-from classes.commands import Command
+# noinspection PyUnresolvedReferences
 import handle.handleModules as Modules
+from classes import user
+# noinspection PyUnresolvedReferences
+from classes.commands import Command
+# noinspection PyUnresolvedReferences
+from classes.modes import UserMode, ChannelMode
 from classes.rpl import ERR, RPL
+from handle.functions import match, is_sslport, update_support, logging
 
 try:
     import objgraph
