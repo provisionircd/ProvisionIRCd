@@ -30,7 +30,7 @@ class Tkl(ircd.Command):
     def execute(self, client, recv, expire=False):
         if recv[2] == '+':
             TKL.add(client, self.ircd, recv)
-            ### TKL add.
+            # TKL add.
         elif recv[2] == '-':
             TKL.remove(client, self.ircd, recv, expire=expire)
 
@@ -57,7 +57,7 @@ class Zline(ircd.Command):
         self.params = 1
 
     def execute(self, client, recv):
-        ### /zline +0 nick/ip reason
+        # /zline +0 nick/ip reason
         type = 'Z' if recv[0].lower() == 'gzline' else 'z'
         if type == 'Z' and not client.ocheck('o', 'gzline'):
             return client.sendraw(self.ERR.NOPRIVILEGES, ':Permission denied - You do not have the correct IRC Operator privileges')

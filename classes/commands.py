@@ -1,11 +1,12 @@
 # Command class.
 
+from classes.rpl import RPL, ERR
 from handle.functions import logging
 
-from classes.rpl import RPL, ERR
 
 class CommandError(Exception):
     pass
+
 
 class Command:
     ircd = None
@@ -21,11 +22,10 @@ class Command:
     RPL, ERR = RPL, ERR
     registered = 0
 
-
     def validate(self):
         # Remove duplicate instances of the same class.
         for c in self.ircd.command_class:
-            if (type(c).__name__ == type(self).__name__ and c != self):
+            if type(c).__name__ == type(self).__name__ and c != self:
                 c.unload()
 
         if not self.ircd:
@@ -39,9 +39,9 @@ class Command:
 
         exists = 0
         for c in self.ircd.command_class:
-            if [m for m in list(c.command) if m in self.command]:
-                #logging.debug('Apparently, {} is equal to {}'.format(c.command, self.command))
-                self.error("Command {} already exists".format(m))
+            for m in [m for m in list(c.command) if m in self.command]:
+                # logging.debug('Apparently, {} is equal to {}'.format(c.command, self.command))
+                self.error(f"Command {m} already exists")
                 break
 
         if self.support:
@@ -50,35 +50,32 @@ class Command:
             if type(self.support) != list:
                 self.error("Invalid SUPPORT type: must be a list containing one or more tuples")
             for s in [s for s in self.support if type(s) != tuple]:
-                self.error("Invalid SUPPORT entry: {} must be a tuple".format(s))
+                self.error(f"Invalid SUPPORT entry: {s} must be a tuple")
 
         if self.cap:
             if type(self.cap) == str:
                 self.cap = [self.cap]
             self.ircd.caps.extend(self.cap)
 
-
-        #in_use = [cmd for cmd in self.ircd.commands if cmd[0].upper() == self.command]
-        #if in_use:
+        # in_use = [cmd for cmd in self.ircd.commands if cmd[0].upper() == self.command]
+        # if in_use:
         #    self.error(f'Command "{self.command}" already in use by: {in_use[0]}')
 
         if self.req_flags and 'o' not in self.req_modes:
             self.req_modes += 'o'
 
-
     def error(self, error):
         self.unload()
         raise CommandError(error)
 
-
     def check(self, client, recv):
         cmd = recv[0].upper()
         if type(client).__name__ != self.req_class and self.req_class == 'Server':
-            client.sendraw(ERR.SERVERONLY, ':{} is a server only command'.format(cmd))
+            client.sendraw(ERR.SERVERONLY, f':{cmd} is a server only command')
             return 0
         received_params = len(recv) - 1
         if received_params < self.params:
-            client.sendraw(ERR.NEEDMOREPARAMS, ':{} Not enough parameters. Required: {}'.format(cmd, self.params))
+            client.sendraw(ERR.NEEDMOREPARAMS, f':{cmd} Not enough parameters. Required: {self.params}')
             return 0
 
         if self.req_modes and type(client).__name__ != 'Server':
@@ -99,12 +96,11 @@ class Command:
                         forbid = False
                         logging.debug('You have one of the required flags. Allowing command.')
                 else:
-                    forbid = set([self.req_flags]).difference(set(client.operflags))
+                    forbid = {self.req_flags}.difference(set(client.operflags))
                 if forbid:
                     client.sendraw(ERR.NOPRIVILEGES, ':Permission denied - You do not have the correct IRC Operator privileges')
                     return 0
         return 1
-
 
     def register(self, **kwargs):
         if not self.registered:
@@ -116,15 +112,13 @@ class Command:
             self.validate()
 
             self.ircd.command_class.append(self)
-            logging.debug('Command registered: {}'.format(self))
+            logging.debug(f'Command registered: {self}')
             self.registered = 1
-
 
     def add_support(self):
         # Add support data.
         if not self.support:
             return
-
 
     def unload(self):
         if self in self.ircd.command_class:
@@ -134,7 +128,6 @@ class Command:
             logging.debug('Removed support data')
             del self.ircd.support[self.support[0]]
         logging.debug('{} successfully unhooked'.format(self))
-
 
     def __repr__(self):
         return f"<Command '{self.command}'>"

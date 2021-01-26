@@ -185,7 +185,6 @@ class Join(ircd.Command):
                     continue
 
                 # if channel.limit != 0 and len(channel.users) >= channel.limit and not invite_override:
-                # print(channel.modes)
                 if 'l' in channel.modes and len(channel.users) >= int(self.ircd.chan_params[channel]['l']) and not invite_override:
                     if 'L' in channel.modes:
                         redirect_chan = self.ircd.chan_params[channel]['L']
@@ -198,7 +197,7 @@ class Join(ircd.Command):
 
                 # if channel.key and key != channel.key and not invite_override:
                 if 'k' in channel.modes and key != self.ircd.chan_params[channel]['k'] and not invite_override:
-                    ### Check key based on modes that require params.
+                    # Check key based on modes that require params.
                     client.sendraw(475, '{} :Cannot join channel (+k)'.format(channel.name))
                     continue
 

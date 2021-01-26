@@ -1,5 +1,6 @@
 from enum import Enum
 
+
 class RPL(Enum):
     WELCOME = 1
     YOURHOST = 2
@@ -40,8 +41,8 @@ class RPL(Enum):
     IRCOPS = 386
     ENDOFIRCOPS = 387
 
-    LOGON = 600 # Used by WATCH
-    LOGOFF = 601 # Used by WATCH
+    LOGON = 600  # Used by WATCH
+    LOGOFF = 601  # Used by WATCH
 
 
 class ERR(Enum):
@@ -53,13 +54,13 @@ class ERR(Enum):
     NOTEXTTOSEND = 412
     UNKNOWNCOMMAND = 421
     SERVICESDOWN = 440
-    USERNOTINCHANNEL = 441 # Target user.
+    USERNOTINCHANNEL = 441  # Target user.
     NOTONCHANNEL = 442
-    USERONCHANNEL = 443 # Target already on channel.
+    USERONCHANNEL = 443  # Target already on channel.
     NOTREGISTERED = 451
     NEEDMOREPARAMS = 461
     NOPRIVILEGES = 481
-    CHANOPRIVSNEEDED = 482 # Channel op privileges needed.
+    CHANOPRIVSNEEDED = 482  # Channel op privileges needed.
     SERVERONLY = 487
     NOOPERHOST = 491
 

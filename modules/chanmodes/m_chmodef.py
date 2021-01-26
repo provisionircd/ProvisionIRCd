@@ -30,7 +30,7 @@ helpop = {"chmodef": info}
 
 @ircd.Modules.hooks.loop()
 def checkExpiredFloods(ircd):
-    ### Checking for timed-out flood protection.
+    # Checking for timed-out flood protection.
     channels = (channel for channel in ircd.channels if chmode in channel.modes and 'm' in channel.chmodef)
     for chan in channels:
         if chan.chmodef['m']['action'] == 'm' and 'm' in chan.modes:
@@ -121,7 +121,7 @@ class chmodef(ircd.ChannelMode):
         self.type = 2
 
 
-### Types: 0 = mask, 1 = require param, 2 = optional param, 3 = no param, 4 = special user channel-mode.
+## Types: 0 = mask, 1 = require param, 2 = optional param, 3 = no param, 4 = special user channel-mode.
 # @ircd.Modules.channel_modes(chmode, 2, 3, 'Set flood protection for your channel (/helpop chmodef for more info)', None, None, '[params]') ### ('mode', type, level, 'Mode description', class 'user' or None, prefix, 'param desc')
 @ircd.Modules.hooks.pre_local_chanmode(chmode)
 @ircd.Modules.hooks.pre_remote_chanmode(chmode)

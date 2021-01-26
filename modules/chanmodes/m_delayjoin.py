@@ -18,6 +18,7 @@ class chmode_D(ircd.ChannelMode):
 
 can_see = {}
 
+
 # Types: 0 = mask, 1 = require param, 2 = optional param, 3 = no param, 4 = special user channel-mode.
 # @ircd.Modules.channel_modes(chmode, 3, 4, 'Delay join message until the user speaks or receives channel status') ### ('mode', type, level, 'Mode description', class 'user' or None, prefix, 'param desc')
 @ircd.Modules.hooks.pre_chanmsg()
@@ -32,7 +33,7 @@ def showjoin(self, ircd, channel, msg):
     return msg
 
 
-@ircd.Modules.hooks.visible_in_channel()  ### Returns True or False depending if <user> should be visible on <channel> for <self>
+@ircd.Modules.hooks.visible_in_channel()  # Returns True or False depending if <user> should be visible on <channel> for <self>
 def visible_in_chan(self, localServer, user, channel):
     global can_see
     if chmode not in channel.modes or (chmode in channel.modes and self.chlevel(channel) > 2 or user == self):  # or ('o' in self.modes and user.chlevel(channel) <= 2)):
@@ -61,7 +62,7 @@ def hidejoin(self, ircd, channel, **kwargs):
             if self not in can_see[channel]:
                 can_see[channel][self] = []
             # <self> just joined <channel>. They can see everyone currently on the channel.
-            can_see[channel][self] = list(channel.users)  ### /!\ Do NOT RE-ASSIGN the list. Make a copy! /!\
+            can_see[channel][self] = list(channel.users)  # /!\ Do NOT RE-ASSIGN the list. Make a copy! /!\
             for user in [user for user in channel.users if user != self]:
                 if visible_in_chan(user, ircd, self, channel) and self not in can_see[channel][user]:
                     can_see[channel][user].append(self)

@@ -14,13 +14,13 @@ if sys.version_info[0] < 3:
     sys.exit()
 
 W = '\033[0m'  # white (normal)
-R = '\033[31m' # red
-R2 = '\033[91m' # bright red
-G = '\033[32m' # green
-G2 = '\033[92m' # bright green
-Y = '\033[33m' # yellow
-B = '\033[34m' # blue
-P = '\033[35m' # purple
+R = '\033[31m'  # red
+R2 = '\033[91m'  # bright red
+G = '\033[32m'  # green
+G2 = '\033[92m'  # bright green
+Y = '\033[33m'  # yellow
+B = '\033[34m'  # blue
+P = '\033[35m'  # purple
 
 
 def syncChannels(localServer, newServer):
@@ -48,30 +48,23 @@ def syncChannels(localServer, newServer):
             prefix = ''
             memberlist.append(member)
         memberlist = ' '.join(memberlist)
-        b = ' '.join(['&' + x for x in [x for x in c.bans]])+' ' if list(c.bans) else ''
-        e = ' '.join(['"' + x for x in [x for x in c.excepts]])+' ' if list(c.excepts) else ''
-        I = ' '.join(["'" + x for x in [x for x in c.invex]])+' ' if list(c.invex) else ''
+        b = ' '.join(['&' + x for x in [x for x in c.bans]]) + ' ' if list(c.bans) else ''
+        e = ' '.join(['"' + x for x in [x for x in c.excepts]]) + ' ' if list(c.excepts) else ''
+        I = ' '.join(["'" + x for x in [x for x in c.invex]]) + ' ' if list(c.invex) else ''
 
-
-
-
-        #mod = next((m for m in localServer.channel_mode_class if m.mode == chmode), None)
+        # mod = next((m for m in localServer.channel_mode_class if m.mode == chmode), None)
 
         # List of mode classes of type 0.
         modes_with_list = [m for m in localServer.channel_mode_class if m.type == 0 if hasattr(c, m.list_name)]
         module_mode_lists = ''
         for m in modes_with_list:
             prefix = getattr(m, 'mode_prefix')
-            m_list_name = getattr(m, 'list_name') # whitelist
+            m_list_name = getattr(m, 'list_name')  # whitelist
             for entry in getattr(c, m_list_name):
-                module_mode_lists += prefix+entry+' '
-
+                module_mode_lists += prefix + entry + ' '
 
         module_mode_lists = module_mode_lists.strip()
         logging.debug(f"Syncing modulair mode list: {module_mode_lists}")
-
-
-
 
         data = '{} {} +{}{} :{} {}{}{}{}'.format(c.creation, c.name, c.modes, modeparams, memberlist, b, e, I, module_mode_lists)
         newServer._send(':{} SJOIN {}'.format(localServer.sid, data))
@@ -105,7 +98,7 @@ def selfIntroduction(localServer, newServer, outgoing=False):
                 newServer._send('MODLIST :{}'.format(' '.join(modlist)))
             # [Jan 26 02:21:47.873135 2020] Debug: Received: :001 SERVER dev.provisionweb.org 1 :ProvisionDev
             # [Jan 26 02:21:47.873161 2020] Debug: unexpected non-server source 001 for SERVER
-            newServer._send('SERVER {} 1 :{} {}'.format(localServer.hostname, version, localServer.name)) # Old, should not be used.
+            newServer._send('SERVER {} 1 :{} {}'.format(localServer.hostname, version, localServer.name))  # Old, should not be used.
             logging.info('{}Introduced myself to {}. Expecting remote sync sequence...{}'.format(Y, newServer.hostname, W))
         localServer.introducedTo.append(newServer)
 
@@ -203,7 +196,7 @@ class Link(threading.Thread):
 
     def run(self):
         try:
-            exists = list(filter(lambda s: s.hostname == self.name, self.localServer.servers+[self.localServer]))
+            exists = list(filter(lambda s: s.hostname == self.name, self.localServer.servers + [self.localServer]))
             if exists:
                 logging.error('Server {} already exists on this network'.format(exists[0].hostname))
                 return

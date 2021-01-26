@@ -11,7 +11,7 @@ from handle.functions import logging
 chmode = 'H'
 
 
-class chmode_H(ircd.ChannelMode):
+class Chmode_H(ircd.ChannelMode):
     def __init__(self):
         self.mode = chmode
         self.desc = 'Displays the message backlog to new users'
@@ -30,9 +30,7 @@ def checkExpiredBacklog(localServer):
             chan.msg_backlog['lines'] = []  # Remove all lines.
 
 
-ircd.Modules.hooks.channel_destroy()
-
-
+@ircd.Modules.hooks.channel_destroy()
 def destroy(self, localServer, channel):
     if chmode in channel.modes:
         channel.backlog = {}

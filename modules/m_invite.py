@@ -8,14 +8,13 @@ import ircd
 from modules.m_joinpart import checkMatch
 
 
-class chmode_i(ircd.ChannelMode):
+class Chmode_i(ircd.ChannelMode):
     def __init__(self):
         self.mode = 'i'
         self.desc = 'You need to be invited to join the channel'
         self.type = 3
 
 
-@ircd.Modules.command
 class Invite(ircd.Command):
     """
     Invites a user to a channel.

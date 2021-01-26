@@ -466,7 +466,7 @@ class User:
         '''
         self.send(str(numeric).rjust(3, '0'), data)
 
-    def broadcast(self, users, data, source=None):
+    def broadcast(self, users: list, data: str, source=None):
         if source:
             if type(source).__name__ == 'Server':
                 source = source.hostname
@@ -709,7 +709,7 @@ class User:
             return True
         return False
 
-    def quit(self, reason, error=True, banmsg=None, kill=False, silent=False, api=False):  ### Why source?
+    def quit(self, reason, error=True, banmsg=None, kill=False, silent=False, api=False):  # Why source?
         try:
             if not hasattr(self, 'socket'):
                 self.socket = None

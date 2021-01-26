@@ -23,7 +23,7 @@ class Whois(ircd.Command):
         # localServer = self.ircd
         # self = user
         if len(recv) < 2:
-            self.sendraw(431, ':No nickname given')
+            client.sendraw(431, ':No nickname given')
             return
         user = list(filter(lambda u: u.nickname.lower() == recv[1].lower(), self.ircd.users))
 
@@ -119,7 +119,7 @@ class Whois(ircd.Command):
                 client.sendraw(276, '{} :has client certificate fingerprint {}'.format(user.nickname, user.fingerprint))
 
         # Read below.
-        if 'H' not in user.modes or 'o' in client.modes:  ### TODO: only exclude oper-whois on +H. Other swhois should be visible.
+        if 'H' not in user.modes or 'o' in client.modes:  # TODO: only exclude oper-whois on +H. Other swhois should be visible.
             for line in user.swhois:
                 client.sendraw(320, '{} :{}'.format(user.nickname, line))
 
@@ -206,7 +206,7 @@ def savewhowas(self, ircd):
             info = list(ircd.whowas[nick])
             for data in info:
                 signoff = data['signoff']
-                if int(time.time()) - signoff > 3600 * 24 * 30:  ### 1 month expire?
+                if int(time.time()) - signoff > 3600 * 24 * 30:  # 1 month expire?
                     ircd.whowas[nick].remove(data)
 
     except Exception as ex:

@@ -7,16 +7,14 @@ import logging
 import re
 import ssl
 import time
-# import requests ### This module will increase the RAM usage by ~10MB. Ain't that a hoot.
 import urllib.request
 
 import ircd
-
-ssl._create_default_https_context = ssl._create_unverified_context
+from handle.functions import match
 from modules.chanmodes.m_extbans import prefix, ext_bans
 from modules.m_joinpart import checkMatch
-from handle.functions import match
 
+ssl._create_default_https_context = ssl._create_unverified_context
 trace_bans = 'Ci'
 for e in trace_bans:
     if e in ext_bans:

@@ -30,13 +30,8 @@ class Netinfo(ircd.Command):
         remotetime = int(recv[3])
         version = recv[4]
         cloakhash = recv[5]
-
         creation = int(recv[6])
-
         remotename = recv[9][1:]
-        remotehost = list(filter(lambda s: s.name == remotename, self.ircd.servers))
-        if remotehost:
-            remotehost = remotehost[0].hostname
 
         if maxglobal > self.ircd.maxgusers:
             self.ircd.maxgusers = maxglobal
@@ -82,7 +77,7 @@ class Netinfo(ircd.Command):
                 except:
                     pass
             else:
-                ### When you requested the link.
+                # When you requested the link.
                 ip, port = source.socket.getpeername()
                 del self.ircd.linkrequester[source]
 

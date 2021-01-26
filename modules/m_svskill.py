@@ -9,14 +9,14 @@ import ircd
 class Svskill(ircd.Command):
     def __init__(self):
         self.params = 2
-        # self.req_class = 'Server'
+        self.req_class = 'Server'
         self.command = 'svskill'
 
     def execute(self, client, recv):
         client = next((u for u in self.ircd.users if u.nickname == recv[0][1:] or u.uid == recv[0][1:]), None)
         # self = list(filter(lambda u: u.nickname.lower() == recv[0][1:].lower() or u.uid.lower() == recv[0][1:].lower(), self.ircd.users))
         if not client:
-            ### Maybe it is a server?
+            # Maybe it is a server?
             # self = list(filter(lambda s: s.hostname.lower() == recv[0][1:].lower() or s.sid.lower() == recv[0][1:].lower(), self.ircd.servers))
             client = next((s for s in self.ircd.servers if s.hostname == recv[0][1:] or u.sid == recv[0][1:]), None)
             if not client:

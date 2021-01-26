@@ -3,13 +3,12 @@
 """
 
 import re
+from modules.m_mode import processModes
+from handle.functions import logging
 
 import ircd
 
 Channel = ircd.Channel
-
-from modules.m_mode import processModes
-from handle.functions import logging
 
 W = '\033[0m'  # white (normal)
 R = '\033[31m'  # red
@@ -17,7 +16,6 @@ G = '\033[32m'  # green
 Y = '\033[33m'  # yellow
 
 
-@ircd.Modules.command
 class Sjoin(ircd.Command):
     def __init__(self):
         self.command = 'sjoin'
@@ -46,7 +44,7 @@ class Sjoin(ircd.Command):
         banlist = []
         excepts = []
         invex = []
-        mod_list_data = []  ### Store temp data from mods list types.
+        mod_list_data = []  # Store temp data from mods list types.
         c = 0
         if recv[4].startswith('+'):
             modes = recv[4].replace('+', '')
@@ -64,14 +62,11 @@ class Sjoin(ircd.Command):
             elif pos.startswith("'"):
                 invex.append(pos[1:])
 
-
-
-
             elif c > 4 and pos and not pos[0].isalpha() and not pos[0].isdigit() and pos[0] not in ":&\"'*~@%+":
                 if pos in memberlist:
                     memberlist.remove(pos)
-                ### Unrecognized mode, checking modules.
-                ### Loop over modules to check if they have a 'mode_prefix' attr.
+                # Unrecognized mode, checking modules.
+                # Loop over modules to check if they have a 'mode_prefix' attr.
                 try:
                     for m in [m for m in self.ircd.modules if hasattr(m, 'mode_prefix') and pos[0] == m.mode_prefix]:
                         mod_list_data.append((m.chmode, pos[1:]))
@@ -84,7 +79,6 @@ class Sjoin(ircd.Command):
 
             for m in [m for m in self.ircd.channel_mode_class if m.type == 0 and m.mode_prefix == list_prefix]:
                 # 2020/02/29 05:31:20 DEBUG [m_sjoin]: Set lokale <ChannelMode 'w'>
-                prefix = m.mode_prefix
                 mode = m.mode
                 custom_mode_list[mode] = []  # Params for mode, like +w (whitelist)
                 p = pos[1:]
@@ -131,7 +125,7 @@ class Sjoin(ircd.Command):
                 return 0
 
             if len(local_chan.users) == 1:
-                ### Channel did not exist on self.ircd. Hook channel_create? Sure, why not.
+                # Channel did not exist on self.ircd. Hook channel_create? Sure, why not.
                 pass
             if userClass.server != self.ircd:
                 logging.info('{}External user {} joined {} on local server.{}'.format(G, userClass.nickname, channel, W))
@@ -306,8 +300,7 @@ class Sjoin(ircd.Command):
                         giveModes.append(m)
                         giveParams.append(p)
 
-                data = []
-                data.append(local_chan.name)
+                data = [local_chan.name]
                 modes = '{}'.format('+' + ''.join(giveModes) if giveModes else '')
                 data.append(modes)
                 for p in removeParams:

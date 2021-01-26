@@ -50,6 +50,7 @@ def HookToCore(self, callables, reload=False):
         module = callables[6]
 
         for c in commands + user_modes + channel_modes:
+            # c = Command/Mode class
             m = c()
             m.module = module
             m.ircd = self
@@ -87,28 +88,26 @@ def HookToCore(self, callables, reload=False):
 def LoadModule(self, name, path, reload=False, module=None):
     package = name.replace('/', '.')
     try:
-        error = 0
-        with open(path) as mod:
-            if reload:
-                module = importlib.reload(module)
-                logging.debug('Requesting reload from importlib')
-            else:
-                module = importlib.import_module(package)
-                importlib.reload(module)
-            if not module.__doc__:
-                logging.info('Invalid module.')
-                return 'Invalid module'
-            callables = FindCallables(self, module)
-            hook_fail = HookToCore(self, callables, reload=reload)  ### If None is returned, assume success.
-            if hook_fail:
-                logging.debug('Hook failed: {}'.format(hook_fail))
-                UnloadModule(self, name)
+        if reload:
+            module = importlib.reload(module)
+            logging.debug('Requesting reload from importlib')
+        else:
+            module = importlib.import_module(package)
+            importlib.reload(module)
+        if not module.__doc__:
+            logging.info('Invalid module.')
+            return 'Invalid module'
+        callables = FindCallables(module)
+        hook_fail = HookToCore(self, callables, reload=reload)  # If None is returned, assume success.
+        if hook_fail:
+            logging.debug('Hook failed: {}'.format(hook_fail))
+            UnloadModule(self, name)
 
-                return hook_fail
-            self.modules[module] = callables
-            name = module.__name__
-            update_support(self)
-            logging.info('Loaded: {}'.format(name))
+            return hook_fail
+        self.modules[module] = callables
+        name = module.__name__
+        update_support(self)
+        logging.info('Loaded: {}'.format(name))
     except FileNotFoundError as ex:
         return ex
     except Exception as ex:
@@ -127,29 +126,6 @@ def UnloadModule(self, name):
             # Tuple: commands, user_modes, channel_modes, hooks, support, api, module
             m = module.__name__
             if m == name:
-                '''
-                logging.debug('Module info:')
-                info = ''
-                for count,mod in enumerate(self.modules[module]):
-                    logging.debug(count)
-                    if count == 0:
-                        info = 'commands'
-                    if count == 1:
-                        info = 'user_modes'
-                    if count == 2:
-                        info = 'channel_modes'
-                    if count == 3:
-                        info = 'hooks'
-                    if count == 4:
-                        info = 'support'
-                    if count == 5:
-                        info = 'api'
-                    if count == 6:
-                        info = 'module'
-                    print(info)
-                    logging.debug(self.modules[module][count])
-                    logging.debug('-')
-                '''
                 core_classes = self.user_mode_class + self.channel_mode_class + self.command_class
                 for m in [m for m in core_classes if m.module == module]:
                     m.unload()
@@ -198,7 +174,7 @@ def UnloadModule(self, name):
         return str(ex)
 
 
-def FindCallables(self, module):
+def FindCallables(module):
     itervalues = dict.values
     commands = []
     user_modes = []
@@ -273,6 +249,7 @@ def params(num):
         return function
 
     return add_attribute
+
 
 """
 def commands(*command_list):

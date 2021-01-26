@@ -161,9 +161,6 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
                     c.parambuf = parambuf
                     if (action == '+' and c.set_mode(self, channel, param_mode)) or (action == '-' and c.remove_mode(self, channel, param_mode)):
                         pass
-                    # else:
-                    # print('TRIGGER DAN')
-                    # continue
                 else:
                     # Modules like extbans do not have a mode, so we will check for hooks manually.
                     for callable in [callable for callable in ircd.hooks if callable[0].lower() == 'pre_' + hook and m in callable[1]]:

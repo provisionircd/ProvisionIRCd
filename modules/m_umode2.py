@@ -11,7 +11,7 @@ class Umode2(ircd.Command):
         self.req_class = 'Server'
 
     def execute(self, client, recv):
-        ### :asdf UMODE2 +ot
+        # :asdf UMODE2 +ot
         target = [u for u in self.ircd.users if u.uid == recv[0][1:] or u.nickname == recv[0][1:]][0]
         modeset = None
         for m in recv[2]:

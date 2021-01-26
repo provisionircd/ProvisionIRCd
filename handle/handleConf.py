@@ -327,7 +327,7 @@ def checkConf(ircd, user, confdir, conffile, rehash=False):
         if 'opers' in tempconf:
             check_opers(tempconf, err_conf=oper_conf)
         if 'link' in tempconf:
-            check_links(tempconf, mainconf=main_conf, err_conf=link_conf)
+            check_links(tempconf, err_conf=link_conf)
         ircd.excepts = {}
         if 'except' in tempconf:
             for type in tempconf['except']:
@@ -583,7 +583,7 @@ def check_opers(tempconf, err_conf):
         # operpass = tempconf['opers'][oper]['password'].encode('utf-8')
         if tempconf['opers'][oper]['password'].startswith('$2b$') and len(tempconf['opers'][oper]['password']) > 58:
             if not bc:
-                ### detected bcrypt pass.
+                # detected bcrypt pass.
                 conferr('Oper block {} has a bcrypt password but the bcrypt package is not installed. Either install it with pip or use a plaintext password.'.format(oper))
 
         # try:
@@ -592,7 +592,7 @@ def check_opers(tempconf, err_conf):
         #    conferr('Invalid salt for oper {} password. Make sure you use bcrypt. You can get one with /mkpasswd on IRC or use the --mkpasswd argument.'.format(oper))
 
 
-def check_links(tempconf, mainconf, err_conf):
+def check_links(tempconf, err_conf):
     if 'link' not in tempconf:
         return
     reqvalues = ['pass', 'class']

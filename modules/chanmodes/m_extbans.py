@@ -63,7 +63,7 @@ def checkExtMatch(type, action, channel, msg):
                         return True
 
                 if action == 'replace':
-                    ### This just works, so don't mess it up.
+                    # This just works, so don't mess it up.
                     m = ban.split(':', 2)[2]
                     if m.startswith(':'):
                         search = ':' + m.split(':')[1]
@@ -145,7 +145,7 @@ def checkExpiredBans(localServer):
         localServer.handle('MODE', '{} -{} {} 0'.format(chan.name, tmodes, bans))
 
 
-@ircd.Modules.support(('EXTBAN=' + prefix + ',' + str(''.join(ext_bans)), True))  ### (support string, boolean if support must be sent to other servers)
+@ircd.Modules.support(('EXTBAN=' + prefix + ',' + str(''.join(ext_bans)), True))  # (support string, boolean if support must be sent to other servers)
 @ircd.Modules.hooks.pre_local_chanmode('beI')
 @ircd.Modules.hooks.pre_remote_chanmode('beI')
 # def extbans(self, localServer, channel, modes, params, modebuf, parambuf):
@@ -172,7 +172,7 @@ def extbans(self, localServer, channel, modebuf, parambuf, action, modebar, para
                 return
 
             if param[:2] == '~L':
-                ### Channel redirect. ~L:host:#chan
+                # Channel redirect. ~L:host:#chan
                 if len(param.split(':')) < 3:
                     return
                 redirect_mask = make_mask(localServer, param.split(':')[1])
@@ -187,16 +187,15 @@ def extbans(self, localServer, channel, modebuf, parambuf, action, modebar, para
                     self.sendraw(690, ':Destination channel already has +L.')
                     return
 
-
             elif param[:2] == '~T':
-                ### Text block.
+                # Text block.
                 if param.split(':')[1] not in ['block', 'replace'] or len(param.split(':')) < 3:
                     return
                 bAction = param.split(':')[1]
                 if not param.split(':')[2:][0]:
                     return
                 if bAction == 'replace':
-                    ### Replace requires an additional parameter: ~T:replace:match:replacement
+                    # Replace requires an additional parameter: ~T:replace:match:replacement
                     if len(param.split(':')) < 4:
                         return
                     if not param.split(':')[3]:
@@ -213,13 +212,13 @@ def extbans(self, localServer, channel, modebuf, parambuf, action, modebar, para
                 tempchan = list(filter(lambda c: c.name.lower() == chanBan.lower(), localServer.channels))
                 if tempchan and len(channel.users) > 2:
                     tempchan = tempchan[0]
-                    ### tempchan users are forbidden on channel.
+                    # tempchan users are forbidden on channel.
                     for user in [user for user in channel.users if tempchan in user.channels and user.chlevel(channel) < 2 and not user.ocheck('o', 'override') and not checkMatch(user, localServer, 'e', channel)]:
                         cmd = ('KICK', '{} {} :Users from {} are not welcome here'.format(channel.name, user.nickname, tempchan.name))
                         commandQueue.append(cmd)
 
             elif param[:2] == '~t':
-                ### Timed bans.
+                # Timed bans.
                 if len(param.split(':')) < 3:
                     return
                 bTime = param.split(':')[1]
@@ -229,7 +228,7 @@ def extbans(self, localServer, channel, modebuf, parambuf, action, modebar, para
                 param = '{}:{}'.format(':'.join(param.split(':')[:2]), banmask)
 
             elif param[:2] == '~b':
-                ### Extension on normal bans.
+                # Extension on normal bans.
                 if len(param.split(':')) < 3:
                     return
                 bParam = param.split(':')[1]
@@ -265,7 +264,7 @@ def join(self, localServer, channel, **kwargs):
     try:
         if 'override' in kwargs:
             logging.debug('Skipping extban checks: override')
-            return (1, [])
+            return 1, []
         overrides = []
         invite_override = 0
         if self in channel.invites:
@@ -276,14 +275,14 @@ def join(self, localServer, channel, **kwargs):
                 ison_banchan = [chan for chan in localServer.channels if chan.name.lower() == banChan.lower() and self in chan.users]
                 if (banChan.lower() == channel.name.lower() or ison_banchan) and not invite_override and not checkMatch(self, localServer, 'e', channel):
                     self.sendraw(474, '{} :Cannot join channel (+b)'.format(channel.name))
-                    return (0, overrides)
+                    return 0, overrides
 
             for b in [b for b in c.bans if b[:2] == '~c']:
                 banChan = b.split(':')[1]
                 ison_banchan = [chan for chan in localServer.channels if chan.name.lower() == banChan.lower() and self in chan.users]
                 if (banChan.lower() == channel.name.lower() or ison_banchan) and not invite_override and not checkMatch(self, localServer, 'e', channel):
                     self.sendraw(474, '{} :Cannot join channel (+b)'.format(channel.name))
-                    return (0, overrides)
+                    return 0, overrides
 
         for b in [b for b in channel.bans if b[:2] == '~L' and not invite_override and not checkMatch(self, localServer, 'e', channel)]:  # ~L:host:#chan
             redirect_host = b.split(':')[1]
@@ -292,29 +291,29 @@ def join(self, localServer, channel, **kwargs):
                 # Redirect channel does not exist
                 pass
             redir = 0
-            if (match(redirect_host, '{}!{}@{}'.format(self.nickname, self.ident, self.hostname))):
+            if match(redirect_host, '{}!{}@{}'.format(self.nickname, self.ident, self.hostname)):
                 redir = 1
-            if (match(redirect_host, '{}!{}@{}'.format(self.nickname, self.ident, self.ip))):
+            if match(redirect_host, '{}!{}@{}'.format(self.nickname, self.ident, self.ip)):
                 redir = 1
-            if (match(redirect_host, '{}!{}@{}'.format(self.nickname, self.ident, self.cloakhost))):
+            if match(redirect_host, '{}!{}@{}'.format(self.nickname, self.ident, self.cloakhost)):
                 redir = 1
             if redir:
                 self.handle('JOIN', redirect_chan)
                 self.sendraw(471, '{} :Channel is full so you are redirected to {}'.format(channel.name, redirect_chan))
-                return (0, overrides)
+                return 0, overrides
 
         for b in [b for b in channel.bans if b[:2] == '~t' and not invite_override and not checkMatch(self, localServer, 'e', channel)]:
             mask = b.split(':')[2]
             ban = 0
-            if (match(mask, '{}!{}@{}'.format(self.nickname, self.ident, self.hostname))):
+            if match(mask, '{}!{}@{}'.format(self.nickname, self.ident, self.hostname)):
                 ban = 1
-            if (match(mask, '{}!{}@{}'.format(self.nickname, self.ident, self.ip))):
+            if match(mask, '{}!{}@{}'.format(self.nickname, self.ident, self.ip)):
                 ban = 1
-            if (match(mask, '{}!{}@{}'.format(self.nickname, self.ident, self.cloakhost))):
+            if match(mask, '{}!{}@{}'.format(self.nickname, self.ident, self.cloakhost)):
                 ban = 1
             if ban:
                 self.sendraw(474, '{} :Cannot join channel (+b)'.format(channel.name))
-                return (0, overrides)
+                return 0, overrides
 
         for i in channel.invex:
             if i.startswith('~O'):
@@ -373,15 +372,15 @@ def join(self, localServer, channel, **kwargs):
                 account = b.split(':')[1]
                 if ('r' in self.modes and (hasattr(self, 'svid') and match(account, self.svid))) and 'b' not in overrides:
                     self.sendraw(474, '{} :Cannot join channel (+b)'.format(channel.name))
-                    return (False, overrides)
+                    return False, overrides
             if b.startswith('~b'):
                 exemp = b.split(':')[1]
                 host = b.split(':')[2]
                 if match(host, self.fullmask()) and (exemp == 'R' and 'r' not in self.modes and 'b' not in overrides):
                     self.sendraw(474, '{} :Cannot join channel (+b)'.format(channel.name))
-                    return (False, overrides)
+                    return False, overrides
 
-        return (True, overrides)
+        return True, overrides
 
     except Exception as ex:
         logging.exception(ex)

@@ -7,7 +7,6 @@ import ircd
 from handle.functions import logging
 
 
-@ircd.Modules.command
 class Names(ircd.Command):
     """
     Lists all users on the given channel.

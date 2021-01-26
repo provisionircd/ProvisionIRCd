@@ -19,7 +19,7 @@ class Chmode_w(ircd.ChannelMode):
         self.level = 5
         self.desc = 'Maintain a "whitelist" for your channel (/helpop whitelist for more info)'
         self.param_help = '<level>:<nick!ident@host>'
-        self.mode_prefix = '^'  ### This is used in SJOIN to indicate that it is a whitelist-entry.
+        self.mode_prefix = '^'  # This is used in SJOIN to indicate that it is a whitelist-entry.
         self.list_name = 'whitelist'
 
 
@@ -52,7 +52,7 @@ def join(self, ircd, channel):
     for entry in channel.whitelist:
         level = int(entry.split(':')[0])
         if level > last_level:
-            ### Found higher level.
+            # Found higher level.
             last_level = level
         mask = entry.split(':')[1]
         modes = ''
@@ -80,7 +80,7 @@ def join(self, ircd, channel):
 def whitelist_mode(self, localServer, channel, modebuf, parambuf, action, modebar, param):
     try:
         if (action == '+' or not action) and not param:
-            ### Requesting list.
+            # Requesting list.
             if self.chlevel(channel) < 3 and 'o' not in self.modes:
                 return self.sendraw(482, '{} :You are not allowed to view the whitelist'.format(channel.name))
             for entry in OrderedDict(reversed(list(channel.whitelist.items()))):
