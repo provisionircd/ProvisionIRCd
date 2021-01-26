@@ -114,7 +114,14 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
             for m in ircd.channel_modes[t]:
                 level = ircd.channel_modes[t][m][0]
                 modeLevel[m] = level
-        for m in [m for m in recv[1] if m in chmodes + '+-' or m in channel.modes]:
+        # for m in [m for m in recv[1] if m in chmodes + '+-' or m in channel.modes]:
+        warn = []
+        for m in recv[1]:
+            if m not in chmodes + '+-' and m not in channel.modes:
+                if m not in warn:
+                    self.sendraw(ircd.ERR.UNKNOWNMODE, f"{m} :unknown mode bar")
+                    warn.append(m)
+                continue
             param_mode = None
             if m in ircd.parammodes:
                 if (action == '+') or (action == '-' and m not in list(ircd.channel_modes[2]) + list(ircd.channel_modes[3])):

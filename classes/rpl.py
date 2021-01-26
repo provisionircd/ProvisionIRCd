@@ -59,6 +59,7 @@ class ERR(Enum):
     USERONCHANNEL = 443  # Target already on channel.
     NOTREGISTERED = 451
     NEEDMOREPARAMS = 461
+    UNKNOWNMODE = 472  # Unknown channel mode.
     NOPRIVILEGES = 481
     CHANOPRIVSNEEDED = 482  # Channel op privileges needed.
     SERVERONLY = 487

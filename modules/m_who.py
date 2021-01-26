@@ -46,7 +46,7 @@ class Who(ircd.Command):
             client.flood_safe = True
         who = []
         if len(recv) == 1 or recv[1] == '*':
-            mask = '*'  ### Match all.
+            mask = '*'  # Match all.
         else:
             mask = recv[1]
             # This parameter contains a comma-separated list of query filters,

@@ -13,7 +13,7 @@ class Whois(ircd.Command):
     """Displays information about the given user, such as hostmask, channels, idle time, etc...
     Output may vary depending on user- and channel modes.
 
-    Example: WHOIS Bob
+    Example: WHOIS Alice
     """
 
     def __init__(self):
