@@ -15,7 +15,7 @@ class Ircops(ircd.Command):
 
     def execute(self, client, recv):
         client.sendraw(self.RPL.IRCOPS, ':§~¤§¤~~¤§¤~~¤§¤~~¤§¤~~¤§¤~~¤§¤~~¤§¤~~¤§¤~~¤§¤~§')
-        client.sendraw(self.RPL.IRCOPS, ':Nick                  Status         Server')
+        client.sendraw(self.RPL.IRCOPS, ':Nick                  Status           Server')
         client.sendraw(self.RPL.IRCOPS, ':--------------------------------------------')
         aways, opers = 0, 0
         for oper in [user for user in self.ircd.users if 'o' in user.modes and ('H' not in user.modes or 'o' in client.modes) and 'S' not in user.modes]:

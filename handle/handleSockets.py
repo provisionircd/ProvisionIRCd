@@ -242,7 +242,6 @@ class DataHandler:  # (threading.Thread):
                     try:
                         read, write, error = select.select(read_clients, write_clients, read_clients, 1.0)
                         # read and error need the same iteratable.
-
                         # read, write, error = select.select(list(self.listen_socks) + read_users + read_servers, write_users + write_servers, read_users + #read_servers + write_users + write_servers + list(self.listen_socks), 1.0)
                     except ValueError as ex:
                         for fd in iter([fd for fd in iter(ircd.users) if fd.socket and not fd.registered]):
@@ -265,7 +264,6 @@ class DataHandler:  # (threading.Thread):
                             continue
 
                     for s in write:
-
                         check_flood(ircd, s)
                         if type(s).__name__ == 'User' or type(s).__name__ == 'Server':
                             try:

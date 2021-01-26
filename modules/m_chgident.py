@@ -7,8 +7,7 @@ import ircd
 
 @ircd.Modules.command
 class Chgident(ircd.Command):
-    """
-    Changes the ident (username) part of a user.
+    """Changes the ident (username) part of a user.
     Syntax: CHGIDENT <target> <newident>
     """
 
@@ -40,4 +39,4 @@ class Chgident(ircd.Command):
         if ident == target.ident or not ident:
             return
         target.setinfo(ident, t='ident', source=source)
-        self.ircd.snotice('s', '*** {} ({}@{}) used CHGIDENT to change the ident of {} to "{}"'.format(client.nickname, client.ident, client.hostname, target.nickname, target.ident))
+        self.ircd.snotice('s', f'*** {client.nickname} ({client.ident}@{client.hostname}) used CHGIDENT to change the ident of {target.nickname} to "{target.ident}"')
