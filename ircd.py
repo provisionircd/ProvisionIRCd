@@ -350,9 +350,9 @@ class Server:
             if direct:  # Private messages and notices. direct represents the target.server
                 dest = direct if direct.socket else direct.uplink
                 # if direct.socket:
-                # logging.info('Directly linked to us, no more hops needed.')
+                # logging.debug('Directly linked to us, no more hops needed.')
                 if not direct.socket:
-                    logging.info('Server has hopcount of {d.hopcount}, sending to {d.uplink} first.'.format(d=direct))
+                    logging.debug('Server has hopcount of {d.hopcount}, sending to {d.uplink} first.'.format(d=direct))
                 dest._send(data)
                 return
 
@@ -361,7 +361,7 @@ class Server:
                     if server not in ircd.sync_queue:
                         ircd.sync_queue[server] = []
                     ircd.sync_queue[server].append(data)
-                    logging.info('{}Added to {} sync queue because they are not done syncing: {}{}'.format(R2, server, data, W))
+                    logging.debug('{}Added to {} sync queue because they are not done syncing: {}{}'.format(R2, server, data, W))
                     continue
                 server._send(data)
         except Exception as ex:
