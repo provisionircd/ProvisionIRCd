@@ -175,7 +175,7 @@ def syncData(localServer, newServer, selfRequest=True, local_only=False):
 
 
 class Link(threading.Thread):
-    def __init__(self, origin=None, localServer=None, name=None, host=None, port=None, pswd=None, is_ssl=False, autoLink=False, incoming=True):
+    def __init__(self, origin=None, localServer=None, name=None, host=None, port=None, pswd=None, tls=False, autoLink=False, incoming=True):
         threading.Thread.__init__(self)
         self.origin = origin
         self.localServer = localServer
@@ -183,7 +183,7 @@ class Link(threading.Thread):
         self.pswd = pswd
         self.host = host
         self.port = port
-        self.is_ssl = is_ssl
+        self.tls = tls
         self.autoLink = autoLink
         self.sendbuffer = ''
 
@@ -198,12 +198,12 @@ class Link(threading.Thread):
             if not self.host.replace('.', '').isdigit():
                 self.host = socket.gethostbyname(self.host)
             self.socket = socket.socket()
-            if self.is_ssl:
+            if self.tls:
                 self.socket = self.localServer.default_sslctx.wrap_socket(self.socket, server_side=False)
                 logging.info('Wrapped outgoing socket {} in TLS'.format(self.socket))
 
             from ircd import Server
-            serv = Server(origin=self.localServer, serverLink=True, sock=self.socket, is_ssl=self.is_ssl)
+            serv = Server(origin=self.localServer, serverLink=True, sock=self.socket, tls=self.tls)
             serv.hostname = self.name
             serv.ip = self.host
             serv.port = self.port
