@@ -1,17 +1,10 @@
-import sys
-import os
 import time
 import threading
 import socket
-import importlib
-import ast
 import hashlib
 import ssl
 from handle.functions import IPtoBase64, logging
 
-if sys.version_info[0] < 3:
-    print('Python 2 is not supported.')
-    sys.exit()
 
 W = '\033[0m'  # white (normal)
 R = '\033[31m'  # red
@@ -206,12 +199,8 @@ class Link(threading.Thread):
                 self.host = socket.gethostbyname(self.host)
             self.socket = socket.socket()
             if self.is_ssl:
-                version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
-                if int(version) >= 36:
-                    self.socket = self.localServer.default_sslctx.wrap_socket(self.socket, server_side=False)
-                else:
-                    self.socket = ssl.wrap_socket(self.socket)
-                logging.info('Wrapped outgoing socket {} in SSL'.format(self.socket))
+                self.socket = self.localServer.default_sslctx.wrap_socket(self.socket, server_side=False)
+                logging.info('Wrapped outgoing socket {} in TLS'.format(self.socket))
 
             from ircd import Server
             serv = Server(origin=self.localServer, serverLink=True, sock=self.socket, is_ssl=self.is_ssl)
@@ -222,7 +211,7 @@ class Link(threading.Thread):
             if self.origin or self.autoLink:
                 self.localServer.linkrequester[serv] = self.origin
 
-            self.socket.settimeout(5)
+            self.socket.settimeout(10)
             self.socket.connect((self.host, self.port))
 
             selfIntroduction(self.localServer, serv, outgoing=True)

@@ -98,7 +98,7 @@ def sock_accept(ircd, s):
                 logging.warning('Current connection backlog is >{}, so not allowing any more connections for now. Bye.'.format(len(conn_backlog)))
                 conn.close()
                 return
-            conn.settimeout(15)
+            # conn.settimeout(15)
             if tls and not ircd.pre_wrap:
                 conn = ircd.sslctx[str(port)].wrap_socket(conn, server_side=True)
                 tls = 1
@@ -153,7 +153,7 @@ def sock_accept(ircd, s):
                 ircd.pollerObject.register(conn, READ_ONLY)
             port = conn.getsockname()[1]
             tls = is_sslport(ircd, port)
-            conn.settimeout(15)
+            # conn.settimeout(15)
             if tls and not ircd.pre_wrap:
                 tls = 0
                 version = '{}{}'.format(sys.version_info[0], sys.version_info[1])
