@@ -116,8 +116,9 @@ def processModes(self, ircd, channel, recv, sync=True, sourceServer=None, source
                 modeLevel[m] = level
         # for m in [m for m in recv[1] if m in chmodes + '+-' or m in channel.modes]:
         warn = []
-        for m in recv[1]:
-            if m not in chmodes + '+-' and m not in channel.modes:
+        modes = recv[1][1:] if recv[1].startswith(':') else recv[1]
+        for m in modes:
+            if m not in chmodes + '+-' and m not in channel.modes and type(self).__name__ != 'Server':
                 if m not in warn:
                     self.sendraw(ircd.ERR.UNKNOWNMODE, f"{m} :unknown mode bar")
                     warn.append(m)
