@@ -537,7 +537,7 @@ class Server:
         localServer = self.localServer
         if not hasattr(self, 'socket') or self not in localServer.servers:
             return
-        logging.info('Server QUIT self: {} :: reason: {}'.format(self, reason))
+        logging.info(f'Server QUIT self: {self} :: reason: {reason}')
         if self in localServer.servers:
             logging.info('Removing self {}'.format(self))
             localServer.servers.remove(self)
@@ -578,7 +578,7 @@ class Server:
                     localServer.snotice('s', msg, local=True)
 
                 if self.is_ssl and t == 2:
-                    localServer.snotice('s', '*** Make sure SSL is enabled on both ends and ports are listening for SSL connections.', local=True)
+                    localServer.snotice('s', '*** Make sure TLS is enabled on both ends and ports are listening for TLS connections.', local=True)
 
             if self in localServer.linkrequester:
                 del localServer.linkrequester[self]
@@ -594,12 +594,12 @@ class Server:
             if self in localServer.sync_queue:
                 del localServer.sync_queue[self]
 
-            if self.socket and reason and self.sid:
-                logging.debug(f"Sending ERROR from server quit()")
-                self._send(':{} ERROR :Closing link: [{}] ({})'.format(self.sid, self.socket.getpeername()[0] if not self.hostname else self.hostname, reason))
+            # if self.socket and reason and self.sid:
+            #     logging.debug(f"Sending ERROR from server quit()")
+            #     self._send(':{} ERROR :Closing link: [{}] ({})'.format(self.sid, self.socket.getpeername()[0] if not self.hostname else self.hostname, reason))
 
             while self.sendbuffer:
-                logging.info('Server {} has sendbuffer remaining: {}'.format(self, self.sendbuffer.rstrip()))
+                logging.debug('Server {} has sendbuffer remaining: {}'.format(self, self.sendbuffer.rstrip()))
                 try:
                     sent = self.socket.send(bytes(self.sendbuffer + '\n', 'utf-8'))
                     self.sendbuffer = self.sendbuffer[sent:]
