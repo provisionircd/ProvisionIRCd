@@ -3,7 +3,7 @@ import threading
 import socket
 import hashlib
 import ssl
-from handle.functions import IPtoBase64, logging
+from handle.functions import IPtoBase64, logging, match
 
 
 W = '\033[0m'  # white (normal)
@@ -77,7 +77,7 @@ def selfIntroduction(localServer, newServer, outgoing=False):
                 value = localServer.support[row]
                 info.append('{}{}'.format(row, '={}'.format(value) if value else ''))
             newServer._send(':{} PROTOCTL EAUTH={} SID={} {}'.format(localServer.sid, localServer.hostname, localServer.sid, ' '.join(info)))
-            newServer._send(':{} PROTOCTL NOQUIT NICKv2 CLK SJOIN SJOIN2 UMODE2 VL SJ3 TKLEXT TKLEXT2 NICKIP ESVID EXTSWHOIS'.format(localServer.sid))
+            newServer._send(':{} PROTOCTL NOQUIT EAUTH SID NICKv2 CLK SJOIN SJOIN2 UMODE2 VL SJ3 TKLEXT TKLEXT2 NICKIP ESVID EXTSWHOIS'.format(localServer.sid))
             version = 'P{}-{}'.format(localServer.versionnumber.replace('.', ''), localServer.sid)
             local_modules = [m.__name__ for m in localServer.modules]
             modlist = []
@@ -89,9 +89,10 @@ def selfIntroduction(localServer, newServer, outgoing=False):
                 modlist.append(entry)
             if modlist:
                 newServer._send('MODLIST :{}'.format(' '.join(modlist)))
-            # [Jan 26 02:21:47.873135 2020] Debug: Received: :001 SERVER dev.provisionweb.org 1 :ProvisionDev
-            # [Jan 26 02:21:47.873161 2020] Debug: unexpected non-server source 001 for SERVER
-            newServer._send('SERVER {} 1 :{} {}'.format(localServer.hostname, version, localServer.name))  # Old, should not be used.
+            if outgoing:
+                newServer._send(f':{localServer.sid} SID {localServer.hostname} 1 {localServer.sid} :{localServer.name}')
+            else:
+                newServer._send('SERVER {} 1 :{} {}'.format(localServer.hostname, version, localServer.name))
             logging.info('{}Introduced myself to {}. Expecting remote sync sequence...{}'.format(Y, newServer.hostname, W))
         localServer.introducedTo.append(newServer)
 
@@ -172,6 +173,74 @@ def syncData(localServer, newServer, selfRequest=True, local_only=False):
     else:
         newServer._send(':{} PING {} {}'.format(localServer.sid, localServer.hostname, newServer.hostname))
     return
+
+
+def validate_server_info(self, client):
+    try:
+        ip, port = client.socket.getpeername()
+        ip2, port2 = client.socket.getsockname()
+        if client.hostname not in self.ircd.conf['link']:
+            error = 'Error connecting to server {}[{}:{}]: no matching link configuration'.format(self.ircd.hostname, ip2, port2)
+            client._send(':{} ERROR :{}'.format(self.ircd.sid, error))
+            client.quit('no matching link configuration')
+            logging.info(f'Link denied for {client.hostname}: server not found in conf')
+            return 0
+
+        client.cls = self.ircd.conf['link'][client.hostname]['class']
+        logging.info('{}Class: {}{}'.format(G, client.cls, W))
+        if not client.cls:
+            error = 'Error connecting to server {}[{}:{}]: no matching link configuration'.format(self.ircd.hostname, ip2, port2)
+            client._send(':{} ERROR :{}'.format(self.ircd.sid, error))
+            client.quit('no matching link configuration')
+            logging.info(f'Link denied for {client.hostname}: unable to assign class to connection')
+            return 0
+
+        totalClasses = list(filter(lambda s: s.cls == client.cls, self.ircd.servers))
+        if len(totalClasses) > int(self.ircd.conf['class'][client.cls]['max']):
+            client.quit('Maximum server connections for this class reached')
+            logging.info(f'Link denied for {client.hostname}: max connections for this class')
+            return 0
+
+        if client.linkpass:
+            if client.linkpass != self.ircd.conf['link'][client.hostname]['pass']:
+                error = 'Error connecting to server {}[{}:{}]: no matching link configuration'.format(self.ircd.hostname, ip2, port2)
+                client._send(':{} ERROR :{}'.format(self.ircd.sid, error))
+                client.quit('no matching link configuration')
+                logging.info(f'Link denied for {client.hostname}: incorrect password')
+                return 0
+
+        if not match(self.ircd.conf['link'][client.hostname]['incoming']['host'], ip):
+            error = 'Error connecting to server {}[{}:{}]: no matching link configuration'.format(self.ircd.hostname, ip2, port2)
+            client._send(':{} ERROR :{}'.format(self.ircd.sid, error))
+            client.quit('no matching link configuration')
+            logging.info(f'Link denied for {client.hostname}: incoming IP does not match conf')
+            return 0
+
+        if client.hostname not in self.ircd.conf['settings']['ulines']:
+            for cap in [cap.split('=')[0] for cap in self.ircd.server_support]:
+                if cap in client.protoctl:
+                    logging.info('Cap {} is supported by both parties'.format(cap))
+                else:
+                    client._send(':{} ERROR :Server {} is missing support for {}'.format(client.sid, client.hostname, cap))
+                    client.quit('Server {} is missing support for {}'.format(client.hostname, cap))
+                    logging.info(f'Link denied for {client.hostname}: no matching CAPs')
+                    return 0
+
+        if client.linkpass and client.linkpass != self.ircd.conf['link'][client.hostname]['pass']:
+            msg = 'Error connecting to server {}[{}:{}]: no matching link configuration'.format(client.hostname, ip, port)
+            error = 'Error connecting to server {}[{}:{}]: no matching link configuration'.format(self.ircd.hostname, ip2, port2)
+            if client not in self.ircd.linkrequester:
+                client._send('ERROR :{}'.format(error))
+            elif self.ircd.linkrequester[client]['user']:
+                self.ircd.linkrequester[client]['user'].send('NOTICE', '*** {}'.format(msg))
+            client.quit('no matching link configuration', silent=True)
+            logging.info(f'Link denied for {client.hostname}: incorrect password')
+            return 0
+
+        return 1
+    except Exception as ex:
+        logging.exception(ex)
+        return 0
 
 
 class Link(threading.Thread):

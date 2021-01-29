@@ -5,6 +5,7 @@
 import ircd
 
 from handle.functions import logging
+from handle.handleLink import validate_server_info
 
 
 class Pass(ircd.Command):
@@ -41,22 +42,4 @@ class Pass(ircd.Command):
         ip2, port2 = client.socket.getsockname()
 
         if client.hostname:
-            if client.hostname not in self.ircd.conf['link']:
-                msg = 'Error connecting to server {}[{}:{}]: no matching link configuration'.format(client.hostname, ip, port)
-                error = 'Error connecting to server {}[{}:{}]: no matching link configuration'.format(self.ircd.hostname, ip2, port2)
-                if client not in self.ircd.linkrequester:
-                    client._send('ERROR :{}'.format(error))
-                elif self.ircd.linkrequester[client]['user']:
-                    self.ircd.linkrequester[client]['user'].send('NOTICE', '*** {}'.format(msg))
-                client.quit('no matching link configuration', silent=True)
-                return
-
-            if client.linkpass != self.ircd.conf['link'][client.hostname]['pass']:
-                msg = 'Error connecting to server {}[{}:{}]: no matching link configuration'.format(client.hostname, ip, port)
-                error = 'Error connecting to server {}[{}:{}]: no matching link configuration'.format(self.ircd.hostname, ip2, port2)
-                if client not in self.ircd.linkrequester:
-                    client._send('ERROR :{}'.format(error))
-                elif self.ircd.linkrequester[client]['user']:
-                    self.ircd.linkrequester[client]['user'].send('NOTICE', '*** {}'.format(msg))
-                client.quit('no matching link configuration', silent=True)
-                return
+            validate_server_info(self, client)

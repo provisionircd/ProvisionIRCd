@@ -282,7 +282,7 @@ class User:
                     self.uid = params[7]
                     server = list(filter(lambda s: s.sid == params[0][1:], self.ircd.servers))
                     if not server:
-                        logging.debug('Quitting {} because their server does not exist'.format(self.nickname), server=self.ircd)
+                        logging.debug(f'Quitting {self.nickname} because their server does not exist')
                         self.quit('Unknown connection')
                         return
                     self.server = server[0]
