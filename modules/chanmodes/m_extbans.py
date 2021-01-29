@@ -6,7 +6,7 @@ info = """~T - text bans: block, replace, online.
 -      block and replace speak for themselves. online follows an integer.
 -      ~T:online:10 - can only send to the channel if on channel longer than 10 seconds. Can help prevent spam.
 
- ~t - timed bans: ~t:host:10 - bans for 10 minutes.
+ ~t - timed bans: ~t:10:*!*@host - bans for 10 minutes.
 
  ~c - channel bans.
 -      +b ~c:#warez - bans everyone from channel #warez to join your channel.
@@ -119,7 +119,7 @@ def checkExtMatch(type, action, channel, msg):
 
 
 def char_repeat(string, char, amount):
-    for word in [word for word in string.split(' ') if '://' not in word and 'www.' not in word]:  ### Excluding urls.
+    for word in [word for word in string.split(' ') if '://' not in word and 'www.' not in word]:  # Excluding urls.
         if char == '*':
             for c in 'abcdefghijklmnopqrstuwvwxyz,.?!1234567890:':
                 if word.lower().count(c.lower()) >= int(amount):
@@ -131,9 +131,9 @@ def char_repeat(string, char, amount):
 
 
 @ircd.Modules.hooks.loop()
-def checkExpiredBans(localServer):
+def checkExpiredBans(ircd):
     remove_bans = {}
-    for chan in localServer.channels:
+    for chan in ircd.channels:
         remove_bans[chan] = []
         for ban in [ban for ban in chan.bans if ban and ban[:2] == '~t']:
             minutes = int(ban.split(':')[1]) * 60
@@ -145,7 +145,7 @@ def checkExpiredBans(localServer):
             continue
         bans = ' '.join(remove_bans[chan])
         tmodes = 'b' * len(remove_bans[chan])
-        localServer.handle('MODE', '{} -{} {} 0'.format(chan.name, tmodes, bans))
+        ircd.handle('MODE', '{} -{} {} 0'.format(chan.name, tmodes, bans))
 
 
 @ircd.Modules.support(('EXTBAN=' + prefix + ',' + str(''.join(ext_bans)), True))  # (support string, boolean if support must be sent to other servers)

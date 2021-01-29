@@ -613,7 +613,8 @@ def save_db(ircd):
             current_perm = f.read().split('\n')[0]
             current_perm = json.loads(current_perm)
     except Exception as ex:
-        pass
+        logging.exception(ex)
+        return
     for chan in iter([chan for chan in iter(ircd.channels) if 'P' in chan.modes]):
         perm_chans[chan.name] = {}
         perm_chans[chan.name]['creation'] = chan.creation
