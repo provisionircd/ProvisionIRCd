@@ -751,7 +751,7 @@ class User:
             if self.registered and (self.server == ircd or self.server.eos):
                 if reason and not kill:
                     skip = [sourceServer]
-                    for server in iter([server for server in ircd.servers if hasattr(server, 'protoctl') and 'NOQUIT' in server.protoctl and not server.eos]):
+                    for server in [server for server in ircd.servers if hasattr(server, 'protoctl') and 'NOQUIT' in server.protoctl]:  # and not server.eos]:
                         skip.append(server)
                     ircd.new_sync(ircd, skip, ':{} QUIT :{}'.format(self.uid, reason))
 
