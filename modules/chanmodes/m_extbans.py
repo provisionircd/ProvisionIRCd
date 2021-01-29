@@ -2,24 +2,27 @@
 support for extended bans
 """
 
-# ~T - text bans: block, replace, online.
-#      block and replace speak for themselves. online follows an integer.
-#      ~T:online:10 - can only send to the channel if on channel longer than 10 seconds. Can help prevent spam.
-#
-# ~t - timed bans: ~t:host:10 - bans for 10 minutes.
-#
-# ~c - channel bans.
-#      +b ~c:#warez - bans everyone from channel #warez to join your channel.
-#      +I ~c:@#warez - ops or higher from channel #warez can bypass +i.
-#      +e ~c:@#warez - ops or higher from channel #warez can bypass +b.
-#
-# ~b - extended normal bans.
-#      +b ~b:R:*!*@annoying.host - bans *!*@annoying.host from the channel, unless the user has a registered nick.
-#                                  this allows for more control against annoying users that keep requesting new IPs from their ISP,
-#                                  forcing them to log in to NickServ before joining the channel.
-# ~L - redirect ban
-#       +b ~L:host:#chan           Redirects everyone with a matching host to another channel.
-#
+info = """~T - text bans: block, replace, online.
+-      block and replace speak for themselves. online follows an integer.
+-      ~T:online:10 - can only send to the channel if on channel longer than 10 seconds. Can help prevent spam.
+
+ ~t - timed bans: ~t:host:10 - bans for 10 minutes.
+
+ ~c - channel bans.
+-      +b ~c:#warez - bans everyone from channel #warez to join your channel.
+-      +I ~c:@#warez - ops or higher from channel #warez can bypass +i.
+-      +e ~c:@#warez - ops or higher from channel #warez can bypass +b.
+
+ ~b - extended normal bans.
+-      +b ~b:R:*!*@annoying.host - bans *!*@annoying.host from the channel, unless the user has a registered nick.
+-                                  this allows for more control against annoying users that keep requesting new IPs from their ISP,
+-                                  forcing them to log in to NickServ before joining the channel.
+ ~L - redirect ban
+-       +b ~L:host:#chan           Redirects everyone with a matching host to another channel.
+"""
+
+helpop = {"extbans": info}
+
 
 import re
 import time

@@ -203,7 +203,7 @@ class Link(threading.Thread):
                 logging.info('Wrapped outgoing socket {} in TLS'.format(self.socket))
 
             from ircd import Server
-            serv = Server(origin=self.localServer, serverLink=True, sock=self.socket, tls=self.tls)
+            serv = Server(origin=self.localServer, serverLink=True, sock=self.socket, is_ssl=self.tls)
             serv.hostname = self.name
             serv.ip = self.host
             serv.port = self.port
