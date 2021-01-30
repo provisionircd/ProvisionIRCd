@@ -104,19 +104,19 @@ class Sjoin(ircd.Command):
                     membernick.append(c)
             membernick = ''.join(membernick)
 
-            userClass = list(filter(lambda c: c.nickname.lower() == membernick.lower() or c.uid == membernick, self.ircd.users))
-            if not userClass:
+            # userClass = list(filter(lambda c: c.nickname.lower() == membernick.lower() or c.uid == membernick, self.ircd.users))
+            user_class = next((c for c in self.ircd.users if c.nickname.lower() == membernick.lower() or c.uid == membernick), None)
+            if not user_class:
                 logging.error('{}ERROR: could not fetch userclass for remote user {}. Looks like the user did not sync correctly. Maybe nick collision, or remote leftover from a netsplit.{}'.format(R, membernick, W))
-                ##continue
+                # continue
                 # source.quit('ERROR: could not fetch userclass for remote user {}. Looks like the user did not sync correctly. Maybe nick collision, or remote leftover from a netsplit.'.format(membernick))
                 continue
 
-            userClass = userClass[0]
             p = {'override': True, 'sourceServer': client}
 
             # Making the remote client join local channel, creating if needed.
 
-            userClass.handle('join', channel, params=p)
+            user_class.handle('join', channel, params=p)
             localChan = list(filter(lambda c: c.name.lower() == channel.lower(), self.ircd.channels))[0]
             local_chan = next((c for c in self.ircd.channels if c.name == channel), None)
 
@@ -127,29 +127,28 @@ class Sjoin(ircd.Command):
             if len(local_chan.users) == 1:
                 # Channel did not exist on self.ircd. Hook channel_create? Sure, why not.
                 pass
-            if userClass.server != self.ircd:
-                logging.info('{}External user {} joined {} on local server.{}'.format(G, userClass.nickname, channel, W))
+            if user_class.server != self.ircd:
+                logging.info('{}External user {} joined {} on local server.{}'.format(G, user_class.nickname, channel, W))
             if timestamp < local_chan.creation and not source.eos:
                 if '*' in member:
                     giveModes.append('q')
-                    giveParams.append(userClass.nickname)
+                    giveParams.append(user_class.nickname)
                 if '~' in member:
                     giveModes.append('a')
-                    giveParams.append(userClass.nickname)
+                    giveParams.append(user_class.nickname)
                 if '@' in member:
                     giveModes.append('o')
-                    giveParams.append(userClass.nickname)
+                    giveParams.append(user_class.nickname)
                 if '%' in member:
                     giveModes.append('h')
-                    giveParams.append(userClass.nickname)
+                    giveParams.append(user_class.nickname)
                 if '+' in member:
                     giveModes.append('v')
-                    giveParams.append(userClass.nickname)
+                    giveParams.append(user_class.nickname)
 
         if timestamp < local_chan.creation and not source.eos:
             # Remote channel is dominant. Replacing modes with remote channel
             # Clear the local modes.
-            #
             logging.info('Remote channel {} is dominant. Replacing modes with remote channels\''.format(channel))
             local_chan.creation = timestamp
             local_chan.name = channel
@@ -158,7 +157,7 @@ class Sjoin(ircd.Command):
                 if m not in modes and m in list(self.ircd.channel_modes[2]) + list(self.ircd.channel_modes[3]):
                     removeModes.append(m)
                     continue
-                ### Remote info is different, remove old one first.
+                # Remote info is different, remove old one first.
                 if m in self.ircd.channel_modes[1] and self.ircd.chan_params[local_chan][m] != recv[pc]:
                     removeParams.append(self.ircd.chan_params[local_chan][m])
                     removeModes.append(m)
@@ -248,7 +247,6 @@ class Sjoin(ircd.Command):
                 data.append(p)
             for p in giveParams:
                 data.append(p)
-
 
 
 

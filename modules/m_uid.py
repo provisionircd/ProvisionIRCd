@@ -4,7 +4,7 @@
 
 import ircd
 
-from handle.functions import logging
+from handle.functions import logging, match
 
 W = '\033[0m'  # white (normal)
 R = '\033[31m'  # red
@@ -28,6 +28,7 @@ class Uid(ircd.Command):
                 logging.error('Quitting {} because their server could not be found (UID)'.format(user))
                 user.quit('Unknown or corrupted connection with the same nick')
                 continue
+
             logging.error('{}ERROR: user {} already found on the network{}'.format(R, user, W))
             localTS = int(user.signon)
             remoteTS = int(recv[4])
@@ -39,6 +40,12 @@ class Uid(ircd.Command):
                 allow = 0
                 logging.debug('Disallowing remote user {}'.format(user))
                 return
+
+        if 'Q' in self.ircd.tkl:
+            for entry in [entry for entry in self.ircd.tkl['Q'] if entry != '*']:
+                if match(entry.split('@')[1].lower(), nick.lower()):
+                    client._send(f":{self.ircd.sid} SVSKILL {nick} :Nickname rejected by remote server: {self.ircd.tkl['Q'][entry]['reason']}")
+                    return
         if allow:
             u = ircd.User(client, server_class=self.ircd, params=params)
             cmd = ' '.join(recv)

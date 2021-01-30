@@ -68,7 +68,7 @@ class Nick(ircd.Command):
 
         inUse = list(filter(lambda u: u.nickname.lower() == nick.lower(), self.ircd.users))
         if inUse and nick == client.nickname:
-            ### Exact nick.
+            # Exact nick.
             return
 
         if inUse and nick.lower() != client.nickname.lower():

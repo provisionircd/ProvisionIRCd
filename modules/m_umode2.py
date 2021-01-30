@@ -4,6 +4,8 @@
 
 import ircd
 
+from handle.functions import logging
+
 
 class Umode2(ircd.Command):
     def __init__(self):
@@ -12,7 +14,10 @@ class Umode2(ircd.Command):
 
     def execute(self, client, recv):
         # :asdf UMODE2 +ot
-        target = [u for u in self.ircd.users if u.uid == recv[0][1:] or u.nickname == recv[0][1:]][0]
+        target = next((u for u in self.ircd.users if u.uid == recv[0][1:] or u.nickname == recv[0][1:]), None)
+        if not target:
+            logging.info(f'Could not set umode for {recv[0][1:]}: maybe it got SVSKILLed?')
+            return
         modeset = None
         for m in recv[2]:
             if m in '+-':

@@ -18,7 +18,7 @@ class Svskill(ircd.Command):
         if not client:
             # Maybe it is a server?
             # self = list(filter(lambda s: s.hostname.lower() == recv[0][1:].lower() or s.sid.lower() == recv[0][1:].lower(), self.ircd.servers))
-            client = next((s for s in self.ircd.servers if s.hostname == recv[0][1:] or u.sid == recv[0][1:]), None)
+            client = next((s for s in self.ircd.servers if s.hostname == recv[0][1:] or s.sid == recv[0][1:]), None)
             if not client:
                 return
             else:

@@ -168,7 +168,7 @@ def syncData(localServer, newServer, selfRequest=True, local_only=False):
         newServer._send(data)
         localServer.syncDone.append(newServer)
 
-    if (not hasattr(newServer, 'outgoing') or not newServer.outgoing):
+    if not hasattr(newServer, 'outgoing') or not newServer.outgoing:
         newServer._send(':{} PONG {} {}'.format(localServer.sid, newServer.hostname, localServer.hostname))
     else:
         newServer._send(':{} PING {} {}'.format(localServer.sid, localServer.hostname, newServer.hostname))
