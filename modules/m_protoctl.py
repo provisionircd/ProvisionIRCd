@@ -33,7 +33,7 @@ class Protoctl(ircd.Command):
                             ip, port = client.socket.getpeername()
                             error = 'Error connecting to server {}[{}:{}]: server already exists on remote network'.format(self.ircd.hostname, ip, port)
                             client._send(':{} ERROR :{}'.format(self.ircd.sid, error))
-                            client.quit('server already exist on this network')
+                            client.quit('server already exists on this network')
                             return
 
                     elif cap == 'SID' and param:
