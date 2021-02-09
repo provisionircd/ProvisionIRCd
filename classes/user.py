@@ -593,15 +593,6 @@ class User:
             if 'dontresolve' in self.server.conf['settings']:
                 threading.Thread(target=resolve_ip, args=([self])).start()
 
-            current_lusers = len([user for user in self.server.users if user.server == self.server and user.registered])
-            if current_lusers >= self.server.maxusers:
-                self.server.maxusers = current_lusers
-
-            if len(self.server.users) >= self.server.maxgusers:
-                self.server.maxgusers = len(self.server.users)
-                if self.server.maxgusers % 10 == 0:
-                    self.server.snotice('s', '*** New global user record: {}'.format(self.server.maxgusers))
-
             if not hasattr(self, 'socket'):
                 return
             self.sendraw(RPL.WELCOME, ':Welcome to the {} IRC Network {}!{}@{}'.format(self.server.name, self.nickname, self.ident, self.hostname))
@@ -635,6 +626,16 @@ class User:
             self.server.new_sync(self.server, self.server, ':{} UID {}'.format(self.server.sid, data))
 
             self.registered = True
+
+            current_lusers = len([user for user in self.server.users if user.server == self.server and user.registered])
+            if current_lusers > self.server.maxusers:
+                self.server.maxusers = current_lusers
+
+            if len(self.server.users) > self.server.maxgusers:
+                self.server.maxgusers = len(self.server.users)
+                if self.server.maxgusers % 10 == 0:
+                    self.server.snotice('s', '*** New global user record: {}'.format(self.server.maxgusers))
+
             self.handle('lusers')
             self.handle('motd')
             for callable in [callable for callable in self.server.hooks if callable[0].lower() == 'welcome']:
