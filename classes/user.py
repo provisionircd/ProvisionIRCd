@@ -594,10 +594,10 @@ class User:
                 threading.Thread(target=resolve_ip, args=([self])).start()
 
             current_lusers = len([user for user in self.server.users if user.server == self.server and user.registered])
-            if current_lusers > self.server.maxusers:
+            if current_lusers >= self.server.maxusers:
                 self.server.maxusers = current_lusers
 
-            if len(self.server.users) > self.server.maxgusers:
+            if len(self.server.users) >= self.server.maxgusers:
                 self.server.maxgusers = len(self.server.users)
                 if self.server.maxgusers % 10 == 0:
                     self.server.snotice('s', '*** New global user record: {}'.format(self.server.maxgusers))
