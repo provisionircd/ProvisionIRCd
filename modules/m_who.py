@@ -34,7 +34,6 @@ class Who(ircd.Command):
      r <realname>   = Filter by realname.
      s <server      = Filter by server.
      u <ident>      = Filter by username/ident.
-    -
     """
 
     def __init__(self):
@@ -57,7 +56,6 @@ class Who(ircd.Command):
         params = '' if len(recv) < 3 else recv[3:]
         # logging.debug('WHO mask: {}'.format(mask))
         for user in iter(self.ircd.users):
-            continue_loop = 0
             chan = '*'
             if not iter([c for c in self.ircd.channels if client in c.users and user in c.users]) and 'i' in client.modes and not 'o' in client.modes and user != client:
                 continue
@@ -67,7 +65,7 @@ class Who(ircd.Command):
 
             modes = ''
 
-            if mask[0] in self.ircd.chantypes + '*':
+            if mask[0] in self.ircd.chantypes:
                 # Mask is a channel.
                 if mask.lower() not in iter([c.name.lower() for c in user.channels]) and mask != '*':
                     continue
@@ -97,7 +95,7 @@ class Who(ircd.Command):
                         # logging.debug('Found arg flag but no params found')
                         continue
                     param = params[paramcount]
-                    logging.debug('Param set: {}'.format(param))
+                    logging.debug(f'Param for WHO flag {f} set: {param}')
                     paramcount += 1
                 else:
                     param = None
