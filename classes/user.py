@@ -710,7 +710,7 @@ class User:
             return True
         return False
 
-    def quit(self, reason, error=True, banmsg=None, kill=False, silent=False, api=False):  # Why source?
+    def quit(self, reason, error=True, banmsg=None, kill=False, silent=False, api=False, squit=False):  # Why source?
         try:
             if not hasattr(self, 'socket'):
                 self.socket = None
