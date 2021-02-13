@@ -41,7 +41,7 @@ class Uid(ircd.Command):
                 logging.debug('Disallowing remote user {}'.format(user))
                 return
 
-        if 'Q' in self.ircd.tkl and client.server.hostname not in self.ircd.conf['settings']['ulines']:
+        if 'Q' in self.ircd.tkl and client.hostname not in self.ircd.conf['settings']['ulines']:
             for entry in [entry for entry in self.ircd.tkl['Q'] if entry != '*']:
                 if match(entry.split('@')[1].lower(), nick.lower()):
                     client._send(f":{self.ircd.sid} SVSKILL {nick} :Nickname rejected by remote server: {self.ircd.tkl['Q'][entry]['reason']}")
