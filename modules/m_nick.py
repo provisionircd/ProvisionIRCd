@@ -37,7 +37,6 @@ class Nick(ircd.Command):
             recv = recv[1:]
             hook = 'remote_nickchange'
         else:
-
             sourceServer = self.ircd
             hook = 'local_nickchange'
 
@@ -90,12 +89,12 @@ class Nick(ircd.Command):
                 if u not in users and u != client:
                     users.append(u)
 
-            if sourceServer == self.ircd:  ### pre_local_nickchanage
+            if sourceServer == self.ircd:  # pre_local_nickchanage
                 success = 1
                 for callable in [callable for callable in self.ircd.hooks if callable[0].lower() == 'pre_' + hook]:
                     try:
                         success = callable[2](client, self.ircd)
-                        if not success and success is not None:  ### None will default to True.
+                        if not success and success is not None:  # None will default to True.
                             break
                     except Exception as ex:
                         logging.exception(ex)
@@ -117,7 +116,7 @@ class Nick(ircd.Command):
                 msg = '*** Your nick has been forcefully changed by  {}.'.format(sanick.nickname)
                 self.ircd.handle('NOTICE', '{} :{}'.format(client.nickname, msg))
 
-            ### Check module hooks for visible_in_channel()
+            # Check module hooks for visible_in_channel()
             all_broadcast = [client]
             for channel in client.channels:
                 for u in channel.users:
@@ -132,7 +131,7 @@ class Nick(ircd.Command):
                             # logging.debug('Is {} visible for {} on {}? :: {}'.format(client.nickname, u.nickname, channel.name, visible))
                         except Exception as ex:
                             logging.exception(ex)
-                    if visible:  ### Break out of the channels loop. No further checks are required.
+                    if visible:  # Break out of the channels loop. No further checks are required.
                         break
                 if not visible:
                     logging.debug('User {} is not allowed to see {} on any channel, not sending nickchange.'.format(u.nickname, client.nickname))

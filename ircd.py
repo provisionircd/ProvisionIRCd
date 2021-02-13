@@ -616,7 +616,7 @@ class Server:
             for user in users:
                 server1 = self.hostname
                 server2 = source.hostname if source else localServer.hostname
-                user.quit('{} {}'.format(server1, server2))
+                user.quit('{} {}'.format(server1, server2), squit=True)
 
             for server in additional_servers:
                 logging.info('Quitting server {}'.format(server))
