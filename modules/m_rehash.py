@@ -25,7 +25,7 @@ class Rehash(ircd.Command):
         self.ircd.snotice('s', msg)
 
         if True:
-            ### Need to add some param shit, now too lazy and hot.
+            # Need to add some param shit, now too lazy and hot.
             self.ircd.dnsblCache = {}
             self.ircd.throttle = {}
             self.ircd.hostcache = {}
