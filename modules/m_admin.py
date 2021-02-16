@@ -5,7 +5,6 @@
 import ircd
 
 
-@ircd.Modules.command
 class Admin(ircd.Command):
     def __init__(self):
         self.command = 'admin'

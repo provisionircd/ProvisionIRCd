@@ -5,7 +5,6 @@
 import ircd
 
 
-@ircd.Modules.command
 class Swhois(ircd.Command):
     def __init__(self):
         self.params = 2
@@ -13,8 +12,8 @@ class Swhois(ircd.Command):
         self.command = 'swhois'
 
     def execute(self, client, recv):
-        ### :source SWHOIS target :line
-        ### :source SWHOIS target :
+        # :source SWHOIS target :line
+        # :source SWHOIS target :
         user = list(filter(lambda u: u.uid == recv[2] or u.nickname == recv[2], self.ircd.users))
         if not user:
             return

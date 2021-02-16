@@ -10,7 +10,6 @@ from handle.functions import logging
 MAXWATCH = 256
 
 
-@ircd.Modules.command
 class Watch(ircd.Command):
     """
     Maintain your WATCH list. You will be notified when a nickname on your WATCH list
@@ -41,12 +40,11 @@ class Watch(ircd.Command):
                 return
             else:
                 process_entries = recv[1:]
-                total_entries = []
                 for entry in process_entries:
                     if entry[0] not in '+-':
                         if entry == 'C':
                             client.watchC = True
-                            if len(recv) == 2:  ### Clear.
+                            if len(recv) == 2:  # Clear.
                                 client.watchlist = []
                                 logging.debug('Watchlist of {} cleared.'.format(client))
                         elif entry == 'S':

@@ -5,7 +5,6 @@
 import ircd
 
 
-@ircd.Modules.command
 class Svsmode(ircd.Command):
     def __init__(self):
         self.command = ['svsmode', 'svs2mode']
@@ -14,7 +13,7 @@ class Svsmode(ircd.Command):
 
     def execute(self, client, recv):
         source = list(filter(lambda c: c.uid == recv[0][1:], self.ircd.users))
-        ### Source can also be a server, you lazy fuck.
+        # Source can also be a server, you lazy fuck.
         if not source:
             return
         source = source[0]

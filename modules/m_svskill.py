@@ -5,7 +5,6 @@
 import ircd
 
 
-@ircd.Modules.command
 class Svskill(ircd.Command):
     def __init__(self):
         self.params = 2

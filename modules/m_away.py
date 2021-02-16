@@ -8,7 +8,6 @@ from handle.functions import checkSpamfilter
 AWAYLEN = 307
 
 
-@ircd.Modules.command
 class Away(ircd.Command):
     def __init__(self):
         self.command = 'away'

@@ -644,7 +644,7 @@ class User:
                 except Exception as ex:
                     logging.exception(ex)
             if self.fingerprint:
-                self.send('NOTICE', ':*** Your SSL fingerprint is {}'.format(self.fingerprint))
+                self.send('NOTICE', ':*** Your TLS fingerprint is {}'.format(self.fingerprint))
                 data = 'MD client {} certfp :{}'.format(self.uid, self.fingerprint)
                 self.server.new_sync(self.server, self.server, ':{} {}'.format(self.server.sid, data))
 

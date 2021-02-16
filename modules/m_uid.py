@@ -10,7 +10,6 @@ W = '\033[0m'  # white (normal)
 R = '\033[31m'  # red
 
 
-@ircd.Modules.command
 class Uid(ircd.Command):
     def __init__(self):
         self.command = 'uid'
@@ -41,11 +40,6 @@ class Uid(ircd.Command):
                 logging.debug('Disallowing remote user {}'.format(user))
                 return
 
-        if 'Q' in self.ircd.tkl and client.hostname not in self.ircd.conf['settings']['ulines']:
-            for entry in [entry for entry in self.ircd.tkl['Q'] if entry != '*']:
-                if match(entry.split('@')[1].lower(), nick.lower()):
-                    client._send(f":{self.ircd.sid} SVSKILL {nick} :Nickname rejected by remote server: {self.ircd.tkl['Q'][entry]['reason']}")
-                    return
         if allow:
             u = ircd.User(client, server_class=self.ircd, params=params)
             cmd = ' '.join(recv)

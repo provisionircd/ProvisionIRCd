@@ -5,7 +5,6 @@
 import ircd
 
 
-@ircd.Modules.command
 class Svsnick(ircd.Command):
     def __init__(self):
         self.command = 'svsnick'

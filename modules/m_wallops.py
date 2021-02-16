@@ -5,15 +5,13 @@
 import ircd
 
 
-@ircd.Modules.user_mode
-class umode_w(ircd.UserMode):
+class Umode_w(ircd.UserMode):
     def __init__(self):
         self.mode = 'w'
         self.desc = 'Can read wallop messages'
         self.req_flag = 1
 
 
-@ircd.Modules.command
 class Wallops(ircd.Command):
     def __init__(self):
         self.command = 'wallops'

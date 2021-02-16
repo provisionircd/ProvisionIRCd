@@ -38,7 +38,6 @@ def umode_g(self, ircd, user, msg):
     return msg
 
 
-@ircd.Modules.command
 class Callerid(ircd.Command):
     """Manipulate caller-ID list.
     -

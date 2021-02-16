@@ -8,7 +8,6 @@ import ircd
 from handle.functions import show_support
 
 
-@ircd.Modules.command
 class Version(ircd.Command):
     def __init__(self):
         self.command = 'version'
