@@ -31,9 +31,9 @@ def cmd_eos(client, recv):
     IRCD.do_delayed_process()
 
     if client in IRCD.send_after_eos:
-        # logging.warning(f"Now sending previously held back server data to {client.name}")
+        logging.warning(f"Now sending previously held back server data to {client.name}")
         for mtags, data in IRCD.send_after_eos[client]:
-            # logging.warning(f"Delayed data: {data.rstrip()}")
+            logging.warning(f"Delayed data: {data.rstrip()}")
             IRCD.send_to_one_server(client, mtags, data)
 
 

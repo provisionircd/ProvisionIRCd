@@ -292,9 +292,9 @@ class Client:
             logging.error(f"Tried to sync user {self.id} but it has no nickname yet?")
             return
 
-        # logging.debug(f"Syncing user {self.name} to all locally connected servers.")
-        # if cause:
-        #     logging.warning(f"Cause of {self.name} sync: {cause}")
+        logging.debug(f"Syncing user {self.name} to all locally connected servers.")
+        if cause:
+            logging.warning(f"Cause of {self.name} sync: {cause}")
 
         sync_modes = ''
         for mode in self.user.modes:
@@ -445,11 +445,11 @@ class Client:
             if self == IRCD.current_link_sync:
                 IRCD.current_link_sync = None
             self.server_exit(reason)
-            # logging.debug('-')
-            # logging.debug(f"Server successfully exitted. My current known UIDs (if any):")
-            # for client in IRCD.global_registered_clients():
-            #     logging.debug(f"Client: {client.name} ({client.uplink.name}) -- UID: {client.id}")
-            # logging.debug('-')
+            logging.debug('-')
+            logging.debug(f"Server successfully exitted. My current known UIDs (if any):")
+            for client in IRCD.global_registered_clients():
+                logging.debug(f"Client: {client.name} ({client.uplink.name}) -- UID: {client.id}")
+            logging.debug('-')
         if self.user and self.registered:
             self.remove_user(reason)
         IRCD.global_client_count -= 1
