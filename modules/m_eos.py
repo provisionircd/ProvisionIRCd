@@ -22,11 +22,6 @@ def cmd_eos(client, recv):
     #     server_client.add_flag(Flag.CLIENT_REGISTERED)
     #     IRCD.run_hook(Hook.SERVER_SYNCED, server_client)
 
-    for batch in Batch.pool:
-        started_by = client if client.local else client.uplink
-        if batch.started_by in [started_by, started_by.direction] and batch.batch_type == "netjoin":
-            batch.end()
-
     IRCD.run_hook(Hook.SERVER_SYNCED, client)
     IRCD.do_delayed_process()
 
@@ -35,6 +30,11 @@ def cmd_eos(client, recv):
         for mtags, data in IRCD.send_after_eos[client]:
             logging.warning(f"Delayed data: {data.rstrip()}")
             IRCD.send_to_one_server(client, mtags, data)
+
+    for batch in Batch.pool:
+        started_by = client if client.local else client.uplink
+        if batch.started_by in [started_by, started_by.direction] and batch.batch_type == "netjoin":
+            batch.end()
 
 
 def init(module):

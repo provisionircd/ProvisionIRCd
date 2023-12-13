@@ -47,7 +47,6 @@ class Listen:
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.listening = 0
-        self.accepting = 0
         self.cert = None
         self.key = None
         self.websockets = 0

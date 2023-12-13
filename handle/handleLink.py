@@ -155,6 +155,7 @@ def start_outgoing_link(link, tls=0, auto_connect=0):
         client.server.link = link
         client.local.socket = socket.socket()
         client.local.auto_connect = auto_connect
+        client.local.handshake = 1
         client.name = link.name
         client.ip = host
         client.port = port

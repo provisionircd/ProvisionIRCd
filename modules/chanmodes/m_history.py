@@ -251,8 +251,8 @@ def get_chathistory(channel, history_filter: HistoryFilter) -> list:
 
 
 def chmode_H_mode(client, channel, modebuf, parambuf):
-    if "H" in modebuf:
-        if "H" not in channel.modes:
+    if 'H' in modebuf:
+        if 'H' not in channel.modes:
             del ChatHistory.backlog[channel]
         else:
             ChatHistory.backlog[channel] = []

@@ -186,7 +186,7 @@ class Client:
         return cap in self.local.caps
 
     def has_permission(self, permission_path: str):
-        if self.server or not self.local:
+        if self.server or not self.local or not self.user:
             return 1
         if not self.user.operlogin or 'o' not in self.user.modes:
             return 0
@@ -294,7 +294,7 @@ class Client:
 
         logging.debug(f"Syncing user {self.name} to all locally connected servers.")
         if cause:
-            logging.warning(f"Cause of {self.name} sync: {cause}")
+            logging.debug(f"Cause of {self.name} sync: {cause}")
 
         sync_modes = ''
         for mode in self.user.modes:
@@ -457,7 +457,6 @@ class Client:
             IRCD.local_client_count -= 1
             IRCD.remove_delay_client(self)
             self.local.recvbuffer = []
-            self.local.in_write = 0
             if reason and self.user:
                 try:
                     self.local.socket.send(bytes(f"ERROR :Closing link: {self.name}[{self.user.realhost}] {reason}\r\n", "utf-8"))
@@ -567,7 +566,8 @@ class Client:
                 if (cmd_len >= max_cmds) and (self.registered and int(time()) - self.creationtime >= 1):
                     if self.registered:
                         IRCD.send_snomask(self, 'f',
-                                          f"*** Buffer Flood -- {self.name} ({self.user.username}@{self.user.realhost}) has reached their max buffer length ({cmd_len}) while the limit is {max_cmds}")
+                                          f"*** Buffer Flood -- {self.name} ({self.user.username}@{self.user.realhost}) has reached "
+                                          f"their max buffer length ({cmd_len}) while the limit is {max_cmds}")
                     self.exit("Excess Flood")
                     return
 
@@ -579,7 +579,8 @@ class Client:
                     if self.local.flood_penalty >= flood_penalty_treshhold:
                         if self.registered:
                             IRCD.send_snomask(self, 'f',
-                                              f"*** Flood -- {self.name} ({self.user.username}@{self.user.realhost}) has reached their max flood penalty ({self.local.flood_penalty}) while the limit is {flood_penalty_treshhold}")
+                                              f"*** Flood -- {self.name} ({self.user.username}@{self.user.realhost}) has reached "
+                                              f"their max flood penalty ({self.local.flood_penalty}) while the limit is {flood_penalty_treshhold}")
                         self.exit("Excess Flood")
                         return
 
@@ -871,7 +872,9 @@ class Client:
             logging.error(f"Wrong data type @ send(): {data}")
             return
         data = data.strip()
-        if not data or self.exitted or self not in Client.table or not self.local or not self.local.socket:
+        if not data or self.exitted \
+                or self not in Client.table or not self.local \
+                or not self.local.socket or (self.local.socket and self.local.socket.fileno() < 0):
             return
         if call_hook:
             data_list = data.split(' ')
@@ -883,37 +886,10 @@ class Client:
         if mtags := MessageTag.filter_tags(destination=self, mtags=mtags):
             data = f"@" + ';'.join([t.string for t in mtags]) + ' ' + data
 
-        write_time = 0
-        try:
-            # while self.local.in_write:
-            #     continue
-            self.local.in_write = 1
-            # FIXME: This line sometimes hangs when attempting to send to a TLS socket that hasn't sent any data yet.
-            #  It appears to be happening when using a non-TLS connection to a TLS port.
-            write_start = int(time())
-            send_data = bytes(data + "\r\n", "utf-8")
-            while 1:
-                try:
-                    self.local.bytes_sent += self.local.socket.send(bytes(data + "\r\n", "utf-8"))
-                    break
-                except (OpenSSL.SSL.WantReadError, OpenSSL.SSL.WantWriteError):
-                    select.select([self.local.socket], [], [])
-                    continue
-            write_done = int(time())
-            write_time = write_done - write_start
-            if write_time >= 1:
-                logging.warning(f"Writing to {self.name}[{self.ip}] took {write_time} seconds. Data: {data}")
-
-            self.local.in_write = 0
-            self.local.messages_sent += 1
-            debug_in = 0
-            if debug_in:
-                logging.debug(f"{self.name}[{self.ip}] < {data}")
-        except Exception as ex:
-            if write_time >= 1:
-                logging.warning(f"Failed to write to {self.name}[{self.ip}] after {write_time} seconds. Data: {data}")
-            self.exit(f"Write error: {str(ex)}")
-            return
+        if IRCD.use_poll:
+            # logging.debug(f"Setting {self.local.socket} flags to write mode")
+            IRCD.poller.modify(self.local.socket, select.POLLOUT)
+        self.local.sendbuffer += data + "\r\n"
 
         if self.user and 'o' not in self.user.modes:
             sendq_buffer_time = time()
@@ -922,6 +898,29 @@ class Client:
             sendq_buffer_time += delay
             self.local.sendq_buffer.append([sendq_buffer_time, data])
             self.check_flood()
+
+    def direct_send(self, data):
+        """ Directly sends data to a socket. """
+        write_time = 0
+        write_start = time()
+        debug_out = 0
+        try:
+            # test 8
+            self.local.socket.sendall(bytes(data, "utf-8"))
+            self.local.bytes_sent += len(data)
+            if debug_out:
+                logging.debug(f"{self.name}[{self.ip}] < {data}")
+            self.local.messages_sent += 1
+            write_done = time()
+            write_time = (write_done - write_start) * 1000
+            if write_time >= 100:
+                logging.debug(f"Writing to {self.name}[{self.ip}] took {write_time:.2f} millseconds seconds. Data: {data}")
+        except Exception as ex:
+            # logging.exception(ex)
+            if write_time >= 100:
+                logging.warning(f"Failed to write to {self.name}[{self.ip}] after {write_time} millseconds seconds. Data: {data}")
+            self.exit(f"Write error: {str(ex)}")
+            return
 
 
 @dataclass(eq=False)
@@ -943,9 +942,9 @@ class LocalClient:
     incoming: int = 0
     protoctl: list = field(default_factory=list)
     recvbuffer: [] = field(repr=False, default_factory=list)  # This is data that the client sends to the server.
+    sendbuffer: str = ''
     backbuffer: [] = field(repr=False, default_factory=list)
     sendq_buffer: [] = field(repr=False, default_factory=list)
-    in_write: int = 0
     auto_connect: int = 0
     handshake: int = 0
 
@@ -1709,6 +1708,7 @@ class IRCD:
     running: int = 0
     poller = None
     last_activity: int = 0
+    uid_iter = None
 
     NICKLEN: int = 0
     NICKCHARS: str = "abcdefghijklmnopqrstuvwxyz0123456789`^-_[]{}|\\"
@@ -1971,6 +1971,9 @@ class IRCD:
 
     @staticmethod
     def get_first_available_uid(client):
+        # The reason I'm still using this UID method instead of the superior one below,
+        # is because I want to fix an issue where ghost UIDs are still present somewhere, for some reason.
+        # I would first like to find out why that is.
         """ 456,976 possibilities. """
         uid_iter = itertools.product(string.ascii_uppercase, repeat=4)
         for i in uid_iter:
@@ -1979,6 +1982,19 @@ class IRCD:
                 return uid
         client.exit(f"UID exhaustion")
         logging.warning(f"No more available UIDs! This should never happen unless you have over 456,976 local users.")
+
+    @staticmethod
+    def initialise_uid_generator():
+        while 1:
+            yield from (IRCD.me.id + ''.join(i) for i in itertools.product(string.ascii_uppercase, repeat=6))
+
+    @staticmethod
+    def get_next_uid(client):
+        if not IRCD.uid_iter:
+            IRCD.uid_iter = IRCD.initialise_uid_generator()
+        while (uid := next(IRCD.uid_iter)) and IRCD.find_user(uid):
+            pass
+        return uid
 
     @staticmethod
     def get_random_interval():
@@ -2554,7 +2570,7 @@ class Numeric:
     RPL_WHOISCHANNELS = 319, "{} :{}"
     RPL_WHOISSPECIAL = 320, "{} :{}"
     RPL_LISTSTART = 321, "Channel :Users  Name"
-    RPL_LIST = 322, "{} {} :{}{}"
+    RPL_LIST = 322, "{} {} :{} {}"
     RPL_LISTEND = 323, ":End of /LIST"
     RPL_CHANNELMODEIS = 324, "{} +{} {}"
     RPL_CREATIONTIME = 329, "{} {}"

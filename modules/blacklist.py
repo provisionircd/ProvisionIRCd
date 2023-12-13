@@ -145,7 +145,7 @@ def post_load(module):
 
         required = ["dns", "action", "reason"]
         for item in required:
-            if not block.get_path(item):
+            if not block.get_path(dnsbl_name + ':' + item):
                 conf_error(f"Block '{block.name}' is missing item '{item}'", filename=block.filename)
 
         dnsbl_dns = block.get_single_value("dns")

@@ -100,6 +100,9 @@ def cmd_server(client, recv):
 
     logging.debug(f"SERVER from {client.name}: {recv}")
 
+    if len(recv) < 4:
+        return client.exit(f"Insufficient SERVER parameters")
+
     if not client.local.protoctl:
         logging.warning(f"Received SERVER message from {client.name} before PROTOCTL.")
         client.exit("No PROTOCTL message received")
