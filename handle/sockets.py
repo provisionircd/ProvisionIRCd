@@ -63,8 +63,8 @@ def post_accept(conn, client, listen_obj):
             logging.debug(f"Doing handshake")
             client.local.socket.do_handshake()
             logging.debug(f"Handshake done")
-        except Exception as ex:
-            logging.exception(ex)
+        except:
+            pass
         client.local.tls = listen_obj.tlsctx
     client.local.handshake = 1
     if IRCD.use_poll:
