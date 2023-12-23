@@ -66,6 +66,7 @@ def post_accept(conn, client, listen_obj):
         except Exception as ex:
             logging.exception(ex)
         client.local.tls = listen_obj.tlsctx
+    client.local.handshake = 1
     if IRCD.use_poll:
         IRCD.poller.register(conn, select.POLLIN | select.POLLPRI | select.POLLHUP | select.POLLERR | select.EPOLLRDNORM | select.EPOLLRDHUP)
     logging.debug(f"Accepted new socket on {listen_obj.port}: {client.ip} -- fd: {client.local.socket.fileno()}")
@@ -86,7 +87,6 @@ def post_accept(conn, client, listen_obj):
         make_user(client)
     if client.server:
         IRCD.run_hook(Hook.SERVER_LINK_IN, client)
-    client.local.handshake = 1
 
 
 def accept_socket(sock, listen_obj):
