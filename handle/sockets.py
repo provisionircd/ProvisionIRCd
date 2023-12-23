@@ -60,9 +60,7 @@ def do_tls_handshake(client):
 def post_accept(conn, client, listen_obj):
     if listen_obj.tls:
         try:
-            logging.debug(f"Doing handshake")
             client.local.socket.do_handshake()
-            logging.debug(f"Handshake done")
         except:
             pass
         client.local.tls = listen_obj.tlsctx
