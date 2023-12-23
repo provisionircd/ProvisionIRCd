@@ -87,7 +87,6 @@ def post_accept(conn, client, listen_obj):
     if client.server:
         IRCD.run_hook(Hook.SERVER_LINK_IN, client)
     client.local.handshake = 1
-    logging.debug(f"Handshake variable set. Client is now ready for reading/writing.")
 
 
 def accept_socket(sock, listen_obj):
@@ -191,7 +190,7 @@ def post_sockread(client, recv):
             continue
 
         # TODO: REMOVE THIS LINE
-        debug_out = 1
+        debug_out = 0
         if line.split()[0].lower() in ["ping", "pong"] and client.registered:
             debug_out = 0
         if len(line.split()) > 1 and line.split()[1].lower() in ["ping", "pong"] and client.registered:

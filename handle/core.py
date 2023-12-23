@@ -9,6 +9,7 @@ import logging
 import os
 import re
 import random
+import ssl
 import string
 import time
 import socket
@@ -567,7 +568,8 @@ class Client:
                 if (cmd_len >= max_cmds) and (self.registered and int(time()) - self.creationtime >= 1):
                     if self.registered:
                         IRCD.send_snomask(self, 'f',
-                                          f"*** Buffer Flood -- {self.name} ({self.user.username}@{self.user.realhost}) has reached their max buffer length ({cmd_len}) while the limit is {max_cmds}")
+                                          f"*** Buffer Flood -- {self.name} ({self.user.username}@{self.user.realhost}) has reached "
+                                          f"their max buffer length ({cmd_len}) while the limit is {max_cmds}")
                     self.exit("Excess Flood")
                     return
 
@@ -579,7 +581,8 @@ class Client:
                     if self.local.flood_penalty >= flood_penalty_treshhold:
                         if self.registered:
                             IRCD.send_snomask(self, 'f',
-                                              f"*** Flood -- {self.name} ({self.user.username}@{self.user.realhost}) has reached their max flood penalty ({self.local.flood_penalty}) while the limit is {flood_penalty_treshhold}")
+                                              f"*** Flood -- {self.name} ({self.user.username}@{self.user.realhost}) has reached "
+                                              f"their max flood penalty ({self.local.flood_penalty}) while the limit is {flood_penalty_treshhold}")
                         self.exit("Excess Flood")
                         return
 
