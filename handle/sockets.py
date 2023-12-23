@@ -98,7 +98,6 @@ def accept_socket(sock, listen_obj):
     client.local.last_msg_received = int(time())
     client.local.incoming = 1
     client.ip, client.port = addr
-    client.local.socket.setblocking(0)
     # post_accept(conn, client, listen_obj)
     IRCD.run_parallel_function(post_accept, args=(conn, client, listen_obj))
 
