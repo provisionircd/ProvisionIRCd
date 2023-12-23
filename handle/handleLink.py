@@ -158,6 +158,7 @@ def start_outgoing_link(link, tls=0, auto_connect=0):
         client.name = link.name
         client.ip = host
         client.port = port
+        client.handshake = 1
         if tls and IRCD.default_tlsctx:
             client.local.tls = IRCD.default_tlsctx
             client.local.socket = OpenSSL.SSL.Connection(IRCD.default_tlsctx, socket=client.local.socket)
