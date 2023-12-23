@@ -294,7 +294,7 @@ class Client:
 
         logging.debug(f"Syncing user {self.name} to all locally connected servers.")
         if cause:
-            logging.warning(f"Cause of {self.name} sync: {cause}")
+            logging.debug(f"Cause of {self.name} sync: {cause}")
 
         sync_modes = ''
         for mode in self.user.modes:
