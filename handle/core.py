@@ -891,12 +891,12 @@ class Client:
             # FIXME: This line sometimes hangs when attempting to send to a TLS socket that hasn't sent any data yet.
             #  It appears to be happening when using a non-TLS connection to a TLS port.
             write_start = time() * 1000
-            send_data = bytes(data + "\r\n", "utf-8")
             while 1:
                 try:
                     self.local.bytes_sent += self.local.socket.send(bytes(data + "\r\n", "utf-8"))
                     break
                 except (OpenSSL.SSL.WantReadError, OpenSSL.SSL.WantWriteError):
+                    logging.debug(f"Not sending: {data}")
                     select.select([self.local.socket], [], [])
                     continue
             write_done = time() * 1000
