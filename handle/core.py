@@ -186,7 +186,7 @@ class Client:
         return cap in self.local.caps
 
     def has_permission(self, permission_path: str):
-        if self.server or not self.local:
+        if self.server or not self.local or not self.user:
             return 1
         if not self.user.operlogin or 'o' not in self.user.modes:
             return 0
@@ -890,7 +890,7 @@ class Client:
             self.local.in_write = 1
             # FIXME: This line sometimes hangs when attempting to send to a TLS socket that hasn't sent any data yet.
             #  It appears to be happening when using a non-TLS connection to a TLS port.
-            write_start = int(time())
+            write_start = time() * 1000
             send_data = bytes(data + "\r\n", "utf-8")
             while 1:
                 try:
@@ -899,10 +899,10 @@ class Client:
                 except (OpenSSL.SSL.WantReadError, OpenSSL.SSL.WantWriteError):
                     select.select([self.local.socket], [], [])
                     continue
-            write_done = int(time())
+            write_done = time() * 1000
             write_time = write_done - write_start
-            if write_time >= 1:
-                logging.warning(f"Writing to {self.name}[{self.ip}] took {write_time} seconds. Data: {data}")
+            if write_time >= 10:
+                logging.warning(f"Writing to {self.name}[{self.ip}] took {write_time:.2f} milliseconds seconds. Data: {data}")
 
             self.local.in_write = 0
             self.local.messages_sent += 1
@@ -1709,6 +1709,7 @@ class IRCD:
     running: int = 0
     poller = None
     last_activity: int = 0
+    uid_iter = None
 
     NICKLEN: int = 0
     NICKCHARS: str = "abcdefghijklmnopqrstuvwxyz0123456789`^-_[]{}|\\"
@@ -1971,6 +1972,9 @@ class IRCD:
 
     @staticmethod
     def get_first_available_uid(client):
+        # The reason I'm still using this UID method instead of the superior one below,
+        # is because I want to fix an issue where ghost UIDs are still present somewhere, for some reason.
+        # I would first like to find out why that is.
         """ 456,976 possibilities. """
         uid_iter = itertools.product(string.ascii_uppercase, repeat=4)
         for i in uid_iter:
@@ -1979,6 +1983,19 @@ class IRCD:
                 return uid
         client.exit(f"UID exhaustion")
         logging.warning(f"No more available UIDs! This should never happen unless you have over 456,976 local users.")
+
+    @staticmethod
+    def initialise_uid_generator():
+        while 1:
+            yield from (IRCD.me.id + ''.join(i) for i in itertools.product(string.ascii_uppercase, repeat=6))
+
+    @staticmethod
+    def get_next_uid(client):
+        if not IRCD.uid_iter:
+            IRCD.uid_iter = IRCD.initialise_uid_generator()
+        while (uid := next(IRCD.uid_iter)) and IRCD.find_user(uid):
+            pass
+        return uid
 
     @staticmethod
     def get_random_interval():
@@ -2554,7 +2571,7 @@ class Numeric:
     RPL_WHOISCHANNELS = 319, "{} :{}"
     RPL_WHOISSPECIAL = 320, "{} :{}"
     RPL_LISTSTART = 321, "Channel :Users  Name"
-    RPL_LIST = 322, "{} {} :{}{}"
+    RPL_LIST = 322, "{} {} :{} {}"
     RPL_LISTEND = 323, ":End of /LIST"
     RPL_CHANNELMODEIS = 324, "{} +{} {}"
     RPL_CREATIONTIME = 329, "{} {}"

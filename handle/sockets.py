@@ -1,4 +1,4 @@
-from time import time, sleep
+from time import time
 
 import select
 from OpenSSL import SSL
@@ -60,25 +60,25 @@ def do_tls_handshake(client):
 def post_accept(conn, client, listen_obj):
     if listen_obj.tls:
         try:
+            logging.debug(f"Doing handshake")
             client.local.socket.do_handshake()
-        except:
-            pass
+            logging.debug(f"Handshake done")
+        except Exception as ex:
+            logging.exception(ex)
         client.local.tls = listen_obj.tlsctx
-    client.local.handshake = 1
     if IRCD.use_poll:
         IRCD.poller.register(conn, select.POLLIN | select.POLLPRI | select.POLLHUP | select.POLLERR | select.EPOLLRDNORM | select.EPOLLRDHUP)
     logging.debug(f"Accepted new socket on {listen_obj.port}: {client.ip} -- fd: {client.local.socket.fileno()}")
     if "servers" in listen_obj.options:
         if IRCD.current_link_sync and IRCD.current_link_sync != client:
-            data = f"New server client incoming ({client.ip}:{client.port}) but we are currently already in a link process."
-            log_string = data
             client.exit(f"Already processing a link, try again.")
+            data = f"New server client incoming ({client.ip}:{listen_obj.port}) but we are currently already processing an incoming server."
             if IRCD.current_link_sync.ip == client.ip \
                     and IRCD.current_link_sync.port in [int(lis.port) for lis in IRCD.configuration.listen] \
                     and int(time()) == IRCD.current_link_sync.creationtime:
                 data += f" Are you connecting to yourself? Make sure the outgoing IP is correct in the '{IRCD.current_link_sync.name}' link block."
-            IRCD.log(IRCD.me, "error", "link", "LINK_IN_FAIL", data, sync=0)
-            logging.warning(data)
+                IRCD.log(IRCD.me, "warn", "link", "LINK_IN_FAIL", data, sync=0)
+                logging.warning(data)
             return
         IRCD.current_link_sync = client
         make_server(client)
@@ -86,11 +86,11 @@ def post_accept(conn, client, listen_obj):
         make_user(client)
     if client.server:
         IRCD.run_hook(Hook.SERVER_LINK_IN, client)
+    client.local.handshake = 1
 
 
 def accept_socket(sock, listen_obj):
     conn, addr = sock.accept()
-    listen_obj.accepting = 0
     client = make_client(direction=None, uplink=IRCD.me)
     client.local.socket = conn
     client.local.listen = listen_obj
@@ -98,6 +98,8 @@ def accept_socket(sock, listen_obj):
     client.local.last_msg_received = int(time())
     client.local.incoming = 1
     client.ip, client.port = addr
+    client.local.socket.setblocking(0)
+    # post_accept(conn, client, listen_obj)
     IRCD.run_parallel_function(post_accept, args=(conn, client, listen_obj))
 
 
@@ -333,7 +335,7 @@ def handle_connections():
                         except:
                             recv = ''
                         if not recv:
-                            client.exit("Read error")
+                            client.exit("Read error: empty recv")
                             continue
                         post_sockread(client, recv)
                     continue

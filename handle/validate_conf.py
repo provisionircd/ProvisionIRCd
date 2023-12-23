@@ -570,7 +570,7 @@ def config_test_link(block):
     required = ["password", "class"]
     ok = 1
     for item in required:
-        if not block.get_path(item):
+        if not block.get_path(link_name + ':' + item):
             conf_error(f"Block '{block.name} {block.value}' is missing item '{item}'", block)
             ok = 0
     if not (outgoing_items := block.get_items("outgoing")) and not (block.get_items("incoming")):

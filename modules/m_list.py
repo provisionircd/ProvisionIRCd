@@ -71,7 +71,10 @@ def cmd_list(client, recv):
                 client.sendnumeric(Numeric.RPL_LIST, "*", len(channel.users))
             continue
         else:
-            client.sendnumeric(Numeric.RPL_LIST, channel.name, channel.membercount, "[" + channel.modes + "]", channel.topic)
+            list_modes = ''
+            if channel.modes:
+                list_modes = "[+" + channel.modes + "]"
+            client.sendnumeric(Numeric.RPL_LIST, channel.name, channel.membercount, list_modes, channel.topic)
     client.sendnumeric(Numeric.RPL_LISTEND)
     client.flood_safe_off()
 
