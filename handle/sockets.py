@@ -293,7 +293,6 @@ def handle_connections():
                                 continue
                             if not client.local.handshake:
                                 # Handshake not finished yet - waiting.
-                                logging.debug(f"Handshake not finished yet - waiting.")
                                 continue
 
                             try:
