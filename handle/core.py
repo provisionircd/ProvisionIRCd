@@ -9,7 +9,6 @@ import logging
 import os
 import re
 import random
-import ssl
 import string
 import time
 import socket
