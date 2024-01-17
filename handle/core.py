@@ -457,7 +457,6 @@ class Client:
             IRCD.local_client_count -= 1
             IRCD.remove_delay_client(self)
             self.local.recvbuffer = []
-            self.local.in_write = 0
             if reason and self.user:
                 try:
                     self.local.socket.send(bytes(f"ERROR :Closing link: {self.name}[{self.user.realhost}] {reason}\r\n", "utf-8"))
@@ -885,11 +884,6 @@ class Client:
         if mtags := MessageTag.filter_tags(destination=self, mtags=mtags):
             data = f"@" + ';'.join([t.string for t in mtags]) + ' ' + data
 
-        self.local.in_write = 1
-        # FIXME: This line sometimes hangs when attempting to send to a TLS socket that hasn't sent any data yet.
-        #  It appears to be happening when using a non-TLS connection to a TLS port.
-        write_start = time() * 1000
-
         if IRCD.use_poll:
             IRCD.poller.modify(self.local.socket, select.POLLOUT)
         self.local.sendbuffer += data + "\r\n"
@@ -915,6 +909,7 @@ class Client:
                 logging.warning(f"[direct_send()] Writing to {self.name}[{self.ip}] took {write_time:.2f} milliseconds seconds. Data: {data}")
                 logging.warning(f"However, this should not have frozen the IRCd.")
         except Exception as ex:
+            logging.exception(ex)
             if write_time >= 1:
                 logging.warning(f"Failed to write to {self.name}[{self.ip}] after {write_time} seconds. Data: {data}")
             self.exit(f"Write error: {str(ex)}")
@@ -943,7 +938,6 @@ class LocalClient:
     sendbuffer: str = ''
     backbuffer: [] = field(repr=False, default_factory=list)
     sendq_buffer: [] = field(repr=False, default_factory=list)
-    in_write: int = 0
     auto_connect: int = 0
     handshake: int = 0
 
