@@ -900,7 +900,7 @@ class Client:
         """ Directly sends data to a socket. """
         write_time = 0
         write_start = time() * 1000
-        debug_out = 1
+        debug_out = 0
         try:
             self.local.bytes_sent += self.local.socket.send(bytes(data, "utf-8"))
             if debug_out:
