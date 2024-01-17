@@ -265,7 +265,7 @@ def handle_connections():
                 fdVsEvent = IRCD.poller.poll(1000)
                 for fd, Event in fdVsEvent:
                     # https://stackoverflow.com/a/42612778
-                    logging.debug(f"New event on fd {fd}: {Event}")
+                    # logging.debug(f"New event on fd {fd}: {Event}")
                     if Event & select.POLLNVAL:
                         try:
                             IRCD.poller.unregister(fd)
@@ -310,7 +310,6 @@ def handle_connections():
                         continue
 
                     if Event & (select.POLLOUT | select.EPOLLOUT):
-                        logging.debug(f"Write ready?")
                         if not (client := find_client_from_socket(sock)):
                             close_socket(sock)
                             continue
