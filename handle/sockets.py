@@ -316,7 +316,8 @@ def handle_connections():
 
                         sendbuffer = client.local.sendbuffer
                         client.local.sendbuffer = ''
-                        IRCD.run_parallel_function(client.direct_send, args=(sendbuffer,))
+                        client.direct_send(sendbuffer)
+                        # IRCD.run_parallel_function(client.direct_send, args=(sendbuffer,))
                         IRCD.poller.modify(sock, select.POLLIN | select.POLLPRI | select.POLLHUP | select.POLLERR | select.EPOLLRDNORM | select.EPOLLRDHUP)
 
                     elif Event & (select.POLLHUP | select.POLLERR | select.EPOLLRDHUP):
