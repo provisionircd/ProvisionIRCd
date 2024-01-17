@@ -64,8 +64,6 @@ def post_accept(conn, client, listen_obj):
         except:
             pass
         client.local.tls = listen_obj.tlsctx
-    # if IRCD.use_poll:
-    #     IRCD.poller.register(conn, select.POLLIN | select.POLLPRI | select.POLLHUP | select.POLLERR | select.EPOLLRDNORM | select.EPOLLRDHUP)
     logging.debug(f"Accepted new socket on {listen_obj.port}: {client.ip} -- fd: {client.local.socket.fileno()}")
     if "servers" in listen_obj.options:
         if IRCD.current_link_sync and IRCD.current_link_sync != client:
@@ -89,6 +87,8 @@ def post_accept(conn, client, listen_obj):
         client.local.socket.setblocking(0)
     except OSError:
         pass
+    if IRCD.use_poll:
+        IRCD.poller.register(conn, select.POLLIN | select.POLLPRI | select.POLLHUP | select.POLLERR | select.EPOLLRDNORM | select.EPOLLRDHUP)
 
 
 def accept_socket(sock, listen_obj):
@@ -100,8 +100,6 @@ def accept_socket(sock, listen_obj):
     client.local.last_msg_received = int(time())
     client.local.incoming = 1
     client.ip, client.port = addr
-    if IRCD.use_poll:
-        IRCD.poller.register(conn, select.POLLIN | select.POLLPRI | select.POLLHUP | select.POLLERR | select.EPOLLRDNORM | select.EPOLLRDHUP)
     IRCD.run_parallel_function(post_accept, args=(conn, client, listen_obj))
 
 
