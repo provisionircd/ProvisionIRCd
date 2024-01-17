@@ -267,6 +267,7 @@ def handle_connections():
                     # https://stackoverflow.com/a/42612778
                     logging.debug(f"New event on fd {fd}: {Event}")
                     if Event & select.POLLNVAL:
+                        logging.debug(f"POLLNVAL")
                         try:
                             IRCD.poller.unregister(fd)
                         except KeyError:
@@ -281,7 +282,7 @@ def handle_connections():
                         continue
 
                     if Event & (select.POLLIN | select.POLLPRI | select.EPOLLRDNORM):
-                        # logging.debug(f"POLLIN or POLLPRI or EPOLLRDNORM")
+                        logging.debug(f"POLLIN or POLLPRI or EPOLLRDNORM")
                         if sock in listen_sockets:
                             if not (listen_obj := find_listen_obj_from_socket(sock)):
                                 logging.debug(f"Attempting to close socket because no listen_obj found")
