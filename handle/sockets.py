@@ -281,7 +281,7 @@ def handle_connections():
                             pass
                         continue
 
-                    if Event & (select.POLLIN | select.POLLPRI | select.EPOLLRDNORM):
+                    if Event & (select.POLLIN | select.POLLPRI):  # | select.EPOLLRDNORM):
                         logging.debug(f"POLLIN or POLLPRI or EPOLLRDNORM")
                         if sock in listen_sockets:
                             if not (listen_obj := find_listen_obj_from_socket(sock)):
