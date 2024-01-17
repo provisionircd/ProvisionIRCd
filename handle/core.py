@@ -906,8 +906,7 @@ class Client:
             write_done = time() * 1000
             write_time = write_done - write_start
             if write_time >= 10:
-                logging.warning(f"[direct_send()] Writing to {self.name}[{self.ip}] took {write_time:.2f} milliseconds seconds. Data: {data}")
-                logging.warning(f"However, this should not have frozen the IRCd.")
+                logging.warning(f"Writing to {self.name}[{self.ip}] took {write_time:.2f} milliseconds seconds. Data: {data}")
         except Exception as ex:
             logging.exception(ex)
             if write_time >= 1:
