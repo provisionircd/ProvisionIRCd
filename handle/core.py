@@ -901,7 +901,10 @@ class Client:
         write_time = 0
         write_start = time() * 1000
         try:
+            debug_out = 1
             self.local.bytes_sent += self.local.socket.send(bytes(data + "\r\n", "utf-8"))
+            if debug_out:
+                ...
             self.local.messages_sent += 1
             write_done = time() * 1000
             write_time = write_done - write_start

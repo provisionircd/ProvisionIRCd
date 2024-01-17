@@ -315,6 +315,7 @@ def handle_connections():
                             continue
 
                         sendbuffer = client.local.sendbuffer
+                        logging.debug(f"Sending: {sendbuffer}")
                         client.local.sendbuffer = ''
                         client.direct_send(sendbuffer)
                         # IRCD.run_parallel_function(client.direct_send, args=(sendbuffer,))
