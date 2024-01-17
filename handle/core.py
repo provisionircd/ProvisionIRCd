@@ -891,7 +891,7 @@ class Client:
         write_start = time() * 1000
 
         if IRCD.use_poll:
-            IRCD.poller.modify(self.local.socket, select.POLLIN | select.POLLPRI | select.POLLHUP | select.POLLERR | select.EPOLLRDNORM | select.EPOLLRDHUP)
+            IRCD.poller.modify(self.local.socket, select.POLLOUT)
         self.local.sendbuffer += data + "\r\n"
 
         if self.user and 'o' not in self.user.modes:
