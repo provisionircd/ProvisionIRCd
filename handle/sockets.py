@@ -85,10 +85,10 @@ def post_accept(conn, client, listen_obj):
     if client.server:
         IRCD.run_hook(Hook.SERVER_LINK_IN, client)
     client.local.handshake = 1
-    # try:
-    #     client.local.socket.setblocking(0)
-    # except OSError:
-    #     pass
+    try:
+        client.local.socket.setblocking(0)
+    except OSError:
+        pass
 
 
 def accept_socket(sock, listen_obj):
@@ -318,6 +318,7 @@ def handle_connections():
                         sendbuffer = client.local.sendbuffer
                         client.local.sendbuffer = ''
                         IRCD.run_parallel_function(client.direct_send, args=(sendbuffer,))
+                        IRCD.poller.modify(sock, select.POLLIN | select.POLLPRI | select.POLLHUP | select.POLLERR | select.EPOLLRDNORM | select.EPOLLRDHUP)
 
                     elif Event & (select.POLLHUP | select.POLLERR | select.EPOLLRDHUP):
                         if not (client := find_client_from_socket(sock)):

@@ -889,6 +889,9 @@ class Client:
         # FIXME: This line sometimes hangs when attempting to send to a TLS socket that hasn't sent any data yet.
         #  It appears to be happening when using a non-TLS connection to a TLS port.
         write_start = time() * 1000
+
+        if IRCD.use_poll:
+            IRCD.poller.modify(self.local.socket, select.POLLIN | select.POLLPRI | select.POLLHUP | select.POLLERR | select.EPOLLRDNORM | select.EPOLLRDHUP)
         self.local.sendbuffer += data + "\r\n"
 
         if self.user and 'o' not in self.user.modes:
