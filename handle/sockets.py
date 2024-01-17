@@ -309,7 +309,7 @@ def handle_connections():
                             post_sockread(client, recv)
                         continue
 
-                    elif Event & select.POLLOUT:
+                    elif Event & (select.POLLOUT | select.EPOLLOUT):
                         logging.debug(f"Write ready?")
                         if not (client := find_client_from_socket(sock)):
                             close_socket(sock)
