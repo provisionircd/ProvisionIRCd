@@ -100,6 +100,7 @@ def accept_socket(sock, listen_obj):
     client.local.last_msg_received = int(time())
     client.local.incoming = 1
     client.ip, client.port = addr
+    logging.debug(f"[early] Socket accepted.")
     IRCD.run_parallel_function(post_accept, args=(conn, client, listen_obj))
 
 
@@ -267,7 +268,6 @@ def handle_connections():
                     # https://stackoverflow.com/a/42612778
                     logging.debug(f"New event on fd {fd}: {Event}")
                     if Event & select.POLLNVAL:
-                        logging.debug(f"POLLNVAL")
                         try:
                             IRCD.poller.unregister(fd)
                         except KeyError:
@@ -281,8 +281,8 @@ def handle_connections():
                             pass
                         continue
 
-                    if Event & (select.POLLIN | select.POLLPRI):  # | select.EPOLLRDNORM):
-                        logging.debug(f"POLLIN or POLLPRI or EPOLLRDNORM")
+                    if Event & (select.POLLIN | select.POLLPRI | select.EPOLLRDNORM):
+                        # logging.debug(f"POLLIN or POLLPRI or EPOLLRDNORM")
                         if sock in listen_sockets:
                             if not (listen_obj := find_listen_obj_from_socket(sock)):
                                 logging.debug(f"Attempting to close socket because no listen_obj found")
@@ -310,7 +310,7 @@ def handle_connections():
                             post_sockread(client, recv)
                         continue
 
-                    if Event & (select.POLLOUT | select.EPOLLOUT) or Event == 65:
+                    if Event & (select.POLLOUT | select.EPOLLOUT):
                         logging.debug(f"Write ready?")
                         if not (client := find_client_from_socket(sock)):
                             close_socket(sock)
