@@ -64,8 +64,8 @@ def post_accept(conn, client, listen_obj):
         except:
             pass
         client.local.tls = listen_obj.tlsctx
-    if IRCD.use_poll:
-        IRCD.poller.register(conn, select.POLLIN | select.POLLPRI | select.POLLHUP | select.POLLERR | select.EPOLLRDNORM | select.EPOLLRDHUP)
+    # if IRCD.use_poll:
+    #     IRCD.poller.register(conn, select.POLLIN | select.POLLPRI | select.POLLHUP | select.POLLERR | select.EPOLLRDNORM | select.EPOLLRDHUP)
     logging.debug(f"Accepted new socket on {listen_obj.port}: {client.ip} -- fd: {client.local.socket.fileno()}")
     if "servers" in listen_obj.options:
         if IRCD.current_link_sync and IRCD.current_link_sync != client:
@@ -100,6 +100,8 @@ def accept_socket(sock, listen_obj):
     client.local.last_msg_received = int(time())
     client.local.incoming = 1
     client.ip, client.port = addr
+    if IRCD.use_poll:
+        IRCD.poller.register(conn, select.POLLIN | select.POLLPRI | select.POLLHUP | select.POLLERR | select.EPOLLRDNORM | select.EPOLLRDHUP)
     IRCD.run_parallel_function(post_accept, args=(conn, client, listen_obj))
 
 
@@ -262,7 +264,7 @@ def handle_connections():
             write_clients = [client.local.socket for client in available_clients if client.local.handshake and client.local.sendbuffer]
 
             if IRCD.use_poll:
-                fdVsEvent = IRCD.poller.poll(1000)
+                fdVsEvent = IRCD.poller.poll(10000)
                 for fd, Event in fdVsEvent:
                     # https://stackoverflow.com/a/42612778
                     # logging.debug(f"New event on fd {fd}: {Event}")
