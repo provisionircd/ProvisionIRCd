@@ -85,10 +85,10 @@ def post_accept(conn, client, listen_obj):
     if client.server:
         IRCD.run_hook(Hook.SERVER_LINK_IN, client)
     client.local.handshake = 1
-    try:
-        client.local.socket.setblocking(0)
-    except OSError:
-        pass
+    # try:
+    #     client.local.socket.setblocking(0)
+    # except OSError:
+    #     pass
 
 
 def accept_socket(sock, listen_obj):
@@ -100,7 +100,6 @@ def accept_socket(sock, listen_obj):
     client.local.last_msg_received = int(time())
     client.local.incoming = 1
     client.ip, client.port = addr
-    logging.debug(f"[early] Socket accepted.")
     IRCD.run_parallel_function(post_accept, args=(conn, client, listen_obj))
 
 
