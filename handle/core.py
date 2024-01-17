@@ -902,7 +902,7 @@ class Client:
         write_start = time() * 1000
         debug_out = 1
         try:
-            self.local.bytes_sent += self.local.socket.send(bytes(data + "\r\n", "utf-8"))
+            self.local.bytes_sent += self.local.socket.send(bytes(data, "utf-8"))
             if debug_out:
                 logging.debug(f"{self.name}[{self.ip}] < {data}")
             self.local.messages_sent += 1
