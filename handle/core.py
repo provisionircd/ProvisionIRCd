@@ -885,37 +885,11 @@ class Client:
         if mtags := MessageTag.filter_tags(destination=self, mtags=mtags):
             data = f"@" + ';'.join([t.string for t in mtags]) + ' ' + data
 
-        write_time = 0
-        try:
-            # while self.local.in_write:
-            #     continue
-            self.local.in_write = 1
-            # FIXME: This line sometimes hangs when attempting to send to a TLS socket that hasn't sent any data yet.
-            #  It appears to be happening when using a non-TLS connection to a TLS port.
-            write_start = time() * 1000
-            while 1:
-                try:
-                    self.local.bytes_sent += self.local.socket.send(bytes(data + "\r\n", "utf-8"))
-                    break
-                except (OpenSSL.SSL.WantReadError, OpenSSL.SSL.WantWriteError):
-                    logging.debug(f"Not sending: {data}")
-                    select.select([self.local.socket], [], [])
-                    continue
-            write_done = time() * 1000
-            write_time = write_done - write_start
-            if write_time >= 10:
-                logging.warning(f"Writing to {self.name}[{self.ip}] took {write_time:.2f} milliseconds seconds. Data: {data}")
-
-            self.local.in_write = 0
-            self.local.messages_sent += 1
-            debug_in = 0
-            if debug_in:
-                logging.debug(f"{self.name}[{self.ip}] < {data}")
-        except Exception as ex:
-            if write_time >= 1:
-                logging.warning(f"Failed to write to {self.name}[{self.ip}] after {write_time} seconds. Data: {data}")
-            self.exit(f"Write error: {str(ex)}")
-            return
+        self.local.in_write = 1
+        # FIXME: This line sometimes hangs when attempting to send to a TLS socket that hasn't sent any data yet.
+        #  It appears to be happening when using a non-TLS connection to a TLS port.
+        write_start = time() * 1000
+        self.local.sendbuffer += data + "\r\n"
 
         if self.user and 'o' not in self.user.modes:
             sendq_buffer_time = time()
@@ -924,6 +898,24 @@ class Client:
             sendq_buffer_time += delay
             self.local.sendq_buffer.append([sendq_buffer_time, data])
             self.check_flood()
+
+    def direct_send(self, data):
+        """ Directly sends data to a socket. """
+        write_time = 0
+        write_start = time() * 1000
+        try:
+            self.local.bytes_sent += self.local.socket.send(bytes(data + "\r\n", "utf-8"))
+            self.local.messages_sent += 1
+            write_done = time() * 1000
+            write_time = write_done - write_start
+            if write_time >= 10:
+                logging.warning(f"[direct_send()] Writing to {self.name}[{self.ip}] took {write_time:.2f} milliseconds seconds. Data: {data}")
+                logging.warning(f"However, this should not have frozen the IRCd.")
+        except Exception as ex:
+            if write_time >= 1:
+                logging.warning(f"Failed to write to {self.name}[{self.ip}] after {write_time} seconds. Data: {data}")
+            self.exit(f"Write error: {str(ex)}")
+            return
 
 
 @dataclass(eq=False)
@@ -945,6 +937,7 @@ class LocalClient:
     incoming: int = 0
     protoctl: list = field(default_factory=list)
     recvbuffer: [] = field(repr=False, default_factory=list)  # This is data that the client sends to the server.
+    sendbuffer: str = ''
     backbuffer: [] = field(repr=False, default_factory=list)
     sendq_buffer: [] = field(repr=False, default_factory=list)
     in_write: int = 0

@@ -85,6 +85,10 @@ def post_accept(conn, client, listen_obj):
     if client.server:
         IRCD.run_hook(Hook.SERVER_LINK_IN, client)
     client.local.handshake = 1
+    try:
+        client.local.socket.setblocking(0)
+    except OSError:
+        pass
 
 
 def accept_socket(sock, listen_obj):
@@ -255,6 +259,7 @@ def handle_connections():
             listen_sockets = [listen.sock for listen in IRCD.configuration.listen if listen.listening]
             available_clients = [client for client in IRCD.local_clients() if client.local.socket and client.local.socket.fileno() > 0 and not client.exitted]
             read_clients = [client.local.socket for client in available_clients if client.local.handshake]
+            write_clients = [client.local.socket for client in available_clients if client.local.handshake and client.local.sendbuffer]
 
             if IRCD.use_poll:
                 fdVsEvent = IRCD.poller.poll(1000)
@@ -304,6 +309,15 @@ def handle_connections():
                             post_sockread(client, recv)
                         continue
 
+                    elif Event & select.POLLOUT:
+                        if not (client := find_client_from_socket(sock)):
+                            close_socket(sock)
+                            continue
+
+                        sendbuffer = client.local.sendbuffer
+                        client.local.sendbuffer = ''
+                        IRCD.run_parallel_function(client.direct_send, args=(sendbuffer,))
+
                     elif Event & (select.POLLHUP | select.POLLERR | select.EPOLLRDHUP):
                         if not (client := find_client_from_socket(sock)):
                             close_socket(sock)
@@ -312,7 +326,7 @@ def handle_connections():
                         continue
 
             else:
-                read, write, error = select.select(listen_sockets + read_clients, [], listen_sockets + read_clients, 1)
+                read, write, error = select.select(listen_sockets + read_clients, write_clients, listen_sockets + read_clients, 1)
                 for socket in read:
                     if socket in listen_sockets:
                         if not (listen_obj := find_listen_obj_from_socket(socket)):
@@ -334,6 +348,15 @@ def handle_connections():
                             continue
                         post_sockread(client, recv)
                     continue
+
+                for socket in write:
+                    if not (client := find_client_from_socket(socket)):
+                        close_socket(socket)
+                        continue
+
+                    sendbuffer = client.local.sendbuffer
+                    client.local.sendbuffer = ''
+                    IRCD.run_parallel_function(client.direct_send, args=(sendbuffer,))
 
                 for socket in error:
                     if not (client := find_client_from_socket(socket)):

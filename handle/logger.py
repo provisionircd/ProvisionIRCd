@@ -207,8 +207,8 @@ class IRCDLogger:
             gb_size = float(mb_size) / 1000
             gb_size = "%.2f" % gb_size
             logging.warning(f'Total log size limit exceeds 10GB: {gb_size} GB')
-            logging.warning('Pausing for 5 seconds for visibility...')
-            time.sleep(5)
+            # logging.warning('Pausing for 5 seconds for visibility...')
+            # time.sleep(5)
 
     @staticmethod
     def fork():
