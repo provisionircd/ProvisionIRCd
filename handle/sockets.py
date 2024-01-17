@@ -58,14 +58,14 @@ def do_tls_handshake(client):
 
 
 def post_accept(conn, client, listen_obj):
+    if IRCD.use_poll:
+        IRCD.poller.register(conn, select.POLLIN | select.POLLPRI | select.POLLHUP | select.POLLERR | select.EPOLLRDNORM | select.EPOLLRDHUP)
     if listen_obj.tls:
         try:
             client.local.socket.do_handshake()
         except:
             pass
         client.local.tls = listen_obj.tlsctx
-    if IRCD.use_poll:
-        IRCD.poller.register(conn, select.POLLIN | select.POLLPRI | select.POLLHUP | select.POLLERR | select.EPOLLRDNORM | select.EPOLLRDHUP)
     logging.debug(f"Accepted new socket on {listen_obj.port}: {client.ip} -- fd: {client.local.socket.fileno()}")
     if "servers" in listen_obj.options:
         if IRCD.current_link_sync and IRCD.current_link_sync != client:
