@@ -309,7 +309,7 @@ def handle_connections():
                             post_sockread(client, recv)
                         continue
 
-                    if Event & (select.POLLOUT | select.EPOLLOUT):
+                    if Event & (select.POLLOUT | select.EPOLLOUT) or Event == 65:
                         logging.debug(f"Write ready?")
                         if not (client := find_client_from_socket(sock)):
                             close_socket(sock)
