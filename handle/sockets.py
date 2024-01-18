@@ -321,7 +321,7 @@ def handle_connections():
                         client.local.sendbuffer = ''
                         client.direct_send(sendbuffer)
                         # IRCD.run_parallel_function(client.direct_send, args=(sendbuffer,))
-                        logging.debug(f"Setting {sock} flags to read mode")
+                        # logging.debug(f"Setting {sock} flags to read mode")
                         IRCD.poller.modify(sock, select.POLLIN | select.POLLPRI | select.POLLHUP | select.POLLERR | select.EPOLLRDNORM | select.EPOLLRDHUP)
 
                     elif Event & (select.POLLHUP | select.POLLERR | select.EPOLLRDHUP):

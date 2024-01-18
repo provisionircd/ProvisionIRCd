@@ -885,7 +885,7 @@ class Client:
             data = f"@" + ';'.join([t.string for t in mtags]) + ' ' + data
 
         if IRCD.use_poll:
-            logging.debug(f"Setting {self.local.socket} flags to write mode")
+            # logging.debug(f"Setting {self.local.socket} flags to write mode")
             IRCD.poller.modify(self.local.socket, select.POLLOUT)
         self.local.sendbuffer += data + "\r\n"
 
