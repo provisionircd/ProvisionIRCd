@@ -58,6 +58,7 @@ def do_tls_handshake(client):
 
 
 def post_accept(conn, client, listen_obj):
+    logging.debug(f"post_accept() called.")
     if IRCD.use_poll:
         IRCD.poller.register(conn, select.POLLIN | select.POLLPRI | select.POLLHUP | select.POLLERR | select.EPOLLRDNORM | select.EPOLLRDHUP)
     if listen_obj.tls:
@@ -87,11 +88,13 @@ def post_accept(conn, client, listen_obj):
     client.local.handshake = 1
     try:
         client.local.socket.setblocking(0)
+        logging.debug(f"Socket set to non-blocking.")
     except OSError:
         pass
 
 
 def accept_socket(sock, listen_obj):
+    logging.debug(f"accept_socket() called.")
     conn, addr = sock.accept()
     client = make_client(direction=None, uplink=IRCD.me)
     client.local.socket = conn
@@ -262,7 +265,7 @@ def handle_connections():
             write_clients = [client.local.socket for client in available_clients if client.local.handshake and client.local.sendbuffer]
 
             if IRCD.use_poll:
-                fdVsEvent = IRCD.poller.poll(100)
+                fdVsEvent = IRCD.poller.poll(1000)
                 for fd, Event in fdVsEvent:
                     # https://stackoverflow.com/a/42612778
                     # logging.debug(f"New event on fd {fd}: {Event}")
@@ -328,7 +331,7 @@ def handle_connections():
                         continue
 
             else:
-                read, write, error = select.select(listen_sockets + read_clients, write_clients, listen_sockets + read_clients, 0.1)
+                read, write, error = select.select(listen_sockets + read_clients, write_clients, listen_sockets + read_clients, 1)
                 for socket in read:
                     if socket in listen_sockets:
                         if not (listen_obj := find_listen_obj_from_socket(socket)):
