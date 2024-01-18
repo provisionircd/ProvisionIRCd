@@ -909,7 +909,7 @@ class Client:
             self.local.messages_sent += 1
             write_done = time() * 1000
             write_time = write_done - write_start
-            if write_time >= 10:
+            if write_time >= 100:
                 logging.warning(f"Writing to {self.name}[{self.ip}] took {write_time:.2f} milliseconds seconds. Data: {data}")
         except Exception as ex:
             logging.exception(ex)
