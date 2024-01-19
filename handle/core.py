@@ -902,7 +902,7 @@ class Client:
     def direct_send(self, data):
         """ Directly sends data to a socket. """
         write_time = 0
-        write_start = time() * 1000
+        write_start = time()
         debug_out = 0
         try:
             self.local.socket.sendall(bytes(data, "utf-8"))
@@ -910,14 +910,14 @@ class Client:
             if debug_out:
                 logging.debug(f"{self.name}[{self.ip}] < {data}")
             self.local.messages_sent += 1
-            write_done = time() * 1000
-            write_time = write_done - write_start
-            if write_time > 1:
-                logging.warning(f"Writing to {self.name}[{self.ip}] took {write_time:.2f} seconds. Data: {data}")
+            write_done = time()
+            write_time = (write_done - write_start) * 1000
+            if write_time >= 10:
+                logging.warning(f"Writing to {self.name}[{self.ip}] took {write_time:.2f} millseconds seconds. Data: {data}")
         except Exception as ex:
             # logging.exception(ex)
-            if write_time >= 1:
-                logging.warning(f"Failed to write to {self.name}[{self.ip}] after {write_time} seconds. Data: {data}")
+            if write_time >= 10:
+                logging.warning(f"Failed to write to {self.name}[{self.ip}] after {write_time} millseconds seconds. Data: {data}")
             self.exit(f"Write error: {str(ex)}")
             return
 
