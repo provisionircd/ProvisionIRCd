@@ -905,7 +905,7 @@ class Client:
         write_start = time()
         debug_out = 0
         try:
-            # test
+            # test 2
             self.local.socket.sendall(bytes(data, "utf-8"))
             self.local.bytes_sent += len(data)
             if debug_out:
