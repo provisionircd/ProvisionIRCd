@@ -305,7 +305,7 @@ def handle_connections():
                             try:
                                 while chunk := sock.recv(4096).decode():
                                     recv += chunk
-                            except SSL.WantReadError:
+                            except (SSL.WantReadError, BlockingIOError):
                                 pass
                             except Exception as ex:
                                 logging.exception(ex)
@@ -355,7 +355,7 @@ def handle_connections():
                         try:
                             while chunk := sock.recv(4096).decode():
                                 recv += chunk
-                        except SSL.WantReadError:
+                        except (SSL.WantReadError, BlockingIOError):
                             pass
                         except:
                             recv = ''
