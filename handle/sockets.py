@@ -315,7 +315,7 @@ def handle_connections():
                         if not (client := find_client_from_socket(sock)):
                             close_socket(sock)
                             continue
-                        if client.exitted:
+                        if client.exitted or client.local.socket.fileno() < 0:
                             continue
 
                         sendbuffer = client.local.sendbuffer
