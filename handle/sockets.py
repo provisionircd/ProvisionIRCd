@@ -315,7 +315,6 @@ def handle_connections():
                         if not (client := find_client_from_socket(sock)):
                             close_socket(sock)
                             continue
-                        logging.debug(sock.fileno())
                         if client.exitted or sock.fileno() < 0:
                             continue
 
