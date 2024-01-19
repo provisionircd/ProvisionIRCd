@@ -912,11 +912,11 @@ class Client:
             self.local.messages_sent += 1
             write_done = time()
             write_time = (write_done - write_start) * 1000
-            if write_time >= 10:
-                logging.warning(f"Writing to {self.name}[{self.ip}] took {write_time:.2f} millseconds seconds. Data: {data}")
+            if write_time >= 100:
+                logging.debug(f"Writing to {self.name}[{self.ip}] took {write_time:.2f} millseconds seconds. Data: {data}")
         except Exception as ex:
             # logging.exception(ex)
-            if write_time >= 10:
+            if write_time >= 100:
                 logging.warning(f"Failed to write to {self.name}[{self.ip}] after {write_time} millseconds seconds. Data: {data}")
             self.exit(f"Write error: {str(ex)}")
             return
