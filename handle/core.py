@@ -905,17 +905,15 @@ class Client:
         write_start = time() * 1000
         debug_out = 0
         try:
-            while data and len(data) > 0:
-                sent = self.local.socket.send(bytes(data, "utf-8"))
-                self.local.bytes_sent += sent
-                data = data[sent:]
-                if debug_out:
-                    logging.debug(f"{self.name}[{self.ip}] < {data}")
-                self.local.messages_sent += 1
-                write_done = time() * 1000
-                write_time = write_done - write_start
-                if write_time >= 100:
-                    logging.warning(f"Writing to {self.name}[{self.ip}] took {write_time:.2f} milliseconds seconds. Data: {data}")
+            self.local.socket.sendall(bytes(data, "utf-8"))
+            self.local.bytes_sent += len(data)
+            if debug_out:
+                logging.debug(f"{self.name}[{self.ip}] < {data}")
+            self.local.messages_sent += 1
+            write_done = time() * 1000
+            write_time = write_done - write_start
+            if write_time > 1:
+                logging.warning(f"Writing to {self.name}[{self.ip}] took {write_time:.2f} seconds. Data: {data}")
         except Exception as ex:
             # logging.exception(ex)
             if write_time >= 1:
