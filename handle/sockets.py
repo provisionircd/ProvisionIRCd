@@ -343,7 +343,7 @@ def handle_connections():
                         if not (listen_obj := find_listen_obj_from_socket(sock)):
                             close_socket(sock)
                             continue
-                        # IRCD.run_parallel_function(accept_socket, args=(socket, listen_obj))
+                        # IRCD.run_parallel_function(accept_socket, args=(sock, listen_obj))
                         accept_socket(sock, listen_obj)
                         continue
                     else:
@@ -359,7 +359,7 @@ def handle_connections():
                         except:
                             recv = ''
                         if not recv:
-                            client.exit("Read error: empty recv")
+                            client.exit("Read error")
                             continue
                         post_sockread(client, recv)
                     continue
