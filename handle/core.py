@@ -872,7 +872,9 @@ class Client:
             logging.error(f"Wrong data type @ send(): {data}")
             return
         data = data.strip()
-        if not data or self.exitted or self not in Client.table or not self.local or not self.local.socket:
+        if not data or self.exitted \
+                or self not in Client.table or not self.local \
+                or not self.local.socket or (self.local.socket and self.local.socket.fileno() < 0):
             return
         if call_hook:
             data_list = data.split(' ')
@@ -912,7 +914,7 @@ class Client:
             if write_time >= 100:
                 logging.warning(f"Writing to {self.name}[{self.ip}] took {write_time:.2f} milliseconds seconds. Data: {data}")
         except Exception as ex:
-            logging.exception(ex)
+            # logging.exception(ex)
             if write_time >= 1:
                 logging.warning(f"Failed to write to {self.name}[{self.ip}] after {write_time} seconds. Data: {data}")
             self.exit(f"Write error: {str(ex)}")
