@@ -308,7 +308,6 @@ def handle_connections():
                             if not recv:
                                 client.exit("Read error")
                                 continue
-                            # logging.warning(f"Reading from {client.name}: {recv.rstrip()}")
                             post_sockread(client, recv)
                         continue
 
