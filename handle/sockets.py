@@ -307,7 +307,8 @@ def handle_connections():
                                     recv += chunk
                             except SSL.WantReadError:
                                 pass
-                            except:
+                            except Exception as ex:
+                                logging.exception(ex)
                                 recv = ''
                             if not recv:
                                 client.exit("Read error")
