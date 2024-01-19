@@ -1,4 +1,5 @@
 from time import time
+import socket
 
 import select
 from OpenSSL import SSL
@@ -300,9 +301,12 @@ def handle_connections():
                             if not client.local.handshake:
                                 # Handshake not finished yet - waiting.
                                 continue
-
+                            recv = ''
                             try:
-                                recv = sock.recv(32768).decode()
+                                while chunk := sock.recv(4096).decode():
+                                    recv += chunk
+                            except SSL.WantReadError:
+                                pass
                             except:
                                 recv = ''
                             if not recv:
@@ -334,20 +338,24 @@ def handle_connections():
 
             else:
                 read, write, error = select.select(listen_sockets + read_clients, write_clients, listen_sockets + read_clients, 1)
-                for socket in read:
-                    if socket in listen_sockets:
-                        if not (listen_obj := find_listen_obj_from_socket(socket)):
-                            close_socket(socket)
+                for sock in read:
+                    if sock in listen_sockets:
+                        if not (listen_obj := find_listen_obj_from_socket(sock)):
+                            close_socket(sock)
                             continue
                         # IRCD.run_parallel_function(accept_socket, args=(socket, listen_obj))
-                        accept_socket(socket, listen_obj)
+                        accept_socket(sock, listen_obj)
                         continue
                     else:
-                        if not (client := find_client_from_socket(socket)):
-                            close_socket(socket)
+                        if not (client := find_client_from_socket(sock)):
+                            close_socket(sock)
                             continue
+                        recv = ''
                         try:
-                            recv = socket.recv(32768).decode()
+                            while chunk := sock.recv(4096).decode():
+                                recv += chunk
+                        except SSL.WantReadError:
+                            pass
                         except:
                             recv = ''
                         if not recv:
@@ -356,18 +364,18 @@ def handle_connections():
                         post_sockread(client, recv)
                     continue
 
-                for socket in write:
-                    if not (client := find_client_from_socket(socket)):
-                        close_socket(socket)
+                for sock in write:
+                    if not (client := find_client_from_socket(sock)):
+                        close_socket(sock)
                         continue
 
                     sendbuffer = client.local.sendbuffer
                     client.local.sendbuffer = ''
                     IRCD.run_parallel_function(client.direct_send, args=(sendbuffer,))
 
-                for socket in error:
-                    if not (client := find_client_from_socket(socket)):
-                        close_socket(socket)
+                for sock in error:
+                    if not (client := find_client_from_socket(sock)):
+                        close_socket(sock)
                         continue
                     client.exit("Connection closed")
                     continue
