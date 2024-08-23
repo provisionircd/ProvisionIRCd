@@ -59,6 +59,11 @@ def geodata_expire():
         IRCD.write_data_file(GeoData.data, filename="geodata.json")
 
 
+def geodata_remote(client):
+    if country := client.get_md_value("country"):
+        GeoData.clients.setdefault(client, {})["country"] = country
+
+
 def geodata_quit(client, reason):
     if client in GeoData.clients:
         del GeoData.clients[client]
@@ -67,7 +72,7 @@ def geodata_quit(client, reason):
 def init(module):
     GeoData.data = IRCD.read_data_file("geodata.json")
     Hook.add(Hook.NEW_CONNECTION, geodata_lookup)
-    Hook.add(Hook.REMOTE_CONNECT, geodata_lookup)
+    Hook.add(Hook.REMOTE_CONNECT, geodata_remote)
     Hook.add(Hook.LOCAL_QUIT, geodata_quit)
     Hook.add(Hook.WHOIS, country_whois)
     Hook.add(Hook.LOOP, geodata_expire)
