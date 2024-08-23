@@ -12,7 +12,7 @@ def init(module):
     Usermode.add(module, 'q', 1, 1, Usermode.allow_opers, "Protected on all channels")
     Usermode.add(module, 'r', 1, 0, Usermode.allow_none, "Identifies the nick as being logged in")
     Usermode.add(module, 's', 1, 1, Usermode.allow_opers, "Can receive server notices")
-    Usermode.add(module, "x", 1, 0, Usermode.allow_none, "Hides real host with cloaked host")
+    Usermode.add(module, 'x', 1, 0, Usermode.allow_none, "Hides real host with cloaked host")
     Usermode.add(module, 'z', 1, 0, Usermode.allow_none, "User is using a secure connection")
     Usermode.add(module, 'H', 1, 1, Usermode.allow_opers, "Hide IRCop status")
     Usermode.add(module, 'S', 1, 0, Usermode.allow_none, "Marks the client as a network service")

@@ -60,7 +60,7 @@ def cmd_netinfo(client, recv):
             case 1:
                 prefix = "Secure l"
             case _:
-                prefix = "L"
+                prefix = 'L'
 
         msg = f"{prefix}ink {client.uplink.name} -> {client.name} successfully established"
         IRCD.log(client.uplink, "info", "link", "LINK_ESTABLISHED", msg, sync=0)

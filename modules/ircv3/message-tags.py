@@ -5,10 +5,7 @@ message-tags capability
 from handle.core import Isupport, Numeric, IRCD, Flag, Command, Capability
 from handle.logger import logging
 
-HEADER = {
-    "name": "message-tags",
-    "version": "1",
-}
+HEADER = dict(name="message-tags", version='1')
 
 
 def cmd_tagmsg(client, recv):

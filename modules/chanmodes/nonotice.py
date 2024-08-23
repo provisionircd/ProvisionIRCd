@@ -9,7 +9,7 @@ def can_channel_notice(client, channel, message, sendtype):
     if 'T' not in channel.modes or sendtype != "NOTICE":
         return Hook.ALLOW
 
-    if not client.user or channel.client_has_membermodes(client, "q") or client.has_permission("channel:override:message:notice"):
+    if not client.user or channel.client_has_membermodes(client, 'q') or client.has_permission("channel:override:message:notice"):
         return Hook.ALLOW
 
     client.sendnumeric(Numeric.ERR_CANNOTSENDTOCHAN, channel.name, "Notices are not permitted in this channel")

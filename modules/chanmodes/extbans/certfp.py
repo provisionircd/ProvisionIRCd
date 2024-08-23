@@ -35,7 +35,7 @@ def certfp_is_match(client, channel, mask):
 
 class CertFp:
     name = "certfp"
-    flag = "S"
+    flag = 'S'
     paramcount = 1
 
     # Checks if the param is valid, in which case it returns it.

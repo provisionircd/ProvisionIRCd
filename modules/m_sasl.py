@@ -83,15 +83,15 @@ def cmd_sasl(client, recv):
         target_client = IRCD.find_user(recv[2])
         if not target_client:
             return
-        if recv[3] == "C":
+        if recv[3] == 'C':
             target_client.send([], f"AUTHENTICATE {recv[4]}")
 
-        elif recv[3] == "D":  # Done?
+        elif recv[3] == 'D':  # Done?
             SaslRequest.table.remove(saslrequest)
-            if recv[4] == "S":  # Success?
+            if recv[4] == 'S':  # Success?
                 target_client.sendnumeric(Numeric.RPL_SASLSUCCESS)
 
-            elif recv[4] == "F":  # Fail.
+            elif recv[4] == 'F':  # Fail.
                 target_client.sendnumeric(Numeric.ERR_SASLFAIL)
                 saslrequest.mech = None
                 saslrequest.failed_attempts += 1
@@ -144,7 +144,7 @@ def sasl_cleanup(client, reason):
 
 
 def sasl_server_online(client):
-    if client.name == IRCD.get_setting('sasl-server'):
+    if client.name == IRCD.get_setting("sasl-server"):
         SaslInfo.server = client
         logging.debug(f"Registered SASL server: {client.name}")
         mech = SaslInfo.server.get_md_value("saslmechlist")

@@ -10,7 +10,7 @@ HEADER = {
 
 
 def display_exceptlist(client, channel, mode):
-    if mode == "e":
+    if mode == 'e':
         if channel.client_has_membermodes(client, "hoaq") or client.has_permission("channel:see:banlist"):
             for entry in reversed(channel.List[mode]):
                 client.sendnumeric(Numeric.RPL_EXLIST, channel.name, entry.mask, entry.set_by, entry.set_time)

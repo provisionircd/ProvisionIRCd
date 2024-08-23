@@ -129,5 +129,5 @@ def init(module):
     Hook.add(Hook.REMOTE_NICKCHANGE, watch_nickchange)
     Hook.add(Hook.POST_COMMAND, watch_flood_safe)
     Isupport.add("WATCH", MAXWATCH)
-    Isupport.add("WATCHOPTS", "A")
+    Isupport.add("WATCHOPTS", 'A')
     Command.add(module, cmd_watch, "WATCH", 1)

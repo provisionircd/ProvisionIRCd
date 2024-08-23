@@ -138,8 +138,8 @@ def config_test_settings(block):
         check = "resolvehost"
         if item := block.get_item(check):
             value = block.get_single_value(check)
-            true_values = ["yes", "y", "1", "true"]
-            false_values = ["no", "n", "0", "false"]
+            true_values = ["yes", 'y', '1', "true"]
+            false_values = ["no", 'n', '0', "false"]
             if not value:
                 return conf_error(f"missing '{check}' value", block, item)
             if value not in true_values + false_values:
@@ -402,13 +402,13 @@ def config_test_spamfilter(block):
     # Checking targets
     valid_targets = ["channel", "private", "private-notice", "channel-notice", "part", "topic", "away"]
     valid_targets_shortened = {
-        "channel": "c",
-        "private": "p",
-        "private-notice": "n",
-        "channel-notice": "N",
-        "part": "P",
-        "topic": "t",
-        "away": "a"
+        "channel": 'c',
+        "private": 'p',
+        "private-notice": 'n',
+        "channel-notice": 'N',
+        "part": 'P',
+        "topic": 't',
+        "away": 'a'
     }
 
     # Spamfilter can have multiple targets.

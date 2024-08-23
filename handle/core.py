@@ -3690,7 +3690,7 @@ class Tkl:
                             client.add_flag(Flag.CLIENT_SHUNNED)
                         return tkl
 
-            elif tkl.type == "Q":
+            elif tkl.type == 'Q':
                 if is_match(tkl.host.lower(), client.name.lower()):
                     return tkl
 

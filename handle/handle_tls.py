@@ -25,7 +25,7 @@ def create_ctx(cert, key, name=None):
 
         if missing:
             answer = input("You have missing TLS files. Would you like to generate now? [Y/n] ")
-            if not answer.strip() or answer.strip().lower() == "y":
+            if not answer.strip() or answer.strip().lower() == 'y':
                 generate_cert(key, cert, name)
             else:
                 exit()

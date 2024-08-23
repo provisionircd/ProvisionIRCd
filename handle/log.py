@@ -29,7 +29,7 @@ def event_to_snomask(rootevent, event):
 
 
 class LogEntry:
-    color_table = {"warn": "7", "error": "4", "info": "3"}
+    color_table = {"warn": '7', "error": '4', "info": '3'}
 
     def __init__(self, client, level, rootevent, event, message):
         self.client = client

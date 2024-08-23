@@ -32,8 +32,8 @@ def account_changed(client):
 
 
 def account_usermode(client):
-    if "r" not in client.user.modes and client.name == client.user.account:
-        client.user.modes += "r"
+    if 'r' not in client.user.modes and client.name == client.user.account:
+        client.user.modes += 'r'
         data = f":{client.name} MODE {client.name} +r"
         client.send([], data)
         data = f":{client.id} MODE {client.name} +r"
