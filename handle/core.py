@@ -2098,6 +2098,7 @@ class IRCD:
         # The reason I'm still using this UID method instead of the superior one below,
         # is because I want to fix an issue where ghost UIDs are still present somewhere, for some reason.
         # I would first like to find out why that is.
+        # This method finds the first available UID, even if it has been used before.
         """ 456,976 possibilities. """
         uid_iter = itertools.product(string.ascii_uppercase, repeat=4)
         for i in uid_iter:
@@ -3061,18 +3062,6 @@ class Hook:
     # Arguments:        client, channel, modebuf, parambuf
     REMOTE_CHANNEL_MODE = hook()
 
-    # Called early when a remote user or server changes a mode.
-    # You can not deny this hook.
-    # Arguments:
-    # client            Client changing the mode.
-    # channel           Channel on which the mode is being changed.
-    # modebuf           Current mode buffer
-    # parambuf          Current parameter buffer
-    # action            Action: + or -
-    # mode              Mode char
-    # param_mode        Param mode, or None if none
-    PRE_REMOTE_CHANNEL_MODE = hook()
-
     # Called before a local nick change.
     # Arguments:        client, newnick
     # Return:           Hook.DENY or Hook.CONTINUE
@@ -3151,15 +3140,10 @@ class Hook:
     CHANNEL_DESTROY = hook()
 
     # Called before a local user sends a channel message.
-    # The Privmsg object has the `msg` attribute, which contains the message beint sent.
-    # Arguments:    client, channel, message as list so it can be modified
+    # If you do not need to modify the message, you can use CAN_SEND_TO_CHANNEL hook.
+    # Arguments:    client, channel, message as list, so it can be modified
     # Returns:      Hook.DENY or Hook.CONTINUE
     PRE_LOCAL_CHANMSG = hook()
-
-    # Called before a remote user sends a channel message.
-    # This event cannot be denied.
-    # Arguments:    client, channel, message
-    PRE_REMOTE_CHANMSG = hook()
 
     # This is called after a local user has sent a channel message.
     # Arguments:    client, channel, message
@@ -3173,11 +3157,6 @@ class Hook:
     # Arguments:    client, target, message as list, so it can be modified.
     # Return:       Hook.DENY or Hook.CONTINUE
     PRE_LOCAL_USERMSG = hook()
-
-    # Called before a remote user sends a private user message.
-    # Arguments:    client, target, message
-    # This event cannot be denied.
-    PRE_REMOTE_USERMSG = hook()
 
     # Called when a local user sends a private message message.
     # Arguments:    client, target, message
@@ -3195,20 +3174,18 @@ class Hook:
     CAN_SEND_TO_USER = hook()
 
     # Check whether a user can send a privsmg to a channel.
-    # The message cannot be modified.
+    # The message cannot be modified. If you need to edit the message, use PRE_LOCAL_CHANMSG hook.
     # Modules using this hook are responsible to deliver any error messages back to the client.
-    # Arguments:    client, channel object, message
+    # Arguments:    client, channel object, message, sendtype (PRIVMSG or NOTICE).
     # Return:       Hook.DENY or Hook.CONTINUE
     CAN_SEND_TO_CHANNEL = hook()
 
     PRE_LOCAL_CHANNOTICE = hook()
-    PRE_REMOTE_CHANNOTICE = hook()
 
     LOCAL_CHANNOTICE = hook()
     REMOTE_CHANNOTICE = hook()
 
     PRE_LOCAL_USERNOTICE = hook()
-    PRE_REMOTE_USERNOTICE = hook()
 
     # Called when a locel user sends a user notice.
     # Arguments:    client, user, msg
