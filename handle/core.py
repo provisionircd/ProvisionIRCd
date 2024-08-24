@@ -184,7 +184,7 @@ class Client:
         return cap in self.local.caps
 
     def has_permission(self, permission_path: str):
-        if self.server or not self.local or not self.user:
+        if self == IRCD.me or self.server or not self.local or not self.user:
             return 1
         if not self.user.operlogin or 'o' not in self.user.modes:
             return 0
@@ -2822,6 +2822,7 @@ class Numeric:
     ERR_SASLABORTED = 906, ":SASL authentication aborted"
     ERR_SASLALREADY = 907, ":You have already authenticated using SASL"
     ERR_CANNOTDOCOMMAND = 972, "{} :{}"
+    ERR_CANNOTCHANGEUMODE = 973, "{} :{}"
     ERR_CANNOTCHANGECHANMODE = 974, "{} :{}"
 
 

@@ -71,6 +71,12 @@ def cmd_usermode(client, recv):
             continue
 
         if action == '+':
+            if mode == 'q' and not client.has_permission("self:protected"):
+                client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
+                continue
+            if umode.can_set == Usermode.allow_opers and not client.has_permission("self:opermodes"):
+                client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
+                continue
             if mode not in target.user.modes:
                 target.user.modes += mode
             if mode == 's' and target.user.oper and param:
@@ -82,6 +88,9 @@ def cmd_usermode(client, recv):
                         target.user.snomask += sno
 
         elif action == '-' and mode in target.user.modes:
+            if mode in IRCD.get_setting("modelock") and not client.has_permission("self:modelock"):
+                client.sendnumeric(Numeric.ERR_CANNOTCHANGEUMODE, mode, "This mode is locked")
+                continue
             target.user.modes = target.user.modes.replace(mode, '')
 
         if target.user.modes != oldumodes:
