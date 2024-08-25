@@ -12,14 +12,12 @@ MAXMODES = 20
 
 
 def show_channel_info(client, channel):
-    if 's' in channel.modes and not channel.find_member(client) and not client.has_permission("channel:see:mode"):
+    if 's' in channel.modes and not (channel.find_member(client) or client.has_permission("channel:see:mode")):
         return
-    show_params = []
-    for m in channel.modes:
-        if param := channel.get_param(m):
-            show_params.append(param)
-    client.sendnumeric(Numeric.RPL_CHANNELMODEIS, channel.name, channel.modes,
-                       ' '.join(show_params) if show_params and (channel.find_member(client) or client.has_permission("channel:see:mode")) else '')
+
+    show_params = [param for m in channel.modes if (param := channel.get_param(m))]
+    show_params = ' '.join(show_params) if channel.find_member(client) or client.has_permission("channel:see:mode") else ''
+    client.sendnumeric(Numeric.RPL_CHANNELMODEIS, channel.name, channel.modes, show_params)
     client.sendnumeric(Numeric.RPL_CREATIONTIME, channel.name, channel.creationtime)
 
 
@@ -111,14 +109,10 @@ def cmd_usermode(client, recv):
         if 's' in set(oldumodes).difference(target.user.modes):
             target.user.snomask = ''
 
-        if 'x' in set(oldumodes).difference(target.user.modes):
-            target.setinfo(info=target.user.realhost, t="host")
-            data = f":{target.id} SETHOST :{target.user.cloakhost}"
-            IRCD.send_to_servers(client, [], data)
-
-        if 'x' in set(target.user.modes).difference(oldumodes):
-            cloak = IRCD.get_cloak(target)
-            target.setinfo(info=cloak, t="host")
+        diff_modes = set(oldumodes).difference(target.user.modes)
+        if 'x' in diff_modes or 'x' in set(target.user.modes).difference(oldumodes):
+            host = target.user.realhost if 'x' in diff_modes else IRCD.get_cloak(target)
+            target.setinfo(info=host, t="host")
             data = f":{target.id} SETHOST :{target.user.cloakhost}"
             IRCD.send_to_servers(client, [], data)
 
@@ -133,14 +127,16 @@ def cmd_usermode(client, recv):
 
         sync_modes = ''
         for mode in modes:
-            if mode in '+-':
+            if mode in "+-":
                 sync_modes += mode
                 continue
             umode = IRCD.get_usermode_by_flag(mode)
             if umode and umode.is_global:
                 sync_modes += mode
+
         data = f":{client.id} MODE {target.name} {sync_modes}"
         IRCD.send_to_servers(client, [], data)
+
         if target != client:
             client.sendnumeric(Numeric.RPL_OTHERUMODEIS, target.name, target.user.modes)
 
@@ -384,6 +380,9 @@ def cmd_channelmode(client, recv):
                 override = 1
             elif not allowed:
                 if allowed == 0:
+                    if cmode.is_ok == Channelmode.allow_opers:
+                        client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
+                        continue
                     if cmode.level == 5:
                         client.sendnumeric(Numeric.ERR_CHANOWNPRIVNEEDED, channel.name)
                     else:

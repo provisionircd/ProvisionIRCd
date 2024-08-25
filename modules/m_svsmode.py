@@ -58,10 +58,11 @@ def cmd_svssno(client, recv):
     action = ''
     snomasks = ''
     for m in recv[2]:
-        if m in '+-' and m != action:
+        if m in "+-" and m != action:
             action = m
             snomasks += action
             continue
+
         if action == '+':
             if recv[0].lower() == "svssno":
                 target.snomasks += m

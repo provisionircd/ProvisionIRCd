@@ -143,7 +143,7 @@ def cmd_who(client, recv):
     whox = 0
     flag_match_increment = -1
     if len(recv) > 2:
-        if recv[2][0] in '+-':
+        if recv[2][0] in "+-":
             flag_true = 1 if recv[2][0] == '+' else 0
             flags = recv[2][1:]
         else:

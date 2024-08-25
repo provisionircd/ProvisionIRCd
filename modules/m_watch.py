@@ -40,7 +40,7 @@ def cmd_watch(client, recv):
         else:
             process_entries = recv[1:]
             for entry in process_entries:
-                if entry[0] not in '+-':
+                if entry[0] not in "+-":
 
                     if entry.lower() == 'C':
                         if len(recv) == 2:  # Clear.
