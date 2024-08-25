@@ -1584,8 +1584,6 @@ class Channel:
         masks = [mask] if type(mask) != list else mask
         for mask in list(masks):
             if entry := next((e for e in _list if mask == e.mask), None):
-                # entry = self.find_entry(mask, _list)
-                # if entry:
                 _list.remove(entry)
                 return entry.mask
 
@@ -1600,7 +1598,7 @@ class Channel:
             if client in self.seen_dict[c]:
                 self.seen_dict[c].remove(client)
 
-        if self.membercount == 0:
+        if self.membercount == 0 and 'P' not in self.modes:
             IRCD.destroy_channel(IRCD.me, self)
 
     def do_part(self, client: Client, reason: str = ''):
@@ -1832,6 +1830,8 @@ class IRCD:
                 logging.info(f"PID [{pid}] forking to the background")
                 IRCDLogger.fork()
                 exit()
+
+        IRCD.run_hook(Hook.BOOT)
 
     @staticmethod
     def log(client, level: str, rootevent: str, event: str, message: str, sync: int = 1):
@@ -2989,6 +2989,9 @@ class Hook:
     DENY = hook()
     ALLOW = hook()
     CONTINUE = hook()
+
+    # Called after the IRCd has successfully booted up.
+    BOOT = hook()
 
     # This is called every 1 second, or as soon as new data is being handled.
     LOOP = hook()
