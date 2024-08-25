@@ -462,9 +462,13 @@ def cmd_channelmode(client, recv):
 
 def cmd_mode(client, recv):
     target = recv[1]
-    if IRCD.find_channel(target):
+    if target[0] in IRCD.CHANPREFIXES:
+        if not IRCD.find_channel(target):
+            return client.sendnumeric(Numeric.ERR_NOSUCHCHANNEL, target)
         cmd_channelmode(client, recv)
-    elif IRCD.find_user(target):
+    else:
+        if not IRCD.find_user(target):
+            return client.sendnumeric(Numeric.ERR_NOSUCHNICK, target)
         cmd_usermode(client, recv)
 
 
