@@ -1,8 +1,8 @@
 """
 /knock command
 """
-from time import time
 
+from time import time
 from handle.core import IRCD, Numeric, Command, Hook
 
 Knocks = {}
@@ -14,6 +14,7 @@ def cmd_knock(client, recv):
     Knock on an invite-only (+i) channel to request an invitation.
     Syntax:     KNOCK <channel>
     """
+
     if not (channel := IRCD.find_channel(recv[1])):
         return client.sendnumeric(Numeric.ERR_NOSUCHCHANNEL, recv[1])
 

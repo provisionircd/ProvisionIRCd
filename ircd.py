@@ -3,9 +3,7 @@
 import argparse
 import sys
 import os
-import time
 
-import select
 from OpenSSL.crypto import load_certificate, FILETYPE_PEM, Error
 
 from classes.configuration import ConfigBuild
