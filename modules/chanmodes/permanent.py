@@ -12,20 +12,17 @@ def save_channel(client, channel, *args):
     if 'P' not in channel.modes:
         return
 
-    ChannelData[channel.name] = {}
-    ChannelData[channel.name].setdefault("params", {})
-    ChannelData[channel.name].setdefault("listmodes", {})
-    ChannelData[channel.name]["topic"] = channel.topic, channel.topic_time, channel.topic_author
-    ChannelData[channel.name]["modes"] = channel.modes
-    ChannelData[channel.name]["creation"] = channel.creationtime
-    for mode in channel.modes:
-        if param := channel.get_param(mode):
-            ChannelData[channel.name]["params"][mode] = param
-
-    """ Saving list modes """
-    for mode in [m.flag for m in Channelmode.table if m.type == Channelmode.LISTMODE]:
-        if channel.List[mode]:
-            ChannelData[channel.name]["listmodes"][mode] = [[le.mask, le.set_by, le.set_time] for le in channel.List[mode]]
+    ChannelData[channel.name] = {
+        "params": {mode: channel.get_param(mode) for mode in channel.modes if channel.get_param(mode)},
+        "listmodes": {
+            mode: [[le.mask, le.set_by, le.set_time] for le in channel.List[mode]]
+            for mode in [m.flag for m in Channelmode.table if m.type == Channelmode.LISTMODE]
+            if channel.List[mode]
+        },
+        "topic": (channel.topic, channel.topic_time, channel.topic_author),
+        "modes": channel.modes,
+        "creation": channel.creationtime
+    }
 
     IRCD.write_data_file(ChannelData, "channels.db")
 
@@ -33,25 +30,31 @@ def save_channel(client, channel, *args):
 def restore_channel():
     """ Restore channel from json """
     if ChannelData := IRCD.read_data_file("channels.db"):
-        for chan in ChannelData:
+        for chan, data in ChannelData.items():
             if channel := IRCD.create_channel(IRCD.me, chan):
-                channel.creationtime = ChannelData[chan]["creation"]
-                channel.modes = ChannelData[chan]["modes"]
-                for pmode in ChannelData[chan]["params"]:
-                    mode, param = pmode, ChannelData[chan]["params"][pmode]
+                channel.creationtime = data["creation"]
+                channel.modes = data["modes"]
+
+                for mode, param in data["params"].items():
                     channel.add_param(mode, param)
-                for listmode in ChannelData[chan]["listmodes"]:
-                    for entry in ChannelData[chan]["listmodes"][listmode]:
-                        mask, setter, timestamp = entry
+
+                for listmode, entries in data["listmodes"].items():
+                    for mask, setter, timestamp in entries:
                         channel.add_to_list(client=IRCD.me, mask=mask, _list=channel.List[listmode], setter=setter, timestamp=timestamp)
 
-                if "topic" in ChannelData[chan]:
-                    channel.topic, channel.topic_time, channel.topic_author = ChannelData[chan]["topic"]
+                if "topic" in data:
+                    channel.topic, channel.topic_time, channel.topic_author = data["topic"]
 
 
 def save_channel_mode(client, channel, modebuf, parambuf):
-    if 'P' in modebuf and 'P' not in channel.modes and channel.name in ChannelData:
-        del ChannelData[channel.name]
+    if 'P' in modebuf:
+        ChannelData = IRCD.read_data_file("channels.db")
+        if 'P' not in channel.modes and channel.name in ChannelData:
+            del ChannelData[channel.name]
+            if channel.membercount == 0:
+                IRCD.destroy_channel(IRCD.me, channel)
+            IRCD.write_data_file(ChannelData, "channels.db")
+
     save_channel(client, channel)
 
 
