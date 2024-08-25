@@ -79,15 +79,15 @@ def cmd_topic(client, recv):
                 return
 
         channel.topic = text
-        channel.topic_author = client.fullmask
-        channel.topic_time = int(time.time())
+        channel.topic_author = client.fullmask if text else None
+        channel.topic_time = int(time.time()) if text else 0
         send_topic(client, channel)
 
-    if oper_override and client.user and client.local:
-        override_string = f"*** OperOverride by {client.name} ({client.user.username}@{client.user.realhost}) with TOPIC {channel.name} \'{channel.topic}\'"
-        IRCD.log(client, "info", "oper", "OPER_OVERRIDE", override_string, sync=1)
+        if oper_override and client.user and client.local:
+            override_string = f"*** OperOverride by {client.name} ({client.user.username}@{client.user.realhost}) with TOPIC {channel.name} \'{channel.topic}\'"
+            IRCD.log(client, "info", "oper", "OPER_OVERRIDE", override_string, sync=1)
 
-    IRCD.run_hook(Hook.TOPIC, client, channel, channel.topic)
+        IRCD.run_hook(Hook.TOPIC, client, channel, channel.topic)
 
 
 def init(module):

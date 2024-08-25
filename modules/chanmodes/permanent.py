@@ -7,23 +7,25 @@ from handle.core import IRCD, Channelmode, Hook
 ChannelData = {}
 
 
-def save_channel(*args):
+def save_channel(client, channel, *args):
     """ Save channel info to json """
-    for channel in [c for c in IRCD.get_channels() if 'P' in c.modes]:
-        ChannelData.setdefault(channel.name, {})
-        ChannelData[channel.name].setdefault("params", {})
-        ChannelData[channel.name].setdefault("listmodes", {})
-        ChannelData[channel.name]["topic"] = channel.topic, channel.topic_time, channel.topic_author
-        ChannelData[channel.name]["modes"] = channel.modes
-        ChannelData[channel.name]["creation"] = channel.creationtime
-        for mode in channel.modes:
-            if param := channel.get_param(mode):
-                ChannelData[channel.name]["params"][mode] = param
+    if 'P' not in channel.modes:
+        return
 
-        """ Saving list modes """
-        for mode in [m.flag for m in Channelmode.table if m.type == Channelmode.LISTMODE]:
-            if channel.List[mode]:
-                ChannelData[channel.name]["listmodes"][mode] = [[le.mask, le.set_by, le.set_time] for le in channel.List[mode]]
+    ChannelData[channel.name] = {}
+    ChannelData[channel.name].setdefault("params", {})
+    ChannelData[channel.name].setdefault("listmodes", {})
+    ChannelData[channel.name]["topic"] = channel.topic, channel.topic_time, channel.topic_author
+    ChannelData[channel.name]["modes"] = channel.modes
+    ChannelData[channel.name]["creation"] = channel.creationtime
+    for mode in channel.modes:
+        if param := channel.get_param(mode):
+            ChannelData[channel.name]["params"][mode] = param
+
+    """ Saving list modes """
+    for mode in [m.flag for m in Channelmode.table if m.type == Channelmode.LISTMODE]:
+        if channel.List[mode]:
+            ChannelData[channel.name]["listmodes"][mode] = [[le.mask, le.set_by, le.set_time] for le in channel.List[mode]]
 
     IRCD.write_data_file(ChannelData, "channels.db")
 
@@ -50,7 +52,7 @@ def restore_channel():
 def save_channel_mode(client, channel, modebuf, parambuf):
     if 'P' in modebuf and 'P' not in channel.modes and channel.name in ChannelData:
         del ChannelData[channel.name]
-    save_channel()
+    save_channel(client, channel)
 
 
 def init(module):
