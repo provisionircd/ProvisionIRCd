@@ -43,4 +43,4 @@ def cmd_eos(client, recv):
 
 
 def init(module):
-    Command.add(module, cmd_eos, "EOS", 0, Flag.CMD_SERVER, Flag.CMD_UNKNOWN)
+    Command.add(module, cmd_eos, "EOS", 0, Flag.CMD_SERVER)

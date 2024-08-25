@@ -118,4 +118,4 @@ def cmd_protoctl(client, recv):
 
 
 def init(module):
-    Command.add(module, cmd_protoctl, "PROTOCTL", 2, Flag.CMD_UNKNOWN)
+    Command.add(module, cmd_protoctl, "PROTOCTL", 2, Flag.CMD_SERVER)

@@ -238,5 +238,5 @@ def init(module):
     IRCD.NICKLEN = NICKLEN
     Hook.add(Hook.LOOP, expired_nickflood)
     Command.add(module, cmd_nick, "NICK", 1, Flag.CMD_UNKNOWN)
-    Command.add(module, cmd_uid, "UID", 12, Flag.CMD_SERVER, Flag.CMD_UNKNOWN)
+    Command.add(module, cmd_uid, "UID", 12, Flag.CMD_SERVER)
     Isupport.add("NICKLEN", NICKLEN)

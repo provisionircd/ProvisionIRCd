@@ -1081,7 +1081,7 @@ class Command:
     def cmd_flags_match(self, client) -> tuple:
         # flags_sum = sum(e.value for e in command.flags)
         """
-        0 = UNKNOWN (not yet fully registered on the server, can be either client or a server.
+        0 = UNKNOWN (not yet fully registered on the server, assumes that it is a user)
         1 = USER
         2 = SERVER
         3 = OPER
@@ -2655,7 +2655,7 @@ class Numeric:
     RPL_MAPEND = 7, ":End of /MAP"
     RPL_SNOMASK = 8, "+{} :Server notice mask"
     RPL_BOUNCE = 10, "{} {} :Please connect to this server"
-    RPL_CLONES = 30, ":User {} is logged in {} times: {}"
+    RPL_CLONES = 30, ":User {} is logged in {} times via IP {}: {}"
     RPL_NOCLONES = 31, ":No clones found on this {}"
     RPL_STATSHELP = 210, "{} :- {}"
     RPL_STATSLINKINFO = 211, "{} {} {} {} {} {} {} {} :{}"
@@ -2800,6 +2800,7 @@ class Numeric:
     ERR_BADCHANNELKEY = 475, "{} :Cannot join channel (+k)"
     ERR_NEEDREGGEDNICK = 477, "{} :Cannot join cannel: you need a registered nickname"
     ERR_BANLISTFULL = 478, "{} {} :Channel {} list is full"
+    ERR_CANNOTKNOCK = 480, ":Cannot knock on {} ({})"
     ERR_NOPRIVILEGES = 481, ":Permission denied - You do not have the correct IRC Operator privileges"
     ERR_CHANOPRIVSNEEDED = 482, "{} :You're not a channel operator"
     ERR_ATTACKDENY = 484, "{} :Cannot kick protected user {}"

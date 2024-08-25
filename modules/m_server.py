@@ -210,5 +210,5 @@ def cmd_sid(client, recv):
 
 
 def init(module):
-    Command.add(module, cmd_server, "SERVER", 3, Flag.CMD_UNKNOWN)
-    Command.add(module, cmd_sid, "SID", 4, Flag.CMD_UNKNOWN)
+    Command.add(module, cmd_server, "SERVER", 3, Flag.CMD_SERVER)
+    Command.add(module, cmd_sid, "SID", 4, Flag.CMD_SERVER)
