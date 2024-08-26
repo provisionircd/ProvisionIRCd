@@ -45,7 +45,12 @@ def cmd_knock(client, recv):
     if client.local:
         IRCD.new_message(client)
         data = f":{client.fullmask} KNOCK {channel.name}"
-        channel.broadcast(client, data)
+
+        broadcast_users = [c for c in channel.clients() if c.local
+                           and (channel.client_has_membermodes(c, "oaq") or c.has_permission("channel:see:knock"))]
+        for user in broadcast_users:
+            user.send(client.mtags, data)
+
         IRCD.server_notice(client, f"You have knocked on {channel.name}")
         client.local.flood_penalty += 100_000
         IRCD.send_to_servers(client, client.mtags, data)
