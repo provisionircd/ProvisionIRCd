@@ -5,7 +5,8 @@ blocks random nicknames
 from handle.core import IRCD, Hook
 
 # A lower score means more matches, and also more innocent kills.
-# A higher score will result in less matches, but also less innocent kills.
+# A higher score will result in fewer matches, but also fewer innocent kills.
+
 max_score = 4
 
 stringdict = {
@@ -45,7 +46,7 @@ stringdict = {
     "cx": "abdefghjklmnpqrstuvwxyz",
     "cy": "jqy",
     "cz": "bcdfghjlpqrtvwxz",
-    "db": "bdgjnpqtxz",
+    "db": "bdgjnpqstxz",
     "dc": "bcdfgjqxz",
     "dd": "fgklmnpqrstvwxz",
     "df": "bghjknpqvxyz",
@@ -55,7 +56,7 @@ stringdict = {
     "dl": "bcdfhjklmnqwxz",
     "dm": "bcdfjnqw",
     "dn": "fghjkmnpqvwz",
-    "dp": "bgjkqvxz",
+    "dp": "bgjkqsvwxz",
     "dq": "abcefghijkmnopqtvwxyz",
     "dr": "bfkqtvx",
     "dt": "bcdfghqtxz",
@@ -254,6 +255,7 @@ stringdict = {
     "pp": "gqwxz",
     "pq": "abcdefghijklmnopqstvwxyz",
     "pr": "hjkqrwx",
+    "ps": "mw",
     "pt": "jqxz",
     "pv": "bdfghjklquvwxyz",
     "pw": "fjkmnpqsuvwxz",
@@ -299,7 +301,7 @@ stringdict = {
     "rx": "bcdfgjkmnopqrtuvwxz",
     "rz": "djpqvxz",
     "sb": "kpqtvwxz",
-    "sd": "jqxz",
+    "sd": "bjpqxz",
     "sf": "bghjkpqw",
     "sg": "cgjkqvwxz",
     "sj": "bfghjkmnpqrstvwxz",
@@ -311,7 +313,7 @@ stringdict = {
     "sr": "jklqrwxz",
     "ss": "bdfghjklmnquvwxyz",
     "sv": "bfhjklmnqtwxyz",
-    "sw": "jkpqvwxz",
+    "sw": "jkmpqvwxz",
     "sx": "bcdefghjklmnopqrtuvwxyz",
     "sy": "qxy",
     "sz": "bdfgjpqsvxz",
@@ -487,7 +489,6 @@ def antirandom_check(client):
             IRCD.send_snomask(client, 's', f"*** Aleatory match for {nick}[{client.ip}]")
             return Hook.DENY
 
-    # Aleatory checks on ident? Why the hell not.
     if client.user.username:
         ident = client.user.username
         score = randomness(ident.lower())
