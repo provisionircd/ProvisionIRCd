@@ -9,13 +9,13 @@ import os
 class EnhancedRotatingFileHandler(logging.handlers.TimedRotatingFileHandler):
     def __init__(self, filename, when="midnight", interval=1, backup_count=0, encoding=None, delay=0, utc=0, maxBytes=0, backupExpire=0):
         """ This is just a combination of TimedRotatingFileHandler and RotatingFileHandler (adds maxBytes to TimedRotatingFileHandler) """
-        logging.handlers.TimedRotatingFileHandler.__init__(self, filename, when, interval, backup_count, encoding, delay, utc)
+        super().__init__(filename, when, interval, backup_count, encoding, delay, utc)
 
-        self.maxBytes = maxBytes if maxBytes <= 1000 * 100000 else 1000 * 100000  # Limit single file to max. 100MB
+        self.maxBytes = min(maxBytes, 100_000_000)  # Limit to 100MB
+        self.backupExpire = min(backupExpire, 315_569_260)  # Limit to 10 years
+        self.backupCount = min(backup_count, 999)
         self.suffix = "%Y-%m-%d"
         self.filename = filename
-        self.backupExpire = backupExpire if backupExpire <= 315569260 else 315569260  # Limit expire to max. 10 years.
-        self.backupCount = backup_count if backup_count <= 999 else 999
 
     def shouldRollover(self, record):
         """
@@ -27,21 +27,19 @@ class EnhancedRotatingFileHandler(logging.handlers.TimedRotatingFileHandler):
         we are also comparing times
         """
 
-        if self.stream is None:  # Delay was set...
+        if self.stream is None:
             self.stream = self._open()
-        if self.maxBytes > 0:  # Are we rolling over?
-            msg = "%s\n" % self.format(record)
-            self.stream.seek(0, 2)  # Due to non-posix-compliant Windows feature
-            if self.stream.tell() + len(msg) >= self.maxBytes:
-                return 1
-        if int(time.time()) >= self.rolloverAt:
+
+        if 0 < self.maxBytes <= self.stream.tell() + len(self.format(record) + '\n'):
             return 1
-        return 0
+
+        return int(time.time()) >= self.rolloverAt
 
     def doRollover(self):
         """
         Do a rollover, as described in __init__().
         """
+
         if self.stream:
             self.stream.close()
             self.stream = None
@@ -98,39 +96,25 @@ class EnhancedRotatingFileHandler(logging.handlers.TimedRotatingFileHandler):
 
     def delete_old_files(self):
         dir_name, base_name = os.path.split(self.baseFilename)
-        files = os.listdir(dir_name)
-        for file in [file for file in files if os.path.join(dir_name, file) != self.baseFilename]:
-            fn = os.path.join(dir_name, file)
-            if not os.path.isfile(fn):
+        files = [os.path.join(dir_name, f) for f in os.listdir(dir_name) if os.path.isfile(os.path.join(dir_name, f))]
+
+        for fn in files:
+            if fn == self.baseFilename:
                 continue
-            logtimestamp = int(os.path.getmtime(fn))  # Based on last modify.
-            diff = int(time.time()) - logtimestamp
-            if self.backupExpire and diff > self.backupExpire:
-                # print('Removing {} because it is >{} seconds old.'.format(file, diff))
+
+            if self.backupExpire and (time.time() - os.path.getmtime(fn)) > self.backupExpire:
                 os.remove(fn)
                 continue
 
-            oldest = [os.path.join(dir_name, f) for f in files if os.path.isfile(os.path.join(dir_name, f))]
-            oldest.sort(key=lambda f: int(os.path.getmtime(f) * 1000))
-
-            exceed = len(oldest) - self.backupCount
-            # print('Exceeding by {} files.'.format(exceed))
-            if exceed > 0:
-                remove_files = oldest[:exceed]
-                # print('Remove {} files:'.format(len(remove_files)))
-                for f in remove_files:
-                    # print('os.remove({})'.format(f))
-                    os.remove(f)
+        oldest = sorted(files, key=os.path.getmtime)
+        for fn in oldest[:-self.backupCount]:
+            os.remove(fn)
 
 
-datefile = time.strftime("%Y%m%d")
 if not os.path.exists("logs"):
     os.mkdir("logs")
-filename = "logs/ircd.log"
 
 BLACK, RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN, WHITE = range(8)
-
-# The background is set with 40 plus the number of the color, and the foreground with 30
 
 # These are the sequences need to get colored ouput
 RESET_SEQ = "\033[0m"
@@ -146,8 +130,7 @@ class PackagePathFilter(logging.Filter):
         record.relativepath = None
         abs_sys_paths = map(os.path.abspath, sys.path)
         for path in sorted(abs_sys_paths, key=len, reverse=True):  # longer paths first
-            if not path.endswith(os.sep):
-                path += os.sep
+            path = path if path.endswith(os.sep) else path + os.sep
             if pathname.startswith(path):
                 record.relativepath = os.path.relpath(pathname, path)
                 break
@@ -156,16 +139,13 @@ class PackagePathFilter(logging.Filter):
 
 class LogFormatter(logging.Formatter):
     def __init__(self, fmt, color=0):
+        super().__init__(fmt)
         self.color = color
-        logging.Formatter.__init__(self, fmt=fmt)
 
     def format(self, record):
-        levelname = record.levelname
-        if self.color:
-            if levelname in COLORS:
-                levelname_color = COLOR_SEQ % (30 + COLORS[levelname]) + levelname + RESET_SEQ
-                record.levelname = levelname_color
-        return logging.Formatter.format(self, record)
+        if self.color and (levelname := record.levelname) in COLORS:
+            record.levelname = f"{COLOR_SEQ % (30 + COLORS[levelname])}{levelname}{RESET_SEQ}"
+        return super().format(record)
 
 
 class IRCDLogger:
@@ -178,29 +158,25 @@ class IRCDLogger:
     @staticmethod
     def view_logging_info():
         logging.info("Logger initialised with settings:")
-        mb_file = IRCDLogger.file_handler.maxBytes * IRCDLogger.file_handler.backupCount
-        mb_file = mb_file / IRCDLogger.file_handler.backupCount
-        mb_file = float(mb_file) / 1000 / 1000
-        mb_file = "%.2f" % mb_file
-        logging.info(f"maxBytes: {IRCDLogger.file_handler.maxBytes} ({mb_file} MB per file)")
+
+        mb_file = IRCDLogger.file_handler.maxBytes / 1_000_000
+        logging.info(f"maxBytes: {IRCDLogger.file_handler.maxBytes} ({mb_file:.2f} MB per file)")
 
         logging.info(f"backupCount: {IRCDLogger.file_handler.backupCount}")
 
         sec = datetime.timedelta(seconds=IRCDLogger.file_handler.backupExpire)
         d = datetime.datetime(1, 1, 1) + sec
-        logging.info(f"backupExpire: {IRCDLogger.file_handler.backupExpire} ({d.year - 1} years, {d.month - 1} months, {d.day - 1} days)")
+        logging.info(f"backupExpire: {IRCDLogger.file_handler.backupExpire} seconds ({d.year - 1} years, {d.month - 1} months, {d.day - 1} days)")
 
-        max_size = IRCDLogger.file_handler.maxBytes * (IRCDLogger.file_handler.backupCount + 1)  # Include base file.
-        mb_size = float(max_size) / 1000 / 1000
-        mb_size = "%.2f" % mb_size
-        logging.info(f"Max possible total logs size: {max_size} bytes ({mb_size} MB)")
+        max_size = IRCDLogger.file_handler.maxBytes * (IRCDLogger.file_handler.backupCount + 1)
+        mb_size = max_size / 1_000_000
+        logging.info(f"Max possible total logs size: {max_size} bytes ({mb_size:.2f} MB)")
 
-        logging.info(f"Logs will rotate log files with interval: {IRCDLogger.file_handler.when}")
+        # logging.info(f"Logs will rotate log files with interval: {IRCDLogger.file_handler.when}")
 
-        if max_size > 10000000000:
-            gb_size = float(mb_size) / 1000
-            gb_size = "%.2f" % gb_size
-            logging.warning(f"Total log size limit exceeds 10GB: {gb_size} GB")
+        if max_size > 10_000_000_000:
+            gb_size = mb_size / 1_000
+            logging.warning(f"Total log size limit exceeds 10GB: {gb_size:.2f} GB")
             logging.warning("Pausing for 5 seconds for visibility...")
             time.sleep(5)
 
@@ -214,23 +190,38 @@ class IRCDLogger:
         IRCDLogger.stream_handler.setLevel(logging.DEBUG)
 
 
-file_fmt = "[%(asctime)s] {%(relativepath)s:%(lineno)d} %(levelname)s - %(message)s"
-file_handler = EnhancedRotatingFileHandler(filename, when="midnight", maxBytes=1_000 * 1_000, backup_count=30, backupExpire=2_629_744)
-file_handler.setLevel(logging.DEBUG)
-file_formatter = LogFormatter(fmt=file_fmt, color=0)
-file_handler.setFormatter(file_formatter)
-file_handler.addFilter(PackagePathFilter())
-IRCDLogger.file_handler = file_handler
-IRCDLogger.loghandlers.append(file_handler)
+log_fmt = "[%(asctime)s] {%(relativepath)s:%(lineno)d} %(levelname)s - %(message)s"
+log_paths = {
+    "file": "logs/ircd.log",
+    "warning": "logs/warning.log",
+    "error": "logs/error.log"
+}
+log_levels = [logging.DEBUG, logging.WARNING, logging.ERROR]
 
-stream_fmt = "[%(asctime)s] {%(relativepath)s:%(lineno)d} %(levelname)s - %(message)s"
+# Create file handlers.
+handlers = []
+for path, level in zip(log_paths.values(), log_levels):
+    handler = EnhancedRotatingFileHandler(path, when="midnight", maxBytes=1_000 * 1_000 * 10, backup_count=30, backupExpire=7_776_000)
+    handler.setLevel(level)
+    handler.setFormatter(LogFormatter(fmt=log_fmt, color=0))
+    handler.addFilter(PackagePathFilter())
+
+    if level == logging.DEBUG:
+        IRCDLogger.file_handler = handler
+
+    # Fix so that error events do not end up in warning.log.
+    if level == logging.WARNING:
+        handler.addFilter(lambda record: record.levelno == logging.WARNING)
+
+    handlers.append(handler)
+
 stream_handler = logging.StreamHandler()
 stream_handler.setLevel(logging.INFO)
-stream_formatter = LogFormatter(fmt=stream_fmt, color=1)
-stream_handler.setFormatter(stream_formatter)
+stream_handler.setFormatter(LogFormatter(fmt=log_fmt, color=1))
 stream_handler.addFilter(PackagePathFilter())
+handlers.append(stream_handler)
 IRCDLogger.stream_handler = stream_handler
-IRCDLogger.loghandlers.append(stream_handler)
 
+IRCDLogger.loghandlers.extend(handlers)
 logging.basicConfig(level=logging.DEBUG, handlers=IRCDLogger.loghandlers)
-# IRCDLogger.view_logging_info()
+IRCDLogger.view_logging_info()
