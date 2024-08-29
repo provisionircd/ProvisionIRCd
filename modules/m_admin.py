@@ -6,6 +6,10 @@ from handle.core import IRCD, Numeric, Command
 
 
 def cmd_admin(client, recv):
+    """
+    Displays administrative information about the server.
+    """
+
     if not (admin_block := IRCD.configuration.get_block("admin")):
         return
     client.sendnumeric(Numeric.RPL_ADMINME, IRCD.me.name)

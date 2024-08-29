@@ -25,10 +25,8 @@ class Watch:
 
 
 def cmd_watch(client, recv):
-    if int(time.time()) - client.creationtime >= 5:
-        client.local.flood_penalty += 100000
-    else:
-        client.flood_safe_on()
+    if client.seconds_since_signon() > 1:
+        client.add_flood_penalty(10_000)
     try:
         watch_lower = [x.lower() for x in Watch.watchlist[client]]
         if len(recv) == 1:
@@ -115,11 +113,6 @@ def watch_quit(client, reason):
         del Watch.watchlist[client]
 
 
-def watch_flood_safe(client, cmd, recv):
-    if cmd.lower() == "watch":
-        client.flood_safe_off()
-
-
 def init(module):
     Hook.add(Hook.LOCAL_CONNECT, watch_user_loggedon)
     Hook.add(Hook.REMOTE_CONNECT, watch_user_loggedon)
@@ -127,7 +120,6 @@ def init(module):
     Hook.add(Hook.REMOTE_QUIT, watch_quit)
     Hook.add(Hook.LOCAL_NICKCHANGE, watch_nickchange)
     Hook.add(Hook.REMOTE_NICKCHANGE, watch_nickchange)
-    Hook.add(Hook.POST_COMMAND, watch_flood_safe)
     Isupport.add("WATCH", MAXWATCH)
     Isupport.add("WATCHOPTS", 'A')
     Command.add(module, cmd_watch, "WATCH", 1)

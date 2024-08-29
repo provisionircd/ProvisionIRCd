@@ -10,33 +10,25 @@ AWAYLEN = 300
 
 
 def cmd_away(client, recv):
-    if len(recv) < 2:
-        if not client.user.away:
+    away = ' '.join(recv[1:]).removeprefix(':')[:AWAYLEN] if len(recv) > 1 else ''
+
+    if not away and not client.user.away:
+        return
+
+    for result, _ in Hook.call(Hook.PRE_AWAY, args=(client, away)):
+        if result == Hook.DENY:
             return
-
-        client.user.away = ''
-        client.user.away_since = 0
-        client.sendnumeric(Numeric.RPL_UNAWAY)
-
-    else:
-        away = ' '.join(recv[1:]).removeprefix(':')
-        trunc = 0
-        if len(away) > AWAYLEN:
-            trunc = 1
-        away = away[:AWAYLEN]
-
-        for result, callback in Hook.call(Hook.PRE_AWAY, args=(client, away)):
-            if result == Hook.DENY:
-                return
 
         if away == client.user.away:
             return
 
-        if trunc:
-            IRCD.server_notice(client, f"Away message truncated: exceeded limit of {AWAYLEN} characters.")
-        client.user.away = away
-        client.user.away_since = int(time())
-        client.sendnumeric(Numeric.RPL_NOWAWAY)
+        if away != client.user.away:
+            client.user.away = away
+            client.user.away_since = int(time()) if away else 0
+            client.sendnumeric(Numeric.RPL_NOWAWAY if away else Numeric.RPL_UNAWAY)
+
+            if len(' '.join(recv[1:])) > AWAYLEN:
+                IRCD.server_notice(client, f"Away message truncated: exceeded limit of {AWAYLEN} characters.")
 
     IRCD.new_message(client)
     chan_data = f":{client.fullmask} AWAY {':' + client.user.away if client.user.away else ''}"

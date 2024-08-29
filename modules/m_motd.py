@@ -5,6 +5,7 @@
 import os
 
 from handle.core import Numeric, IRCD, Command
+from handle.logger import logging
 
 
 def cmd_motd(client, recv):
@@ -14,8 +15,8 @@ def cmd_motd(client, recv):
     but it can still contain useful information.
     """
 
-    if client.local:
-        client.local.flood_penalty += 50_000
+    if client.seconds_since_signon() > 1:
+        client.add_flood_penalty(50_000)
     if len(recv) == 1:
         file = IRCD.confdir + "ircd.motd"
         if not os.path.isfile(file):

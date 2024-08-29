@@ -5,8 +5,6 @@
 # Draft:
 # https://ircv3.net/specs/core/monitor-3.2
 
-import time
-
 from handle.core import IRCD, Command, Isupport, Numeric, Hook
 from handle.logger import logging
 
@@ -31,10 +29,10 @@ class Monitor:
 
 
 def cmd_monitor(client, recv):
-    if int(time.time()) - client.creationtime > 10:
-        client.local.flood_penalty += 100000
+    if client.seconds_since_signon() > 5:
+        client.local.flood_penalty += 10_000
     try:
-        if recv[1] not in 'CLS+-':
+        if recv[1] not in "CLS+-":
             return
         if client not in Monitor.monlist:
             Monitor.monlist[client] = []
@@ -54,8 +52,7 @@ def cmd_monitor(client, recv):
                 if skip_target:
                     continue
                 Monitor.monlist[client].append(target)
-                is_online = next((u.fullmask for u in IRCD.global_clients() if u.name.lower() == target.lower()), 0)
-                if is_online:
+                if is_online := next((u.fullmask for u in IRCD.global_clients() if u.name.lower() == target.lower()), 0):
                     currently_online.append(is_online)
 
             buffer = []

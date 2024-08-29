@@ -34,15 +34,13 @@ def cmd_topic(client, recv):
         # After sync, always allow topic changes from remote servers.
         if not (channel := IRCD.find_channel(recv[1])):
             return logging.error(f"[topic] Unknown channel for topic: {recv[1]}")
-        if not channel.topic_time or int(recv[3]) < channel.topic_time or client.uplink.server.synced:
-            text = ' '.join(recv[4:]).removeprefix(':')
-            channel.topic = text
-            channel.topic_author = recv[2]
-            channel.topic_time = int(recv[3])
-            send_topic(client, channel)
-        return
 
-    oper_override = 0
+        if not channel.topic_time or int(recv[3]) < channel.topic_time or client.uplink.server.synced:
+            channel.topic = ' '.join(recv[4:]).removeprefix(':')
+            channel.topic_author, channel.topic_time = recv[2], int(recv[3])
+            send_topic(client, channel)
+
+        return
 
     if not (channel := IRCD.find_channel(recv[1])):
         return client.sendnumeric(Numeric.ERR_NOSUCHCHANNEL, recv[1])
@@ -53,41 +51,39 @@ def cmd_topic(client, recv):
 
         client.sendnumeric(Numeric.RPL_TOPIC, channel.name, channel.topic)
         client.sendnumeric(Numeric.RPL_TOPICWHOTIME, channel.name, channel.topic_author, channel.topic_time)
+        return
 
-    else:
-        text = ' '.join(recv[2:]).removeprefix(':')
-        if client not in channel.clients() and not client.has_permission("channel:override:topic:notinchannel"):
+    oper_override = 0
+    text = ' '.join(recv[2:]).removeprefix(':')
+    if client not in channel.clients():
+        if not client.has_permission("channel:override:topic:notinchannel"):
             return client.sendnumeric(Numeric.ERR_NOTONCHANNEL, channel.name)
+        oper_override = 1
 
-        elif client not in channel.clients():
-            oper_override = 1
+    if 't' in channel.modes and client.local and not channel.client_has_membermodes(client, "hoaq"):
+        if not client.has_permission("channel:override:topic:no-ops"):
+            return client.sendnumeric(Numeric.ERR_CHANOPRIVSNEEDED, channel.name)
+        oper_override = 1
 
-        if 't' in channel.modes and client.local:
-            if not channel.client_has_membermodes(client, "hoaq"):
-                if not client.has_permission("channel:override:topic:no-ops"):
-                    return client.sendnumeric(Numeric.ERR_CHANOPRIVSNEEDED, channel.name)
-                else:
-                    oper_override = 1
+    if channel.topic == text:
+        # Topic is the same. Do nothing.
+        return
 
-        if channel.topic == text:
-            # Topic is the same. Do nothing.
+    h = Hook.call(Hook.PRE_LOCAL_TOPIC, args=(client, channel, text))
+    for result, callback in h:
+        if result == Hook.DENY:
             return
 
-        h = Hook.call(Hook.PRE_LOCAL_TOPIC, args=(client, channel, text))
-        for result, callback in h:
-            if result == Hook.DENY:
-                return
+    channel.topic = text
+    channel.topic_author = client.fullmask if text else None
+    channel.topic_time = int(time.time()) if text else 0
+    send_topic(client, channel)
 
-        channel.topic = text
-        channel.topic_author = client.fullmask if text else None
-        channel.topic_time = int(time.time()) if text else 0
-        send_topic(client, channel)
+    if oper_override and client.user and client.local:
+        override_string = f"*** OperOverride by {client.name} ({client.user.username}@{client.user.realhost}) with TOPIC {channel.name} \'{channel.topic}\'"
+        IRCD.log(client, "info", "oper", "OPER_OVERRIDE", override_string, sync=1)
 
-        if oper_override and client.user and client.local:
-            override_string = f"*** OperOverride by {client.name} ({client.user.username}@{client.user.realhost}) with TOPIC {channel.name} \'{channel.topic}\'"
-            IRCD.log(client, "info", "oper", "OPER_OVERRIDE", override_string, sync=1)
-
-        IRCD.run_hook(Hook.TOPIC, client, channel, channel.topic)
+    IRCD.run_hook(Hook.TOPIC, client, channel, channel.topic)
 
 
 def init(module):

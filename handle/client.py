@@ -19,7 +19,9 @@ try:
 except AttributeError:
     if sys.platform.startswith("win32"):
         logging.warning("Windows does not support select.poll(), using select.select() instead.")
-        IRCD.use_poll = 0
+    else:
+        logging.warning("This system does not support select.poll(), using select.select() instead.")
+    IRCD.use_poll = 0
 
 
 def make_client(direction, uplink) -> Client | None:
@@ -35,13 +37,12 @@ def make_client(direction, uplink) -> Client | None:
     client = Client()
     client.direction = direction if direction else uplink
     client.uplink = uplink
-    client.creationtime = int(time())
-    client.idle_since = int(time())
     IRCD.global_client_count += 1
     if not direction:
         # Local client.
         IRCD.local_client_count += 1
         client.local = LocalClient()
+        # Creationtime must be set here for reg timeout checks.
         client.local.creationtime = int(time())
     Client.table.append(client)
     return client

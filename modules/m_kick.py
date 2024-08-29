@@ -15,10 +15,8 @@ def client_can_kick_target(client, target_client, channel, reason):
 
 
 def do_kick(client, channel, target_client, reason):
-    if client == IRCD.me:
-        fullmask = IRCD.me.name
-    else:
-        fullmask = client.fullmask
+    fullmask = IRCD.me.name if client == IRCD.me else client.fullmask
+
     data = f":{fullmask} KICK {channel.name} {target_client.name} :{reason}"
     channel.broadcast(client, data)
     channel.remove_client(target_client)
@@ -28,18 +26,19 @@ def do_kick(client, channel, target_client, reason):
 
     data = f":{client.id} KICK {channel.name} {target_client.id} :{reason}"
     IRCD.send_to_servers(client, mtags=client.mtags, data=data)
-    client.mtags = []
 
 
 def cmd_kick(client, recv):
+    """
+    Kicks a user from the channel. Requires +h or higher.
+    Syntax: KICK <nickname> <reason>
+    """
+
     chan = recv[1]
     if not (channel := IRCD.find_channel(chan)):
         return client.sendnumeric(Numeric.ERR_NOSUCHCHANNEL, chan)
 
-    if len(recv) == 3:
-        reason = client.name
-    else:
-        reason = ' '.join(recv[3:])
+    reason = client.name if len(recv) == 3 else ' '.join(recv[3:])
     reason = reason[:KICKLEN].removeprefix(':')
 
     if not (target_client := IRCD.find_user(recv[2])):

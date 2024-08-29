@@ -104,6 +104,7 @@ def send_who_reply(client, mask: str):
                             reply.channel = chan
                             break
 
+            client.add_flood_penalty(100)
             client.sendnumeric(Numeric.RPL_WHOREPLY, *reply.who_reply())
 
     client.sendnumeric(Numeric.RPL_ENDOFWHO, mask)
@@ -128,6 +129,7 @@ def cmd_who(client, recv):
      u <ident>      = Filter by username/ident.
     """
 
+    client.add_flood_penalty(10_000)
     WhoData.replies = []
 
     if len(recv) == 1 or recv[1] == '*':

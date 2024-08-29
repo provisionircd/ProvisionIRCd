@@ -17,14 +17,11 @@ except ImportError:
 
 
 def close_socket(sock):
-    try:
-        sock.shutdown(sock.SHUT_RDWR)
-    except:
-        pass
-    try:
-        sock.shutdown()
-    except:
-        pass
+    for method in [lambda: sock.shutdown(sock.SHUT_RDWR), lambda: sock.close()]:
+        try:
+            method()
+        except:
+            pass
     if IRCD.use_poll:
         try:
             IRCD.poller.unregister(sock)
@@ -91,17 +88,15 @@ def accept_socket(sock, listen_obj):
 
 
 def check_ping_timeouts():
-    for client in list(IRCD.local_clients()):
-        if not client.registered:
-            continue
-        if (int(time()) - client.local.last_msg_received) >= 120:
+    current_time = int(time())
+    for client in IRCD.local_clients():
+        if client.registered and (current_time - client.local.last_msg_received) >= 120:
             client.exit("Ping timeout", sock_error=1)
 
 
 def check_invalid_clients():
     for client in list(IRCD.remote_clients()):
-        sid = client.id[:3]
-        if not IRCD.find_server(sid):
+        if not IRCD.find_server(client.id[:3]):
             logging.error(f"Invalid user leftover after possible netsplit: {client.name}. UID: {client.id}")
             client.exit("Invalid user")
             if client in Client.table:
@@ -110,10 +105,11 @@ def check_invalid_clients():
 
 
 def check_freeze():
-    since_last_activity = int(time()) - IRCD.last_activity
+    now = int(time())
+    since_last_activity = now - IRCD.last_activity
     if IRCD.last_activity and since_last_activity > 2:
         logging.warning(f"IRCd froze for {since_last_activity} seconds. Check logs above for possible cause.")
-    IRCD.last_activity = int(time())
+    IRCD.last_activity = now
 
 
 def autoconnect_links():
@@ -134,18 +130,18 @@ def autoconnect_links():
 
 
 def check_reg_timeouts():
-    all_linked = 1
-    for server in [c for c in Client.table if c.server]:
-        if not server.registered:
-            all_linked = 0
+    for client in IRCD.global_servers():
+        if not client.registered:
             break
-    if all_linked:
+    else:
+        """ Loop ended normally, so all servers are registered """
         if IRCD.current_link_sync:
             logging.debug(f"[check_reg_timeouts()] current_link_sync for {IRCD.current_link_sync} unset.")
         IRCD.current_link_sync = None
+
+    reg_timeout = int(IRCD.get_setting("regtimeout"))
     for client in IRCD.unregistered_clients():
-        alive_in_seconds = int(time()) - client.local.creationtime
-        if alive_in_seconds >= int(IRCD.get_setting("regtimeout")):
+        if int(time()) - client.local.creationtime >= reg_timeout:
             client.exit("Registration timed out")
 
 
@@ -166,15 +162,13 @@ def remove_delayed_connections():
 
 def send_pings():
     pingfreq = 90
-    for client in [c for c in IRCD.local_clients() if c.registered]:
-        last_ping_sent_int = int((time() * 1000) - client.last_ping_sent) / 1000
-        if (int(time()) - client.local.last_msg_received) >= pingfreq and last_ping_sent_int > pingfreq / 3:
-            if client.user:
-                data = f"PING :{IRCD.me.name}"
-            else:
-                data = f":{IRCD.me.id} PING {IRCD.me.name} {client.name}"
+    current_time = time()
+    for client in (c for c in IRCD.local_clients() if c.registered):
+        time_since_last_ping = (current_time * 1000 - client.last_ping_sent) / 1000
+        if (current_time - client.local.last_msg_received) >= pingfreq and time_since_last_ping > pingfreq / 3:
+            data = f"PING :{IRCD.me.name}" if client.user else f":{IRCD.me.id} PING {IRCD.me.name} {client.name}"
             client.send([], data)
-            client.last_ping_sent = time() * 1000
+            client.last_ping_sent = current_time * 1000
 
 
 def find_sock_from_fd(fd: int):
@@ -198,14 +192,14 @@ def post_sockread(client, recv):
         if not line.strip():
             continue
 
-        # TODO: REMOVE THIS LINE
         debug_in = 0 if client.server else 0
-        if line.split()[0].lower() in ["ping", "pong"] and client.registered:
-            debug_in = 0
-        if len(line.split()) > 1 and line.split()[1].lower() in ["ping", "pong", "privmsg", "notice", "tagmsg"] and client.registered:
-            debug_in = 0
-        if len(line.split()) > 2 and line.split()[2].lower() in ["ping", "pong", "privmsg", "notice", "tagmsg"] and client.registered:
-            debug_in = 0
+        if client.registered:
+            ignore = ["ping", "pong", "privmsg", "notice", "tagmsg", "id", "identify", "auth", "register", "nickserv", "ns"]
+            split_line = line.split()
+            for i in range(min(3, len(split_line))):
+                if split_line[i].lower() in ignore:
+                    debug_in = 0
+                    break
         if debug_in:
             logging.debug(f"[IN] {client.name}[{client.ip}] > {line}")
 
@@ -242,15 +236,14 @@ def process_backbuffer():
     for client in IRCD.local_clients():
         if client.local.recvbuffer:
             client.handle_recv()
+
         if client.user:
-            for entry in list(client.local.backbuffer):
-                tte, data = entry
-                if time() > tte + 1:
-                    client.local.backbuffer.remove(entry)
-            for entry in list(client.local.sendq_buffer):
-                tte, data = entry
-                if time() >= tte + 1:
-                    client.local.sendq_buffer.remove(entry)
+            current_time = time()
+            for buffer in [client.local.backbuffer, client.local.sendq_buffer]:
+                for entry in list(buffer):
+                    tte, _ = entry
+                    if current_time >= tte + 1:
+                        buffer.remove(entry)
 
 
 def handle_connections():

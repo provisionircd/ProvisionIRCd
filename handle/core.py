@@ -520,6 +520,9 @@ class Client:
         if md := ModData.get_from_client(self, name):
             return md.value
 
+    def seconds_since_signon(self):
+        return int(time()) - self.creationtime
+
     def flood_safe_on(self):
         flag = Flag.CLIENT_USER_FLOOD_SAFE
         if flag not in self.flags:
@@ -532,6 +535,11 @@ class Client:
 
     def is_flood_safe(self):
         return Flag.CLIENT_USER_FLOOD_SAFE in self.flags
+
+    def add_flood_penalty(self, penalty: int):
+        if not self.local or self.is_flood_safe():
+            return
+        self.local.flood_penalty += penalty
 
     def check_flood(self):
         if self.is_flood_safe():
@@ -567,7 +575,7 @@ class Client:
                 cmd_len = len(self.local.recvbuffer)
                 max_cmds = recvq / 50
                 max_cmds = int(max_cmds)
-                if (cmd_len >= max_cmds) and (self.registered and int(time()) - self.creationtime >= 1):
+                if (cmd_len >= max_cmds) and (self.registered and self.seconds_since_signon() >= 1):
                     if self.registered:
                         IRCD.send_snomask(self, 'f',
                                           f"*** Buffer Flood -- {self.name} ({self.user.username}@{self.user.realhost}) has reached "
@@ -734,8 +742,6 @@ class Client:
                 IRCD.server_notice(self, f"*** You are connected to {IRCD.me.name} with {cipher_version}-{cipher_name}")
                 self.add_md("tls-cipher", f"{cipher_version}-{cipher_name}")
 
-        self.sync(cause="welcome_user()")
-
         IRCD.local_user_count += 1
         if IRCD.local_user_count > IRCD.maxusers:
             IRCD.maxusers = IRCD.local_user_count
@@ -744,7 +750,8 @@ class Client:
         if IRCD.global_user_count > IRCD.maxgusers:
             IRCD.maxgusers = IRCD.global_user_count
 
-        self.flood_safe_on()
+        self.creationtime = int(time())
+        self.idle_since = int(time())
         self.add_flag(Flag.CLIENT_REGISTERED)
         self.sendnumeric(Numeric.RPL_WELCOME, IRCD.me.name, self.name, self.user.username, self.user.realhost)
         self.sendnumeric(Numeric.RPL_YOURHOST, IRCD.me.name, IRCD.version)
@@ -771,8 +778,9 @@ class Client:
             if len(modes) > 0:
                 self.add_user_modes(modes)
 
+        self.sync(cause="welcome_user()")
+
         IRCD.run_hook(Hook.LOCAL_CONNECT, self)
-        self.flood_safe_off()
 
     def handle_recv(self):
         if Flag.CLIENT_HANDSHAKE_FINISHED not in self.flags:
@@ -1594,7 +1602,7 @@ class Channel:
         else:
             logging.debug(f"Unable to remove {client.name} (uplink={client.uplink.name}) from channel {self.name}: member not found")
 
-        for c in list(self.seen_dict):
+        for c in self.seen_dict:
             if client in self.seen_dict[c]:
                 self.seen_dict[c].remove(client)
 
@@ -1647,8 +1655,9 @@ class Channel:
         if len(self.members) == 1 and client.local:
             if self.name[0] != '+' and 'P' not in self.modes:
                 self.member_give_modes(client, 'o')
-                if modes_on_join := IRCD.get_setting("modes-on-join"):
-                    Command.do(IRCD.me, "MODE", self.name, *modes_on_join.split(), str(self.creationtime))
+            # Ensure that 'modes-on-join' are also set on +channels.
+            if modes_on_join := IRCD.get_setting("modes-on-join"):
+                Command.do(IRCD.me, "MODE", self.name, *modes_on_join.split(), str(self.creationtime))
 
         if self.name[0] != '&':
             prefix = self.get_sjoin_prefix_sorted_str(client)

@@ -44,20 +44,17 @@ def cmd_invite(client, recv):
     invite_can_override = 1 if (client.has_permission("channel:override:invite") or channel.client_has_membermodes(client, "oaq")) else 0
     channel.add_invite(to=invite_client, by=client, override=invite_can_override)
     if oper_override and client.user and client.local:
-        s = ''
-        if channel.is_banned(invite_client):
-            s = " [Overriding +b]"
-        elif 'i' in channel.modes:
-            s = " [Overriding +i]"
-        elif 'l' in channel.modes and channel.membercount >= channel.limit:
-            s = " [Overriding +l]"
-        elif 'k' in channel.modes:
-            s = " [Overriding +k]"
-        elif 'R' in channel.modes and 'r' not in invite_client.modes:
-            s = " [Overriding +R]"
-        elif 'z' in channel.modes and 'z' not in invite_client.modes:
-            s = " [Overriding +z]"
+        overrides = {
+            'b': " [Overriding +b]" if channel.is_banned(invite_client) else '',
+            'i': " [Overriding +i]" if 'i' in channel.modes else '',
+            'l': " [Overriding +l]" if 'l' in channel.modes and channel.membercount >= channel.limit else '',
+            'k': " [Overriding +k]" if 'k' in channel.modes else '',
+            'R': " [Overriding +R]" if 'R' in channel.modes and 'r' not in invite_client.modes else '',
+            'z': " [Overriding +z]" if 'z' in channel.modes and 'z' not in invite_client.modes else ''
+        }
+        s = next((msg for key, msg in overrides.items() if msg), '')
         msg = f"*** OperOverride by {client.name} ({client.user.username}@{client.user.realhost}) with INVITE {invite_client.name} {channel.name}{s}"
+
         IRCD.log(client, "info", "oper", "OPER_OVERRIDE", msg, sync=1)
 
     data = f":{client.fullmask} INVITE {invite_client.name} {channel.name}"
