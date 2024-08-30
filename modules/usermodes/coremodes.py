@@ -19,6 +19,7 @@ def init(module):
 
     Snomask.add(module, 'c', 0, "Can read local connect/disconnect notices")
     Snomask.add(module, 'f', 1, "See excess flood alerts")
+    Snomask.add(module, 'j', 0, "See join, part, and kick messages")
     Snomask.add(module, 'k', 0, "View kill notices")
     Snomask.add(module, 'o', 1, "See oper-up notices and oper override notices")
     Snomask.add(module, 's', 0, "General server notices")

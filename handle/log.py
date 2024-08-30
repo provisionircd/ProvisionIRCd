@@ -24,6 +24,9 @@ def event_to_snomask(rootevent, event):
         case "sajoin" | "sapart" | "sanick":
             return 'S'
 
+        case "join" | "part" | "kick":
+            return 'j'
+
         case _:
             return 's'
 

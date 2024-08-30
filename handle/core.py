@@ -1622,6 +1622,11 @@ class Channel:
             IRCD.send_to_servers(client, client.mtags, data)
         self.remove_client(client)
 
+        if (client.user or (client.server and client.registered)) and not client.ulined:
+            msg = f"*** {client.name} ({client.user.username}@{client.user.realhost}) has left channel {self.name}"
+            event = "LOCAL_PART" if client.local else "REMOTE_PART"
+            IRCD.log(client, "info", "part", event, msg, sync=0)
+
     def show_join_message(self, mtags, client: Client, new_user: Client) -> None:
         """ Show `new_user` join message to `client` """
         if new_user.is_stealth() or new_user in self.seen_dict[client]:
@@ -1665,6 +1670,11 @@ class Channel:
             # data = f":{IRCD.me.id} SJOIN {self.creationtime} {self.name} :{prefix}{client.id}"
             data = f":{client.uplink.id} SJOIN {self.creationtime} {self.name} :{prefix}{client.id}"
             IRCD.send_to_servers(client, client.mtags, data)
+
+        if (client.user or (client.server and client.registered)) and not client.ulined:
+            event = "LOCAL_JOIN" if client.local else "REMOTE_JOIN"
+            msg = f"*** {client.name} ({client.user.username}@{client.user.realhost}) has joined channel {self.name}"
+            IRCD.log(client, "info", "join", event, msg, sync=0)
 
 
 @dataclass
