@@ -46,11 +46,12 @@ class Chanset:
 
     @staticmethod
     def get_setting(channel: Channel, name: str):
-        return next((p for p in Chanset.channels[channel] if p.name == name), None)
+        channel_settings = Chanset.channels.get(channel, [])
+        return next((p for p in channel_settings if p.name == name), None)
 
     @staticmethod
     def get_settings(channel: Channel) -> list:
-        return [p for p in Chanset.channels[channel]]
+        return [p for p in Chanset.channels.get(channel, [])]
 
 
 def cmd_chanset(client, recv):
