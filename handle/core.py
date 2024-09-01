@@ -768,6 +768,8 @@ class Client:
         Command.do(self, "LUSERS")
         Command.do(self, "MOTD")
 
+        self.sync(cause="welcome_user()")
+
         # Give modes on connect.
         if conn_modes := IRCD.get_setting("modes-on-connect"):
             conn_modes = ''.join([m for m in conn_modes if m.isalpha() and m not in self.user.modes])
@@ -777,8 +779,6 @@ class Client:
             modes = list(set(modes))
             if len(modes) > 0:
                 self.add_user_modes(modes)
-
-        self.sync(cause="welcome_user()")
 
         IRCD.run_hook(Hook.LOCAL_CONNECT, self)
 
@@ -2426,6 +2426,9 @@ class IRCD:
 
     @staticmethod
     def new_message(client):
+        if not client.local:
+            """ Remote clients mtags are already stored -- don't overwrite """
+            return
         IRCD.run_hook(Hook.NEW_MESSAGE, client)
         # Filter duplicate tags from self.sender.mtags, keeping only first.
         filtered_tags = []
