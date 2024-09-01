@@ -2508,12 +2508,8 @@ class IRCD:
 
     @staticmethod
     def server_notice(client: Client, data: str):  # server: Client):
-        # if server:
-        #     server = server
-        # else:
-        #     server = client.uplink
-
-        # server.name
+        if not client.local:
+            return
         data = f":{client.uplink.name} NOTICE {client.name} :{data}"
         client.send([], data)
 

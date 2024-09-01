@@ -6,7 +6,7 @@ from handle.core import IRCD, Command, Flag
 
 
 def cmd_error(client, recv):
-    if (link := IRCD.get_link(client.name)) and link.autoconnect and not client.server.authed:
+    if (link := IRCD.get_link(client.name)) and link.auto_connect and not client.server.authed:
         """ Do not spam ERROR messages on outgoing autoconnect fails. """
         return
     msg = ' '.join(recv[1:]).removeprefix(':')

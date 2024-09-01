@@ -2,9 +2,12 @@
 /list command
 """
 
+from time import time
+
 from handle.core import IRCD, Command, Isupport, Numeric
 from handle.functions import is_match
-from time import time
+
+LIST_PROCESS = []
 
 
 def cmd_list(client, recv):
@@ -23,6 +26,10 @@ def cmd_list(client, recv):
     LIST T<`timestamp`      Show channels that had their topic set before `timestamp`.
     """
 
+    if client in LIST_PROCESS:
+        return IRCD.server_notice(client, "*** A /LIST command is already in progress, please wait.")
+
+    LIST_PROCESS.append(client)
     client.add_flood_penalty(10_000)
     client.sendnumeric(Numeric.RPL_LISTSTART)
 
