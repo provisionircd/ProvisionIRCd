@@ -70,6 +70,7 @@ def cmd_list(client, recv):
         client.sendnumeric(Numeric.RPL_LIST, channel.name, channel.membercount, list_modes, channel.topic)
 
     client.sendnumeric(Numeric.RPL_LISTEND)
+    LIST_PROCESS.remove(client)
 
 
 def init(module):
