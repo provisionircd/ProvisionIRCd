@@ -27,7 +27,7 @@ def do_kick(client, channel, target_client, reason):
     data = f":{client.id} KICK {channel.name} {target_client.id} :{reason}"
     IRCD.send_to_servers(client, mtags=client.mtags, data=data)
 
-    if (client.user or (client.server and client.registered)) and not client.ulined:
+    if (client.local and client.registered) or (not client.local and client.uplink.server.synced) and not client.ulined:
         event = "LOCAL_KICK" if client.local else "REMOTE_KICK"
         msg = f"*** {client.name} ({client.user.username}@{client.user.realhost}) has kicked {target_client.name} off channel {channel.name}: {reason}"
         IRCD.log(client, "info", "kick", event, msg, sync=0)

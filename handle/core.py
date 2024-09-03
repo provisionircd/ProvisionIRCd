@@ -18,7 +18,7 @@ from random import randrange
 from sys import version
 from threading import Thread
 from time import time
-from datetime import datetime
+from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from typing import NewType, ClassVar, Callable
 
@@ -291,9 +291,6 @@ class Client:
             return
 
         logging.debug(f"Syncing user {self.name} to all locally connected servers.")
-        # if cause:
-        #     logging.debug(f"Cause of {self.name} sync: {cause}")
-
         sync_modes = ''
         for mode in self.user.modes:
             umode = IRCD.get_usermode_by_flag(mode)
@@ -1622,7 +1619,7 @@ class Channel:
             IRCD.send_to_servers(client, client.mtags, data)
         self.remove_client(client)
 
-        if (client.user or (client.server and client.registered)) and not client.ulined:
+        if (client.local and client.registered) or (not client.local and client.uplink.server.synced) and not client.ulined:
             msg = f"*** {client.name} ({client.user.username}@{client.user.realhost}) has left channel {self.name}"
             event = "LOCAL_PART" if client.local else "REMOTE_PART"
             IRCD.log(client, "info", "part", event, msg, sync=0)
@@ -1666,12 +1663,10 @@ class Channel:
 
         if self.name[0] != '&':
             prefix = self.get_sjoin_prefix_sorted_str(client)
-            # data = f":{client.id} JOIN {self.name}"
-            # data = f":{IRCD.me.id} SJOIN {self.creationtime} {self.name} :{prefix}{client.id}"
             data = f":{client.uplink.id} SJOIN {self.creationtime} {self.name} :{prefix}{client.id}"
             IRCD.send_to_servers(client, client.mtags, data)
 
-        if (client.user or (client.server and client.registered)) and not client.ulined:
+        if (client.local and client.registered) or (not client.local and client.uplink.server.synced) and not client.ulined:
             event = "LOCAL_JOIN" if client.local else "REMOTE_JOIN"
             msg = f"*** {client.name} ({client.user.username}@{client.user.realhost}) has joined channel {self.name}"
             IRCD.log(client, "info", "join", event, msg, sync=0)
@@ -2201,8 +2196,8 @@ class IRCD:
 
     @staticmethod
     def get_time_string():
-        utc_time = datetime.utcnow().timestamp()
-        time_string = f"{datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S')}.{round(utc_time % 1000)}Z"
+        utc_time = datetime.now(timezone.utc).timestamp()
+        time_string = f"{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S')}.{round(utc_time % 1000)}Z"
         return time_string
 
     @staticmethod
@@ -3181,7 +3176,7 @@ class Hook:
     # Return:       Hook.DENY or Hook.CONTINUE
     PRE_LOCAL_USERMSG = hook()
 
-    # Called when a local user sends a private message message.
+    # Called when a local user sends a private message.
     # Arguments:    client, target, message
     LOCAL_USERMSG = hook()
 
