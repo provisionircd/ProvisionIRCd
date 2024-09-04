@@ -152,7 +152,7 @@ def cmd_line(client, recv):
         # Server-only command, so 'client'.
         # :00B SQLINE OperServ :Reserved for services
         # data = f':{IRCD.me.id} TKL + {tkl.type} {tkl.ident} {tkl.host} {tkl.bantypes} {tkl.set_by} {tkl.expire} {tkl.set_time} :{tkl.reason}'
-        Tkl.add(client, 'Q', ident='*', host=recv[1], bantypes='', set_by=client.name, expire=0, set_time=int(time.time()), reason=reason)
+        Tkl.add(client, flag='Q', ident='*', host=recv[1], bantypes='', set_by=client.name, expire=0, set_time=int(time.time()), reason=reason)
         return
     elif recv[0].lower() == "unsqline":
         Tkl.remove(client, 'Q', '*', recv[1])
@@ -316,7 +316,7 @@ def cmd_shun(client, recv):
 
 
 def sqline_check_pre_nick(client, newnick):
-    if tkl := Tkl.find_tkl_by_mask('Q', newnick) and not client.has_permission("immune:server-ban:qline"):
+    if (tkl := Tkl.find_tkl_by_mask('Q', newnick)) and not client.has_permission("immune:server-ban:qline"):
         client.sendnumeric(Numeric.ERR_ERRONEUSNICKNAME, newnick, tkl.reason)
         msg = f"*** Q:Line Rejection -- Forbidden nick {newnick} from client {client.ip} {'' if client.name == '*' else f'[Current nick: {client.name}]'}"
         IRCD.send_snomask(client, 'Q', msg)

@@ -3561,7 +3561,7 @@ class Tkl:
         client:     Source performing the add.
         bantypes:   Only applicable with /eline. Specifies which bantypes to except.
         """
-        logging.debug(f"TKL add from client ID: {client.id} ({client.name})")
+
         if flag not in Tkl.valid_flags():
             return logging.warning(f"Attempted to add non-existing TKL {flag} from {client.name}")
         mask = Tkl.get_mask(flag, ident, host)
