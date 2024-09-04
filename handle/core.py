@@ -1820,10 +1820,18 @@ class IRCD:
     uid_iter = None
 
     NICKLEN: int = 0
-    NICKCHARS: str = "abcdefghijklmnopqrstuvwxyz0123456789`^-_[]{}|\\"
+    ascii_letters_digits = ''.join([string.ascii_lowercase,
+                                    string.digits,
+                                    # à - ÿ (includes ö, ä, ü, é, è, ñ)
+                                    ''.join([chr(i) for i in range(0x00E0, 0x00FF)]),
+                                    # α - ω
+                                    ''.join([chr(i) for i in range(0x03B1, 0x03C9 + 1)])
+                                    ])
+
+    NICKCHARS = ascii_letters_digits + "`^-_[]{}|\\"
     CHANPREFIXES = "#+&"
     CHANLEN = 32
-    CHANCHARS = "abcdefghijklmnopqrstuvwxyz0123456789`#$^*()-=_[]{}|;':\"<>"
+    CHANCHARS = ascii_letters_digits + "`#$^*()-=_[]{}|;':\"<>"
     HOSTCHARS = "abcdefghijklmnopqrstuvwxyz0123456789.-"
 
     @staticmethod

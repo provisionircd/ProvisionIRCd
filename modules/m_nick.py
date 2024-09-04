@@ -60,7 +60,6 @@ def cmd_nick_local(client, recv):
         return client.sendnumeric(Numeric.ERR_ERRONEUSNICKNAME, newnick, nickban.reason)
 
     newnick = newnick[:NICKLEN]
-
     for c in newnick:
         if c.lower() not in IRCD.NICKCHARS:
             return client.sendnumeric(Numeric.ERR_ERRONEUSNICKNAME, newnick, c)
