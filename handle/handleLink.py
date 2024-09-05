@@ -114,7 +114,7 @@ def start_link_negotiation(newserver):
         info.append(isupport.string)
     newserver.send([], f"PROTOCTL EAUTH={IRCD.me.name} SID={IRCD.me.id} {' '.join(info)}")
     newserver.send([], f"PROTOCTL NOQUIT EAUTH SID CLK SJOIN SJOIN2 UMODE2 VL SJ3 SJSBY NICKIP ESVID NEXTBANS EXTSWHOIS TS={int(time.time())} BOOTED={IRCD.boottime}")
-    newserver.send([], f"PROTOCTL NICKCHARS=utf8 CHANNELCHARS=utf8")
+    newserver.send([], f"PROTOCTL NICKCHARS=utf8 CHANNELCHARS=utf8 BIGLINES")
     newserver.send([], f"SERVER {IRCD.me.name} 1 :P300B-*-{IRCD.me.id} {IRCD.me.info}")
     IRCD.run_hook(Hook.SERVER_LINK_POST_NEGOTATION, newserver)
 

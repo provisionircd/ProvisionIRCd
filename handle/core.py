@@ -959,7 +959,7 @@ class Client:
 
         except (OpenSSL.SSL.WantReadError, OpenSSL.SSL.SysCallError, Exception) as ex:
             error_message = f"Write error: {str(ex)}"
-            if (isinstance(ex, OpenSSL.SSL.WantReadError) or isinstance(ex, OpenSSL.SSL.SysCallError)) and not self.registered:
+            if (isinstance(ex, OpenSSL.SSL.WantReadError) or isinstance(ex, OpenSSL.SSL.SysCallError) or isinstance(ex, ConnectionAbortedError)) and not self.registered:
                 """ Most likely a non-TLS socket on a TLS port. Not showing exception message. """
                 pass
             else:

@@ -316,10 +316,19 @@ def config_test_listen(block):
                 location = (host, port)
                 s.bind(location)  # Try to bind to the port.
                 close_port_check(s)
-                return 0  # If the bind succeeds, the port is not in use.
-            except:
+                return 0, 0  # If the bind succeeds, the port is not in use.
+            except OSError as ex:
                 close_port_check(s)
-                return 1
+                if ex.errno in [13, 10013]:
+                    # Permission denied.
+                    return 1, f"Could not bind to port '{port}': Permission denied."
+                if ex.errno in [98]:
+                    # Already in use.
+                    return 1, f"Port '{port}' is already open on this machine"
+                return 1, 0
+            except Exception as ex:
+                close_port_check(s)
+                return 1, 0
 
     def close_port_check(s):
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -347,8 +356,9 @@ def config_test_listen(block):
             return conf_error(f"Port '{port}' is invalid. Must be in range 1024-65535.", block=block, item=port_item)
 
         check_ip = "127.0.0.1" if ip == '*' else ip
-        if is_port_in_use(check_ip, int(port)) and int(port) not in IRCD.configuration.our_ports:
-            return conf_error(f"Port '{port}' is already open on this machine.", block=block, item=port_item)
+        port_error, errmsg = is_port_in_use(check_ip, int(port))
+        if port_error == 1 and int(port) not in IRCD.configuration.our_ports:
+            return conf_error(errmsg or f"Unable to bind to port '{port}'", block=block, item=port_item)
 
         # Don't re-bind already listening sockets.
         if IRCD.configuration.get_listen_by_port(port):
