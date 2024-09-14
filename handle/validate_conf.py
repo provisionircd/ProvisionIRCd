@@ -322,7 +322,7 @@ def config_test_listen(block):
                 if ex.errno in [13, 10013]:
                     # Permission denied.
                     return 1, f"Could not bind to port '{port}': Permission denied."
-                if ex.errno in [98]:
+                if ex.errno in [98, 48, 10048]:
                     # Already in use.
                     return 1, f"Port '{port}' is already open on this machine"
                 return 1, 0
