@@ -25,7 +25,7 @@ def cmd_ping(client, recv):
 def cmd_nospoof(client, reply):
     if reply == client.local.nospoof:
         client.local.nospoof = 0
-    else:
+    elif client.local.nospoof:
         IRCD.server_notice(client, "ERROR: Invalid PING response. Your client must respond back with PONG :<cookie>")
 
 
@@ -52,4 +52,4 @@ def cmd_pong(client, recv):
 
 def init(module):
     Command.add(module, cmd_pong, "PONG", 1, Flag.CMD_USER, Flag.CMD_UNKNOWN, Flag.CMD_SERVER)
-    Command.add(module, cmd_ping, "PING", 0, Flag.CMD_USER, Flag.CMD_UNKNOWN, Flag.CMD_SERVER)
+    Command.add(module, cmd_ping, "PING", 1, Flag.CMD_USER, Flag.CMD_UNKNOWN, Flag.CMD_SERVER)

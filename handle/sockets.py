@@ -140,8 +140,9 @@ def check_reg_timeouts():
         IRCD.current_link_sync = None
 
     reg_timeout = int(IRCD.get_setting("regtimeout"))
+    current_time = int(time())
     for client in IRCD.unregistered_clients():
-        if int(time()) - client.local.creationtime >= reg_timeout:
+        if current_time - client.local.creationtime >= reg_timeout:
             client.exit("Registration timed out")
 
 

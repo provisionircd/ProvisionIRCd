@@ -55,6 +55,11 @@ def make_server(client: Client):
     return client
 
 
+def cookie_helper(client):
+    if int(time()) - client.local.creationtime >= 1 and client.local.nospoof:
+        IRCD.server_notice(client, f"*** If you have registration timeouts, use /quote PONG {client.local.nospoof} or /raw PONG {client.local.nospoof}")
+
+
 def make_user(client: Client):
     client.user = User()
     if client.local:
@@ -62,6 +67,7 @@ def make_user(client: Client):
         client.assign_host()
         client.local.nospoof = ''.join(random.choice(string.digits + string.ascii_uppercase) for _ in range(8))
         client.send([], f"PING :{client.local.nospoof}")
+        IRCD.run_parallel_function(cookie_helper, args=(client,), delay=1)
 
     return client
 
