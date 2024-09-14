@@ -16,7 +16,7 @@ import OpenSSL
 from enum import Enum
 from random import randrange
 from sys import version
-from threading import Thread
+from threading import Thread, Timer
 from time import time
 from datetime import datetime, timezone
 from dataclasses import dataclass, field
@@ -2109,11 +2109,18 @@ class IRCD:
         return next((ls for ls in IRCD.configuration.listen if ls.port == port and ls.listening), 0)
 
     @staticmethod
-    def run_parallel_function(target, args=()):
-        """ Run a threaded function once. Does not return anything. """
-        t = Thread(target=target, args=args)
-        t.daemon = 1
-        t.start()
+    def run_parallel_function(target, args=(), delay=0):
+        """ Run a threaded function once with optional delay. Does not return anything. """
+
+        def start_thread():
+            t = Thread(target=target, args=args)
+            t.daemon = 1
+            t.start()
+
+        if delay > 0:
+            Timer(delay, start_thread).start()
+        else:
+            start_thread()
 
     @staticmethod
     def get_first_available_uid(client):
