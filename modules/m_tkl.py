@@ -342,7 +342,7 @@ def shun_pre_command(client, recv):
         return Hook.CONTINUE
 
     command = recv[0]
-    if command.lower() not in ["admin", "part", "quit", "ping", "pong", "motd"] and client.registered and client.is_shunned():
+    if command.lower() not in ["admin", "part", "quit", "ping", "pong", "motd", "rules"] and client.registered and client.is_shunned():
         return Hook.DENY
     return Hook.CONTINUE
 
@@ -397,11 +397,11 @@ def init(module):
     Hook.add(Hook.WHOIS, shun_whois)
     Stat.add(module, global_tkl_stats, 'G', "View the all active TKLs")
     Stat.add(module, local_tkl_stats, 'g', "View only local active TKLs")
-    Tkl.add_flag('k', name="K:Line", what="kline", host_format=1, is_global=0, allow_eline=1)
-    Tkl.add_flag('s', name="Shun", what="shun", host_format=1, is_global=0, allow_eline=1)
-    Tkl.add_flag('z', name="Z:Line", what="zline", host_format=0, is_global=0, allow_eline=1)
-    Tkl.add_flag('E', name="E:Line", what="eline", host_format=1, is_global=0)
-    Tkl.add_flag('F', name="Spamfilter", what="spamfilter", host_format=1, is_global=0, allow_eline=1)
-    Tkl.add_flag('G', name="G:Line", what="gline", host_format=1, is_global=1, allow_eline=1)
-    Tkl.add_flag('Q', name="Q:Line", what="qline", host_format=0, is_global=1, allow_eline=1)
-    Tkl.add_flag('Z', name="Z:Line", what="gzline", host_format=1, is_global=1, allow_eline=1)
+    Tkl.add_flag(flag='k', name="K:Line", what="kline", host_format=1, is_global=0, allow_eline=1)
+    Tkl.add_flag(flag='s', name="Shun", what="shun", host_format=1, is_global=0, allow_eline=1)
+    Tkl.add_flag(flag='z', name="Z:Line", what="zline", host_format=0, is_global=0, allow_eline=1)
+    Tkl.add_flag(flag='E', name="E:Line", what="eline", host_format=1, is_global=0)
+    Tkl.add_flag(flag='F', name="Spamfilter", what="spamfilter", host_format=1, is_global=0, allow_eline=1)
+    Tkl.add_flag(flag='G', name="G:Line", what="gline", host_format=1, is_global=1, allow_eline=1)
+    Tkl.add_flag(flag='Q', name="Q:Line", what="qline", host_format=0, is_global=1, allow_eline=1)
+    Tkl.add_flag(flag='Z', name="Z:Line", what="gzline", host_format=1, is_global=1, allow_eline=1)
