@@ -26,7 +26,7 @@ def cmd_nospoof(client, reply):
     if reply == client.local.nospoof:
         client.local.nospoof = 0
     elif client.local.nospoof:
-        IRCD.server_notice(client, "ERROR: Invalid PING response. Your client must respond back with PONG :<cookie>")
+        IRCD.server_notice(client, f"ERROR: Invalid PING response. Your client must respond back with PONG {client.local.nospoof}")
 
 
 def cmd_pong(client, recv):

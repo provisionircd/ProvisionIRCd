@@ -1989,6 +1989,31 @@ class IRCD:
         return data
 
     @staticmethod
+    def write_to_file(file: str, text: str) -> int:
+        """ Write text to a file. Newline automatically added """
+
+        try:
+            directory = os.path.dirname(file)
+            if directory:
+                os.makedirs(directory, exist_ok=True)
+
+            with open(file, 'a') as f:
+                f.write(text + '\n')
+            return 1
+        except Exception as ex:
+            logging.exception(ex)
+            return 0
+
+    @staticmethod
+    def read_from_file(file: str) -> str:
+        """ Read data from a file and return its contents as a string """
+        if not os.path.exists(file):
+            return ''
+
+        with open(file, 'r') as file:
+            return file.read()
+
+    @staticmethod
     def delay_client(client: Client, delay: int | float, label: str):
         """
         Delay a client for maximum <delay> seconds.
