@@ -957,9 +957,13 @@ class Client:
             """ Not ready to write yet. """
             return 0
 
-        except (OpenSSL.SSL.WantReadError, OpenSSL.SSL.SysCallError, Exception) as ex:
+        except (OpenSSL.SSL.WantReadError, OpenSSL.SSL.SysCallError, OpenSSL.SSL.Error, Exception) as ex:
             error_message = f"Write error: {str(ex)}"
-            if (isinstance(ex, OpenSSL.SSL.WantReadError) or isinstance(ex, OpenSSL.SSL.SysCallError) or isinstance(ex, ConnectionAbortedError)) and not self.registered:
+            if (isinstance(ex, OpenSSL.SSL.WantReadError)
+                    or isinstance(ex, OpenSSL.SSL.SysCallError)
+                    or isinstance(ex, OpenSSL.SSL.Error)
+                    or isinstance(ex, ConnectionAbortedError)
+                    and not self.registered):
                 """ Most likely a non-TLS socket on a TLS port. Not showing exception message. """
                 pass
             else:
@@ -2121,20 +2125,19 @@ class IRCD:
 
     @staticmethod
     def client_match_mask(client, mask):
-        if is_match(mask, f"{client.name}!{client.user.username}@{client.user.realhost}"):
-            return 1
-        if is_match(mask, f"{client.name}!{client.user.username}@{client.ip}"):
-            return 1
-        if is_match(mask, f"{client.name}!{client.user.username}@{client.user.cloakhost}"):
-            return 1
-        return 0
+        targets = [
+            f"{client.name}!{client.user.username}@{client.user.realhost}",
+            f"{client.name}!{client.user.username}@{client.ip}",
+            f"{client.name}!{client.user.username}@{client.user.cloakhost}",
+        ]
+        return int(any(is_match(mask, target) for target in targets))
 
     @staticmethod
     def port_in_use(port: int):
         return next((ls for ls in IRCD.configuration.listen if ls.port == port and ls.listening), 0)
 
     @staticmethod
-    def run_parallel_function(target, args=(), delay=0):
+    def run_parallel_function(target, args=(), delay=0.0):
         """ Run a threaded function once with optional delay. Does not return anything. """
 
         def start_thread():
