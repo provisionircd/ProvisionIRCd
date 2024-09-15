@@ -12,7 +12,10 @@ def cmd_user(client, recv):
     if client.server:
         return client.exit(f"This port is for servers only.")
 
-    if 'nmap' in ''.join(recv).lower():
+    if not client.user:
+        return
+
+    if "nmap" in ''.join(recv).lower():
         return client.exit("Connection reset by peer")
 
     ident = str(recv[1][:12]).strip()

@@ -88,7 +88,7 @@ def Base64toIP(base):
         logging.exception(ex)
 
 
-def make_mask(data):
+def make_mask_old(data):
     nick, ident, host = '', '', ''
     nick = data.split('!')[0]
     nicklen = 32
@@ -125,7 +125,48 @@ def make_mask(data):
     return result
 
 
-def is_match(first, second):
+def make_mask(data):
+    # Check if data should be treated as host
+    if '!' not in data and '@' not in data and '.' in data:
+        nick = '*'
+        ident = '*'
+        host = data
+    else:
+        # Assign nick
+        nick = data.split('!')[0]
+        if not nick or '@' in nick:
+            nick = '*'
+
+        # Assign ident
+        if '@' in data:
+            ident_part = data.split('@')[0]
+            if '!' in ident_part:
+                ident = ident_part.split('!')[1]
+            else:
+                ident = ident_part
+        else:
+            if '!' in data:
+                ident = data.split('!')[1]
+            else:
+                ident = '*'
+
+        # Assign host
+        if '@' in data:
+            host = data.split('@')[1]
+            # # Adjust host if it starts with '!' and ident is '*' or empty
+            # if ident in ('', '*') and host.startswith('!'):
+            #     host = host[1:]
+        else:
+            host = '*'
+
+    nick = f"*{nick[-20:]}" if len(nick) > 32 else nick or '*'
+    ident = f"*{ident[-12:]}" if len(ident) > 12 else ident or '*'
+    host = f"*{host[-64:]}" if len(host) > 64 else host or '*'
+
+    return f"{nick}!{ident}@{host}"
+
+
+def is_match_old(first, second):
     if not first and not second:
         return True
     if len(first) > 1 and first[0] == '*' and not second:
@@ -135,3 +176,14 @@ def is_match(first, second):
     if first and first[0] == '*':
         return is_match(first[1:], second) or is_match(first, second[1:])
     return False
+
+
+def is_match(first, second):
+    if not first:
+        return not second
+    if first[0] == '*':
+        return is_match(first[1:], second) or (second and is_match(first, second[1:]))
+    elif second and (first[0] == '?' or first[0] == second[0]):
+        return is_match(first[1:], second[1:])
+    else:
+        return False
