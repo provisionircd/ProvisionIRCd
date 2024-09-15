@@ -269,7 +269,7 @@ def handle_connections():
             write_clients = [client.local.socket for client in available_clients if client.local.handshake and client.local.sendbuffer]
 
             if IRCD.use_poll:
-                fdVsEvent = IRCD.poller.poll(1000)
+                fdVsEvent = IRCD.poller.poll(500)
                 for fd, Event in fdVsEvent:
                     # https://stackoverflow.com/a/42612778
                     # logging.debug(f"New event on fd {fd}: {Event}")
@@ -339,7 +339,7 @@ def handle_connections():
                         continue
 
             else:
-                read, write, error = select.select(listen_sockets + read_clients, write_clients, listen_sockets + read_clients, 1)
+                read, write, error = select.select(listen_sockets + read_clients, write_clients, listen_sockets + read_clients, 0.5)
                 for sock in read:
                     if sock in listen_sockets:
                         if not (listen_obj := find_listen_obj_from_socket(sock)):
