@@ -1,3 +1,8 @@
+"""
+Provides labeled response message tag support.
+https://ircv3.net/specs/extensions/labeled-response.html
+"""
+
 import re
 
 from handle.core import MessageTag, Capability, Hook, IRCD, Batch

@@ -1,5 +1,5 @@
 """
-channel mode +m
+channel mode +m (moderated, only +v or higher can speak)
 """
 
 from handle.core import Channelmode

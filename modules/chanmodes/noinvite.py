@@ -1,5 +1,5 @@
 """
-channel mode +V
+channel mode +V (only +q can /INVITE)
 """
 
 from handle.core import Channelmode

@@ -1,5 +1,5 @@
 """
-channel mode +r
+channel mode +r (registered channel)
 """
 
 from handle.core import Channelmode

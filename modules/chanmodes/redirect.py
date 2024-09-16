@@ -1,5 +1,5 @@
 """
-channel mode +L
+channel mode +L (redirect to other channel if full)
 """
 
 from handle.core import IRCD, Channelmode, Numeric, Hook, Command

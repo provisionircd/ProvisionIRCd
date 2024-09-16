@@ -1,3 +1,7 @@
+"""
+Support for blacklist checks. Configure in dnsbl.conf
+"""
+
 import logging
 
 from handle.core import IRCD, Hook, Numeric, Snomask, Tkl

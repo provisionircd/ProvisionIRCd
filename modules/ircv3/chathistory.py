@@ -1,3 +1,8 @@
+"""
+Provides IRCv3 CHATHISTORY support.
+https://ircv3.net/specs/extensions/chathistory
+"""
+
 from handle.core import IRCD, Command, Isupport, Capability, Numeric
 from handle.logger import logging
 from modules.chanmodes.m_history import HistoryFilter, get_chathistory, send_history, ChatHistory

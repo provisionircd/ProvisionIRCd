@@ -1,12 +1,8 @@
 """
-BATCH capilities
+batch message tag
 """
 
 from handle.core import MessageTag, Capability
-
-HEADER = {
-    "name": "batch"
-}
 
 
 class BatchTag(MessageTag):

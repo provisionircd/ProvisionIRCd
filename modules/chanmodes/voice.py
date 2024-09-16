@@ -1,8 +1,6 @@
 """
-voice
+voice mode (+v)
 """
-
-import logging
 
 from handle.core import IRCD, Channelmode
 

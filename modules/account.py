@@ -1,3 +1,7 @@
+"""
+Provides support for account names when logged in with services
+"""
+
 from handle.core import IRCD, Numeric, Command, Hook
 
 

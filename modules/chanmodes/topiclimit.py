@@ -1,5 +1,5 @@
 """
-channel mode +t
+channel mode +t (no topic change from outside)
 """
 
 from handle.core import Channelmode

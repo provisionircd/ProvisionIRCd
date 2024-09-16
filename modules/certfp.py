@@ -1,5 +1,8 @@
+"""
+Client certificate fingerprint support
+"""
+
 from handle.core import Numeric, IRCD, Hook
-from handle.logger import logging
 
 
 def certfp_connect(client):

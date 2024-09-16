@@ -1,5 +1,5 @@
 """
-channel mode +N
+channel mode +N (nick changes are not allowed)
 """
 
 from handle.core import Channelmode, Hook, Numeric
@@ -11,9 +11,11 @@ def can_change_nick(client, newnick):
     for channel in client.channels:
         if 'N' in channel.modes and not channel.client_has_membermodes(client, 'q'):
             # Channel owners can bypass channel mode +N.
-            # Client needs channel owner (or channel:override:no-nick oper permission) on all channels it's in.
+            # Client needs channel owner (or channel:override:no-nick oper permission) on all channels it's in
+            # if that channel has +N.
             client.sendnumeric(Numeric.ERR_NONICKCHANGE, channel.name)
             return Hook.DENY
+    return Hook.ALLOW
 
 
 def init(module):

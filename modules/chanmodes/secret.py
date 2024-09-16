@@ -1,5 +1,5 @@
 """
-channel mode +s
+channel mode +s (secret channel)
 """
 
 from handle.core import Channelmode

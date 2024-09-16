@@ -1,3 +1,8 @@
+"""
+Provides +typing client tag.
+https://ircv3.net/specs/client-tags/typing.html
+"""
+
 from handle.core import MessageTag
 
 

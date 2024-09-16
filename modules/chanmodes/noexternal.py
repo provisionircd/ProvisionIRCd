@@ -1,5 +1,5 @@
 """
-channel mode +n
+channel mode +n (no external messages)
 """
 
 from handle.core import Channelmode

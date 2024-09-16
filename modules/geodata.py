@@ -1,8 +1,15 @@
+"""
+Fetches and saves client geodata from ipapi.co.
+Edit API_URL to change.
+"""
+
 from handle.core import IRCD, Hook, Numeric
 from urllib import request
 import json
 import ipaddress
 from time import time
+
+API_URL = "https://ipapi.co/%ip/json/"
 
 
 class GeoData:
@@ -13,7 +20,7 @@ class GeoData:
 
 def api_call(client):
     try:
-        response = request.urlopen(f"https://ipapi.co/{client.ip}/json/", timeout=10)
+        response = request.urlopen(API_URL.replace("%ip", client.ip), timeout=10)
         response_body = response.read()
         json_response = json.loads(response_body.decode())
         json_response["ircd_time_added"] = int(time())

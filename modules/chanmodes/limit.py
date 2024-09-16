@@ -1,5 +1,5 @@
 """
-channel mode +l
+channel mode +l (limit users on channel)
 """
 
 import logging
