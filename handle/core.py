@@ -230,7 +230,7 @@ class Client:
         try:
             if not info or not t:
                 return 0
-            if t not in ['host', 'ident', 'gecos']:
+            if t not in ["host", "ident", "gecos"]:
                 logging.error(f"Incorrect type received in setinfo(): {t}")
                 return 0
             if self.registered and t in ["host", "ident"]:
@@ -248,14 +248,14 @@ class Client:
                 data = f":{self.fullmask} SETNAME :{info}"
                 IRCD.send_to_local_common_chans(self, [], "setname", data)
 
-            if t == 'host':
+            if t == "host":
                 if self.user.cloakhost != info:
                     self.user.cloakhost = info
                     self.sendnumeric(Numeric.RPL_HOSTHIDDEN, self.user.cloakhost)
                     # logging.debug(f"[setinfo()] Changed host of {self.name} to: {self.user.cloakhost}")
-            elif t == 'ident':
+            elif t == "ident":
                 self.user.username = info
-            elif t == 'gecos':
+            elif t == "gecos":
                 if self.info != info:
                     self.info = info
                     if self.local:
@@ -3289,7 +3289,7 @@ class Hook:
     REMOTE_USERNOTICE = hook()
 
     # Called when a local client wants to kick a user off a channel.
-    # Arguments:    client, target_client, channel, reason
+    # Arguments:    client, target_client, channel, reason, oper_override (list)
     # Return:       Hook.DENY to deny.
     CAN_KICK = hook()
 
