@@ -3310,7 +3310,7 @@ class Hook:
     MODEBAR_DEL = hook()
 
     # Called after a user mode has been changed.
-    # Arguments:   client, target, current_modes, new_modes
+    # Arguments:   client, target, current_modes, new_modes, param
     UMODE_CHANGE = hook()
 
     # Called before a user sets /away status.

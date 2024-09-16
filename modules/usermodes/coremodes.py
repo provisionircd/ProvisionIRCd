@@ -1,15 +1,22 @@
 """
-core user modes
+core user modes and snomasks
 """
 
-from handle.core import Usermode, Snomask
+from handle.core import Usermode, Snomask, Numeric
+
+
+def umode_q_is_ok(client):
+    if client.has_permission("self:protected") or 'q' in client.user.modes:
+        return 1
+    client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
+    return 0
 
 
 def init(module):
     # Params: mode flag, is_global (will be synced to servers), unset_on_deoper bool, can_set method, desc
     Usermode.add(module, 'i', 1, 0, Usermode.allow_all, "User does not show up in outside /who")
     Usermode.add(module, 'o', 1, 1, Usermode.allow_opers, "Marks the user as an IRC Operator")
-    Usermode.add(module, 'q', 1, 1, Usermode.allow_opers, "Protected on all channels")
+    Usermode.add(module, 'q', 1, 1, umode_q_is_ok, "Protected on all channels")
     Usermode.add(module, 'r', 1, 0, Usermode.allow_none, "Identifies the nick as being logged in")
     Usermode.add(module, 's', 1, 1, Usermode.allow_opers, "Can receive server notices")
     Usermode.add(module, 'x', 1, 0, Usermode.allow_all, "Hides real host with cloaked host")

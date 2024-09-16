@@ -69,20 +69,22 @@ def cmd_usermode(client, recv):
             continue
 
         if action == '+':
-            if mode == 'q' and not client.has_permission("self:protected"):
-                client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
-                continue
             if umode.can_set == Usermode.allow_opers and not client.has_permission("self:opermodes"):
                 client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
                 continue
             if mode not in target.user.modes:
                 target.user.modes += mode
+
+            # Handle snomasks
             if mode == 's' and target.user.oper and param:
-                if param.startswith('-'):
-                    for sno in [sno for sno in param if sno in target.user.snomask]:
+                sno_action = '+'
+                for sno in param:
+                    if sno in "+-":
+                        sno_action = sno
+                        continue
+                    if sno_action == '-' and sno in target.user.snomask:
                         target.user.snomask = target.user.snomask.replace(sno, '')
-                else:
-                    for sno in [sno for sno in param if sno in target.user.oper.snomasks and sno not in target.user.snomask]:
+                    elif sno_action == '+' and sno in target.user.oper.snomasks and sno not in target.user.snomask:
                         target.user.snomask += sno
 
         elif action == '-' and mode in target.user.modes:
