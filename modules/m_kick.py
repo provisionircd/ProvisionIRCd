@@ -20,6 +20,8 @@ def do_kick(client, channel, target_client, reason):
     data = f":{fullmask} KICK {channel.name} {target_client.name} :{reason}"
     channel.broadcast(client, data)
     channel.remove_client(target_client)
+    if channel.is_founder(target_client):
+        channel.founder = {}
 
     hook = Hook.LOCAL_KICK if target_client.local else Hook.REMOTE_KICK
     IRCD.run_hook(hook, client, target_client, channel, reason)

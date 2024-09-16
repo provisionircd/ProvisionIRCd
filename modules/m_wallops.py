@@ -3,12 +3,11 @@
 """
 
 from handle.core import IRCD, Usermode, Command, Flag
-from handle.logger import logging
 
 
 def cmd_wallops(client, recv):
     msg = ' '.join(recv[1:]).removeprefix(':')
-    for user_client in [c for c in IRCD.local_users() if 'w' in c.user.modes]:
+    for user_client in [c for c in IRCD.local_users(usermodes='w')]:
         user_client.send([], f":{client.fullmask} WALLOPS :{msg}")
 
     data = f":{client.id} WALLOPS :{msg}"

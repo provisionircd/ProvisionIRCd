@@ -68,7 +68,7 @@ def log(client, level: str, rootevent: str, event: str, message: str, sync: int 
     out_msg = f"{level_colored} ({rootevent}) {message}"
 
     if log_entry.snomask:
-        for oper_client in [c for c in IRCD.local_users() if 'o' in c.user.modes]:
+        for oper_client in [c for c in IRCD.local_users(usermodes='o')]:
             if log_entry.snomask not in oper_client.user.snomask:
                 continue
             data = f":{source.name} NOTICE {oper_client.name} :{out_msg}"

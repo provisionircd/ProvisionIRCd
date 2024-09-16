@@ -422,6 +422,8 @@ class Client:
                 self.send([], data)
 
             self.exit(quitreason)
+            for channel in [c for c in IRCD.get_channels() if c.is_founder(self)]:
+                channel.founder = {}
             data = f":{killed_by.id} KILL {self.id} :{reason}"
             IRCD.send_to_servers(killed_by, mtags=[], data=data)
 
@@ -604,14 +606,21 @@ class Client:
             return
 
         if IRCD.get_setting("resolvehost"):
+            realhost = ''
+            cache = 0
+            if self.ip in IRCD.hostcache:
+                _, realhost = IRCD.hostcache[self.ip]
+                cache = 1
             try:
-                realhost = gethostbyaddr(self.ip)[0]
+                if not realhost:
+                    realhost = gethostbyaddr(self.ip)[0]
+                    IRCD.hostcache[self.ip] = int(time()), realhost
                 if realhost == "localhost" and not ipaddress.IPv4Address(self.ip).is_private:
                     # https://ipinfo.io/AS7552/27.71.152.0/21
                     # All those IP addresses seem to resolve to localhost.
                     raise Exception
                 self.user.realhost = realhost
-                IRCD.server_notice(self, f"*** Found your hostname: {self.user.realhost}")
+                IRCD.server_notice(self, f"*** Found your hostname: {self.user.realhost}{' [cached]' if cache else ''}")
             except:
                 self.user.realhost = self.ip
                 IRCD.server_notice(self, f"*** Couldn't resolve your hostname, using IP address instead")
@@ -1365,6 +1374,7 @@ class Channel:
     topic_author: str = None
     topic_time: int = 0
     creationtime: int = 0
+    founder: dict = field(default_factory=dict)
     List: dict = field(default_factory=dict)
 
     # This dict keeps track of which users have seen other users on the channel.
@@ -1373,6 +1383,14 @@ class Channel:
     def init_lists(self):
         for mode in [m.flag for m in Channelmode.table if m.type == Channelmode.LISTMODE]:
             self.List[mode] = []
+
+    def set_founder(self, client):
+        if self.name[0] != '+':
+            self.founder = {"fullmask": client.fullmask, "certfp": client.get_md_value("certfp")}
+
+    def is_founder(self, client):
+        certfp = client.get_md_value("certfp")
+        return client.fullmask == self.founder.get("fullmask") or (certfp and certfp == self.founder.get("certfp"))
 
     def can_join(self, client: Client, key: str):
         """
@@ -1621,7 +1639,10 @@ class Channel:
         if self.name[0] != '&':  # and (client.local or (client.server and client.server.synced)):
             data = f":{client.id} PART {self.name}{' :' + reason if reason else ''}"
             IRCD.send_to_servers(client, client.mtags, data)
+
         self.remove_client(client)
+        if self.is_founder(client):
+            self.founder = {}
 
         if (client.local and client.registered) or (not client.local and client.uplink.server.synced) and not client.ulined:
             msg = f"*** {client.name} ({client.user.username}@{client.user.realhost}) has left channel {self.name}"
@@ -1674,6 +1695,9 @@ class Channel:
             event = "LOCAL_JOIN" if client.local else "REMOTE_JOIN"
             msg = f"*** {client.name} ({client.user.username}@{client.user.realhost}) has joined channel {self.name}"
             IRCD.log(client, "info", "join", event, msg, sync=0)
+
+        if self.name[0] != '+' and self.is_founder(client):
+            Command.do(IRCD.me, "MODE", self.name, "+o", client.name)
 
 
 @dataclass
@@ -1799,6 +1823,7 @@ class IRCD:
     conf_file: str = ''
     isupport: ClassVar[list] = []  # Isupport classes
     throttle: ClassVar[dict] = {}
+    hostcache: ClassVar[dict] = {}
     maxusers: int = 0
     maxgusers: int = 0
     local_user_count: int = 0
@@ -2330,12 +2355,18 @@ class IRCD:
         return [c for c in Client.table if c.registered]
 
     @staticmethod
-    def local_users():
-        return [c for c in Client.table if c.local and c.user]
+    def local_users(usermodes=''):
+        users = [c for c in Client.table if c.local and c.user]
+        if usermodes:
+            users = [c for c in users if all(mode in c.user.modes for mode in usermodes)]
+        return users
 
     @staticmethod
-    def global_users():
-        return [c for c in Client.table if c.user]
+    def global_users(usermodes=''):
+        users = [c for c in Client.table if c.user]
+        if usermodes:
+            users = [c for c in users if all(mode in c.user.modes for mode in usermodes)]
+        return users
 
     @staticmethod
     def global_registered_users():
@@ -2389,6 +2420,7 @@ class IRCD:
         channel.name = name
         channel.creationtime = int(time())
         channel.init_lists()
+        channel.set_founder(client)
         Channel.table.append(channel)
         IRCD.channel_count += 1
         IRCD.run_hook(Hook.CHANNEL_CREATE, client, channel)
@@ -2536,7 +2568,7 @@ class IRCD:
             return
         data = data.removeprefix(':')
         source = client if client == IRCD.me or client.server else client.uplink
-        for c in [c for c in Client.table if c.user and c.local and 's' in c.user.modes and snomask.flag in c.user.snomask]:
+        for c in [c for c in IRCD.local_users(usermodes='s') if snomask.flag in c.user.snomask]:
             Batch.check_batch_event(mtags=c.mtags, started_by=source, target_client=c, event="netjoin")
             local_data = f":{source.name} NOTICE {c.name} :{data}"
             c.send([], local_data)

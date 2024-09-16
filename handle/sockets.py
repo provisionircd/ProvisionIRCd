@@ -151,7 +151,14 @@ def throttle_expire():
         throttle_time = int(IRCD.get_setting("throttle").split(':')[1])
         for throttle in [t for t in dict(IRCD.throttle) if int(time()) - IRCD.throttle[t] >= throttle_time]:
             del IRCD.throttle[throttle]
-            continue
+
+
+def hostcache_expire():
+    current_time = int(time())
+    for ip in dict(IRCD.hostcache):
+        timestamp, realhost = IRCD.hostcache[ip]
+        if current_time - timestamp >= 3600:
+            del IRCD.hostcache[ip]
 
 
 def remove_delayed_connections():
@@ -387,6 +394,7 @@ def handle_connections():
             process_backbuffer()
             autoconnect_links()
             throttle_expire()
+            hostcache_expire()
             remove_delayed_connections()
             check_ping_timeouts()
             check_invalid_clients()
