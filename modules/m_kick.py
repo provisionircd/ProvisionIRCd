@@ -7,8 +7,8 @@ from handle.core import Command, IRCD, Isupport, Flag, Numeric, Hook
 KICKLEN = 300
 
 
-def client_can_kick_target(client, target_client, channel, reason):
-    for result, callback in Hook.call(Hook.CAN_KICK, args=(client, target_client, channel, reason)):
+def client_can_kick_target(client, target_client, channel, reason, oper_override):
+    for result, callback in Hook.call(Hook.CAN_KICK, args=(client, target_client, channel, reason, oper_override)):
         if result == Hook.DENY:
             return 0
     return 1
@@ -58,33 +58,28 @@ def cmd_kick(client, recv):
         do_kick(client, channel, target_client, reason)
         return
 
-    oper_override = 0
+    # List, so that modules can change the value.
+    oper_override = [0]
 
     if not client.server:
         if not channel.client_has_membermodes(client, "hoaq") and not client.has_permission("channel:override:kick:no-ops"):
             return client.sendnumeric(Numeric.ERR_CHANOPRIVSNEEDED, channel.name)
 
         elif not channel.client_has_membermodes(client, "hoaq"):
-            oper_override = 1
+            oper_override[0] = 1
 
     if (channel.level(target_client) > channel.level(client) or 'q' in target_client.user.modes) and not client.has_permission("channel:override:kick:protected"):
         return client.sendnumeric(Numeric.ERR_ATTACKDENY, channel.name, target_client.name)
 
     elif channel.level(target_client) > channel.level(client) or 'q' in target_client.user.modes:
-        oper_override = 1
+        oper_override[0] = 1
 
-    if 'Q' in channel.modes and channel.level(client) < 5 and not client.has_permission("channel:override:kick:no-kick"):
-        return client.sendnumeric(Numeric.ERR_CANNOTDOCOMMAND, channel.name, "KICKs are not permitted in this channel")
-
-    elif 'Q' in channel.modes and not channel.client_has_membermodes(client, 'q'):
-        oper_override = 1
-
-    if not client_can_kick_target(client, target_client, channel, reason):
+    if not client_can_kick_target(client, target_client, channel, reason, oper_override):
         return
 
     do_kick(client, channel, target_client, reason)
 
-    if oper_override and client.user and client.local:
+    if oper_override[0] and client.user and client.local:
         msg = f"*** OperOverride by {client.name} ({client.user.username}@{client.user.realhost}) with KICK {channel.name} {target_client.name} ({reason})"
         IRCD.log(client, "info", "oper", "OPER_OVERRIDE", msg, sync=1)
 
