@@ -11,6 +11,7 @@ def cmd_names(client, recv):
         return client.sendnumeric(Numeric.ERR_NOSUCHCHANNEL, recv[1])
 
     if not channel.find_member(client) and not client.has_permission("channel:see:names"):
+        client.sendnumeric(Numeric.RPL_ENDOFNAMES, channel.name)
         return
 
     users = []
@@ -26,11 +27,10 @@ def cmd_names(client, recv):
             channel.seen_dict[client].append(names_client)
 
         prefix = channel.get_prefix_sorted_str(names_client)
-        string = ''
+        string = prefix + names_client.name
         if client.has_capability("userhost-in-names"):
-            string = f"!{names_client.user.username}@{names_client.user.cloakhost}"
-        entry = f"{names_client.name}{string}"
-        users.append(prefix + '' + entry)
+            string += f"!{names_client.user.username}@{names_client.user.cloakhost}"
+        users.append(string)
         if len(users) >= 24:
             client.sendnumeric(Numeric.RPL_NAMEREPLY, channel.name, ' '.join(users))
             users = []

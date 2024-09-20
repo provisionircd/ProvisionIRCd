@@ -127,7 +127,7 @@ def make_mask_old(data):
 
 def make_mask(data):
     # Check if data should be treated as host
-    if '!' not in data and '@' not in data and '.' in data:
+    if '!' not in data and '@' not in data and ('.' in data or ':' in data):
         nick = '*'
         ident = '*'
         host = data
