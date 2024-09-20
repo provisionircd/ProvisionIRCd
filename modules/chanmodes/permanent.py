@@ -65,6 +65,5 @@ def init(module):
     Cmode_P.desc = "Channel is permanent. All data will be restored on server restart"
     Channelmode.add(module, Cmode_P)
     Hook.add(Hook.LOCAL_CHANNEL_MODE, save_channel_mode)
-    Hook.add(Hook.REMOTE_CHANNEL_MODE, save_channel_mode)
     Hook.add(Hook.TOPIC, save_channel)
     Hook.add(Hook.BOOT, restore_channel)
