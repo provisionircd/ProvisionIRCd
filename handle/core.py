@@ -3085,11 +3085,6 @@ class Hook:
     # This is called every 1 second, or as soon as new data is being handled.
     LOOP = hook()
 
-    # Gets called before sending to a socket.
-    # You cannot reject this.
-    # Arguments:        raw data
-    PACKET_SEND = hook()
-
     # Called when a packet is being read or sent.
     # Arguments         from            Sender of this data.
     #                   to              Direction to send the data to.
@@ -3123,11 +3118,6 @@ class Hook:
     # When a new remote user is introduced, this hook gets called.
     # Argument:         User object.
     REMOTE_CONNECT = hook()
-
-    # Called right before reading a socket.
-    # Arguments:        socket
-    # Return value is ignored.
-    PRE_SOCKREAD = hook()
 
     # Called after reading a socket, but before performing any commands.
     # Used in IRCv3 reply tags.
@@ -3200,7 +3190,7 @@ class Hook:
     CAN_JOIN = hook()
 
     # Called when a user fails to join a channel due to a channel mode.
-    # Arguments:    client, channel, mode
+    # Arguments:    client, channel, error or None
     JOIN_FAIL = hook()
 
     # Called after a user is allowed to join the channel,
