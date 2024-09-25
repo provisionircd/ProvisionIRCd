@@ -192,6 +192,7 @@ def post_sockread(client, recv):
     client.local.messages_received += 1
     recv_list = recv.split('\n')
     IRCD.run_hook(Hook.PACKET, client, IRCD.me, IRCD.me, recv_list)
+    IRCD.run_hook(Hook.POST_SOCKREAD, client, recv)
     recv = '\n'.join(recv_list)
     if not recv.strip():
         return 1
