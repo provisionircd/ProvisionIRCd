@@ -31,19 +31,19 @@ def restore_channel():
     """ Restore channel from json """
     if ChannelData := IRCD.read_data_file("channels.db"):
         for chan, data in ChannelData.items():
-            if channel := IRCD.create_channel(IRCD.me, chan):
-                channel.creationtime = data["creation"]
-                channel.modes = data["modes"]
+            channel = IRCD.create_channel(IRCD.me, chan)
+            channel.creationtime = data["creation"]
+            channel.modes = data["modes"]
 
-                for mode, param in data["params"].items():
-                    channel.add_param(mode, param)
+            for mode, param in data["params"].items():
+                channel.add_param(mode, param)
 
-                for listmode, entries in data["listmodes"].items():
-                    for mask, setter, timestamp in entries:
-                        channel.add_to_list(client=IRCD.me, mask=mask, _list=channel.List[listmode], setter=setter, timestamp=timestamp)
+            for listmode, entries in data["listmodes"].items():
+                for mask, setter, timestamp in entries:
+                    channel.add_to_list(client=IRCD.me, mask=mask, _list=channel.List[listmode], setter=setter, timestamp=timestamp)
 
-                if "topic" in data:
-                    channel.topic, channel.topic_time, channel.topic_author = data["topic"]
+            if "topic" in data:
+                channel.topic, channel.topic_time, channel.topic_author = data["topic"]
 
 
 def save_channel_mode(client, channel, modebuf, parambuf):
