@@ -367,9 +367,11 @@ def cmd_channelmode(client, recv):
                     or mode in list(IRCD.get_list_modes_str()) + param_modes_unset:
                 if len(params) <= paramcount:
                     continue
-            param = params[paramcount]
-            param = IRCD.strip_format(param)
-            paramcount += 1
+
+            if action == '+' or cmode.unset_with_param:
+                param = params[paramcount]
+                param = IRCD.strip_format(param)
+                paramcount += 1
 
         if mode in IRCD.get_list_modes_str():
             if returned_param := handle_mode_list(client, channel, action, mode, param):
