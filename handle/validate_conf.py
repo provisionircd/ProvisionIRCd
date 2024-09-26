@@ -13,7 +13,16 @@ class ConfErrors:
     paths = []
 
 
-def conf_error(errmsg, block=None, item=None, filename=None, linenumber=0):
+class ConfWarnings:
+    entries = []
+    paths = []
+
+
+def conf_warning(*args, **kwargs):
+    conf_error(*args, **kwargs, warning=1)
+
+
+def conf_error(errmsg, block=None, item=None, filename=None, linenumber=0, warning=0):
     if item:
         block = item.block
         if not linenumber:
@@ -27,8 +36,12 @@ def conf_error(errmsg, block=None, item=None, filename=None, linenumber=0):
         linenumber = str(linenumber)
     path = f"{filename + ':' if filename else ''}{' ' if not block else ''}{linenumber + ': ' if linenumber else ''}"
     errstr = path.strip() + f"{errmsg}".strip()
-    if errstr not in ConfErrors.entries and path not in ConfErrors.paths:
-        ConfErrors.entries.append(errstr)
+    if not warning:
+        if errstr not in ConfErrors.entries and path not in ConfErrors.paths:
+            ConfErrors.entries.append(errstr)
+    else:
+        if errstr not in ConfWarnings.entries and path not in ConfWarnings.paths:
+            ConfWarnings.entries.append(errstr)
 
 
 def load_module(package):
@@ -513,12 +526,12 @@ def config_test_oper(block):
                 continue
 
             if mask_what in Oper.mask_types and not mask_value:
-                errmsg = f"Missing value for oper {{ {oper_name} }} mask::{mask_what}"
+                errmsg = f"Missing value for oper {{ {oper_name} }} mask:{mask_what}"
                 conf_error(errmsg, item=oper_mask_item)
                 continue
 
             if mask_value and mask_what not in Oper.mask_types:
-                errmsg = f"Unrecognized mask type in {{ {oper_name} }} mask::{mask_what}"
+                errmsg = f"Unrecognized mask type in {{ {oper_name} }} mask:{mask_what}"
                 conf_error(errmsg, item=oper_mask_item)
                 continue
 
@@ -577,7 +590,7 @@ def config_test_link(block):
     if not (link_name := block.value):
         conf_error(f"link is missing a name", block)
         return
-    required = ["password", "class"]
+    required = ["class"]
     ok = 1
     for item in required:
         if not block.get_path(link_name + ':' + item):
@@ -593,16 +606,17 @@ def config_test_link(block):
             ok = 0
 
     if ok:
-        password = block.get_single_value("password")
-        link = Link(link_name, password, block.get_single_value("class"))
-        for item in outgoing_items:
-            outgoing_item = item.get_single_value("outgoing")
-            if outgoing_item == "host":
-                link.outgoing["host"] = item.get_single_value("host")
-            elif outgoing_item == "port":
-                link.outgoing["port"] = item.get_single_value("port")
-            for option in item.get_path("options"):
-                link.outgoing_options.append(option)
+        link = Link(link_name, password=None, connectclass=block.get_single_value("class"))
+        if password := block.get_single_value("password"):
+            link.password = password
+            for item in outgoing_items:
+                outgoing_item = item.get_single_value("outgoing")
+                if outgoing_item == "host":
+                    link.outgoing["host"] = item.get_single_value("host")
+                elif outgoing_item == "port":
+                    link.outgoing["port"] = item.get_single_value("port")
+                for option in item.get_path("options"):
+                    link.outgoing_options.append(option)
 
         for mask_item in block.get_items("incoming:mask"):
             ip = mask_item.path[3]
@@ -623,6 +637,30 @@ def config_test_link(block):
 
         if fingerprint := block.get_single_value("fingerprint"):
             link.fingerprint = fingerprint
+
+        auth = {"password": None, "fingerprint": None, "common-name": None}
+        if auth_items := block.get_items("auth"):
+            for item in auth_items:
+                auth_item = item.get_single_value("auth")
+                if auth_item == "password":
+                    auth["password"] = item.get_single_value("password")
+                if auth_item == "fingerprint":
+                    fingerprint = item.get_single_value("fingerprint")
+                    if not re.match(r"[A-Fa-f0-9]{64}$", fingerprint):
+                        conf_error(f"Invalid certificate fingerprint: {fingerprint}. Must match: [A-Fa-f0-9]{64}")
+                        continue
+                    auth["fingerprint"] = fingerprint
+                if auth_item == "common-name":
+                    auth["common-name"] = item.get_single_value("common-name")
+        else:
+            if not password:
+                conf_error(f"Missing auth block in link '{block.value}'")
+            else:
+                conf_warning(
+                    f"Link block '{block.value}' uses the deprecated 'password' option. "
+                    f"Use the 'auth' sub-block instead. Check conf/examples/links.example.conf for details.")
+
+        link.auth = auth
 
 
 def config_test_alias(block):
@@ -682,12 +720,12 @@ def config_test_except(block):
                 continue
 
             if mask_what in Oper.mask_types and not mask_value:
-                errmsg = f"Missing value for except {block.name} {{ }} mask::{mask_what}"
+                errmsg = f"Missing value for except {block.name} {{ }} mask:{mask_what}"
                 conf_error(errmsg, item=mask_item)
                 continue
 
             if mask_value and mask_what not in Except.mask_types:
-                errmsg = f"Unrecognized mask type in except {block.name} {{ }} mask::{mask_what}"
+                errmsg = f"Unrecognized mask type in except {block.name} {{ }} mask:{mask_what}"
                 conf_error(errmsg, item=mask_item)
                 continue
 

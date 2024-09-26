@@ -21,6 +21,7 @@ class Error:
     SERVER_LINK_NOMATCH = error(), "No matching link configuration"
     SERVER_LINK_NOMATCH_IP = error(), "Link block mask does not match"
     SERVER_LINK_NOMATCH_CERTFP = error(), "Certificate fingerprints do not match"
+    SERVER_LINK_NOMATCH_CN = error(), "Certificate Common-Name does not match"
     SERVER_LINK_MAXCLASS = error(), "Maximum instances of link class '{}' reached"
     SERVER_LINK_NOCLASS = error(), "Remote server was unable to found a matching connection class for us"
     SERVER_LINK_NAME_COLLISION = error(), "Server name {} already in use"

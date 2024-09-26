@@ -20,6 +20,7 @@ if __name__ == "__main__":
     parser.add_argument("--debug", help="Show debug output in console", action="store_true")
     parser.add_argument("--fork", help="Fork to the background", action="store_true")
     parser.add_argument("--certfp", help="Prints the server certificate fingerprint", action="store_true")
+    parser.add_argument("--certcn", help="Prints the server certificate CN", action="store_true")
 
     try:
         import bcrypt
@@ -43,7 +44,23 @@ if __name__ == "__main__":
                     cert = cert.read()
                     cert = load_certificate(FILETYPE_PEM, cert)
                     fingerprint = cert.digest("sha256").decode().replace(':', '').lower()
-                    print(f"[{file}]: {fingerprint}")
+                    print(f"[{file}] Fingerprint: {fingerprint}")
+                except Error:
+                    pass
+        exit()
+
+    if args.certcn:
+        for file in [file for file in os.listdir("tls") if file.endswith(".pem")]:
+            with open("tls/" + file, "rb") as cert:
+                try:
+                    cert_data = cert.read()
+                    cert = load_certificate(FILETYPE_PEM, cert_data)
+
+                    # Extract the CN (Common Name) from the subject
+                    subject = cert.get_subject()
+                    cn = subject.commonName
+
+                    print(f"[{file}] CN: {cn}")
                 except Error:
                     pass
         exit()

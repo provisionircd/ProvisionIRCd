@@ -220,7 +220,9 @@ class Oper:
 class Link:
     def __init__(self, name, password, connectclass):
         self.name = name
+        # Deprecated. Use `auth` instead.
         self.password = password
+        self.auth = {}
         self.connectclass = connectclass
         self.incoming = {}
         self.outgoing = {}

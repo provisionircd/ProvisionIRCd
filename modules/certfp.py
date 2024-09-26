@@ -10,14 +10,36 @@ def certfp_connect(client):
         IRCD.server_notice(client, f"Your TLS fingerprint is: {fingerprint}")
 
 
-def certfp_new_connection(client):
+def extract_client_cn(cert):
+    subject = cert.get_subject()
+    for component in subject.get_components():
+        if component[0] == b"CN":
+            return component[1].decode("utf-8")
+    return None
+
+
+def extract_client_san(cert):
+    ext_count = cert.get_extension_count()
+    for i in range(ext_count):
+        ext = cert.get_extension(i)
+        if ext.get_short_name() == b"subjectAltName":
+            return str(ext)
+    return None
+
+
+def get_certfp(client):
     if not client.local.tls:
         return
-    fingerprint = client.local.socket.get_peer_certificate()
-    if not fingerprint:
-        # Client did not send a cert.
+    cert = client.local.socket.get_peer_certificate()
+    if not cert:
         return
-    fingerprint = fingerprint.digest("SHA256").decode().lower().replace(':', '')
+    if cn := extract_client_cn(cert):
+        client.add_md(name="cert_cn", value=cn, sync=0)
+
+    if san := extract_client_san(cert):
+        client.add_md(name="cert_san", value=san, sync=0)
+
+    fingerprint = cert.digest("SHA256").decode().lower().replace(':', '')
     client.add_md(name="certfp", value=fingerprint)
 
 
@@ -29,6 +51,7 @@ def certfp_whois(client, target, lines):
 
 def init(module):
     """ Grab certificate first (if any) so that we can work with it. """
-    Hook.add(Hook.NEW_CONNECTION, certfp_new_connection, priority=9999)
+    Hook.add(Hook.NEW_CONNECTION, get_certfp, priority=9999)
+    Hook.add(Hook.SERVER_LINK_OUT_CONNECTED, get_certfp, priority=9999)
     Hook.add(Hook.LOCAL_CONNECT, certfp_connect)
     Hook.add(Hook.WHOIS, certfp_whois)

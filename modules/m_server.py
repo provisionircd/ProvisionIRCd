@@ -74,6 +74,42 @@ def auth_incoming_link(client):
             return 0
 
         client_certfp = client.get_md_value("certfp")
+
+        if link.auth:
+            password = link.auth["password"]
+            fingerprint = link.auth["fingerprint"]
+            cn = link.auth["common-name"]
+
+            if password:
+                if client.local.authpass != password:
+                    deny_direct_link(client, Error.SERVER_LINK_INCORRECT_PASSWORD)
+                    logging.debug(f"[auth] Link denied for {client.name}: incorrect password")
+                    return 0
+                logging.debug(f"[auth] Incoming link password is a match")
+
+            if fingerprint:
+                if client_certfp != fingerprint:
+                    deny_direct_link(client, Error.SERVER_LINK_NOMATCH_CERTFP)
+                    logging.debug(f"Link denied for {client.name}: certificate fingerprint mismatch")
+                    logging.debug(f"Required: {fingerprint}")
+                    logging.debug(f"Received: {client_certfp}")
+                    return 0
+                logging.debug(f"[auth] Incoming link fingerprint is a match")
+
+            if cn:
+                if (client_cn := client.get_md_value(name="certfp_cn")) and client_cn.lower() != cn.lower():
+                    deny_direct_link(client, Error.SERVER_LINK_NOMATCH_CN)
+                    logging.debug(f"Link denied for {client.name}: certificate Common-Name mismatch")
+                    logging.debug(f"Required: {cn}")
+                    logging.debug(f"Received: {client_cn}")
+                    return 0
+                logging.debug(f"[auth] Incoming link CN is a match")
+
+            logging.debug(f"[auth] Incoming server successfully authenticated")
+            client.server.link = link
+            return 1
+
+        # Deprecated method below.
         if re.match(r"[A-Fa-f0-9]{64}$", link.password):
             """ This link requires a certificate fingerprint """
             if client_certfp and client_certfp == link.password:
