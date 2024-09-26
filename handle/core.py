@@ -794,7 +794,7 @@ class Client:
             First sockread.
             """
             self.flags.append(Flag.CLIENT_HANDSHAKE_FINISHED)
-            IRCD.run_hook(Hook.NEW_CONNECTION, self)
+            # IRCD.run_hook(Hook.NEW_CONNECTION, self)
 
             if self.user and (ban := IRCD.is_ban_client("user", self)):
                 """
@@ -1385,7 +1385,7 @@ class Channel:
             self.List[mode] = []
 
     def set_founder(self, client):
-        if self.name[0] != '+':
+        if self.name[0] != '+' and client.user:
             self.founder = {"fullmask": client.fullmask, "certfp": client.get_md_value("certfp")}
 
     def is_founder(self, client):
@@ -3324,6 +3324,10 @@ class Hook:
     # Called very early when we request a link, before the socket connects.
     # Arguments:    client
     SERVER_LINK_OUT = hook()
+
+    # Called right after an outgoing link socket connects, but before basic negotiation.
+    # Arguments:    client
+    SERVER_LINK_OUT_CONNECTED = hook()
 
     # Called after every succesful incoming UID during linking.
     # Arguments:    client, recv

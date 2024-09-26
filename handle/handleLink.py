@@ -189,6 +189,7 @@ def start_outgoing_link(link, tls=0, auto_connect=0):
                 client.local.socket.do_handshake()
             except:
                 pass
+            IRCD.run_hook(Hook.SERVER_LINK_OUT_CONNECTED, client)
             client.local.handshake = 1
             client.local.socket.setblocking(False)
             logging.debug(f"Succesfully connected out: {host}:{port}")

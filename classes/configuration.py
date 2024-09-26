@@ -6,6 +6,7 @@ from handle.logger import logging, IRCDLogger
 from handle.core import Channelmode, Usermode, IRCD, Command, Configuration, Extban, Isupport, Snomask, Stat, Hook, MessageTag
 from handle.validate_conf import (
     ConfErrors,
+    ConfWarnings,
     load_module,
     config_test_me,
     config_test_admin,
@@ -147,6 +148,10 @@ class ConfigBuild:
                     ConfigParser.errors.append(f"Oper '{oper.name}' has oper-class assigned but it does not exist: {oper.operclass}")
                 else:
                     oper.operclass = operclass
+
+        if ConfWarnings.entries:
+            for warning in ConfWarnings.entries:
+                logging.warning(warning)
 
         if ConfigParser.errors or ConfErrors.entries:
             for error in ConfigParser.errors + ConfErrors.entries:

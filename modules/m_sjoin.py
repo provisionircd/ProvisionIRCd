@@ -169,7 +169,7 @@ def set_remote_modes(remote_server, channel_object, remote_modes: str, remote_pa
                 channel_object.member_give_modes(client, mode)
                 modebuf_give.append(mode)
                 parambuf_give.append(client.name)
-            logging.debug(f"[set_remote_modes()] Joining {client.name} to {channel_object.name}")
+            # logging.debug(f"[set_remote_modes()] Joining {client.name} to {channel_object.name}")
             channel_object.do_join(remote_server.recv_mtags, client)
         else:
             logging.error(f"[set_remote_modes()] Attempted to join {client.name} to {channel_object.name} but it already exists.")

@@ -64,6 +64,10 @@ def post_accept(conn, client, listen_obj):
     logging.debug(f"Accepted new socket on {listen_obj.port}: {client.ip} -- fd: {client.local.socket.fileno()}")
     if client.server:
         IRCD.run_hook(Hook.SERVER_LINK_IN, client)
+    else:
+        # TODO: Check if this causes issues.
+        #  It used to be in handle_recv()
+        IRCD.run_hook(Hook.NEW_CONNECTION, client)
 
 
 def accept_socket(sock, listen_obj):
