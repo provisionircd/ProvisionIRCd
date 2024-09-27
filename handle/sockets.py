@@ -1,3 +1,4 @@
+import socket
 from time import time
 
 import select
@@ -17,7 +18,7 @@ except ImportError:
 
 
 def close_socket(sock):
-    for method in [lambda: sock.shutdown(sock.SHUT_RDWR), lambda: sock.close()]:
+    for method in [lambda: sock.shutdown(sock.SHUT_RDWR), sock.close]:
         try:
             method()
         except:
@@ -30,14 +31,24 @@ def close_socket(sock):
 
 
 def post_accept(conn, client, listen_obj):
-    # logging.debug(f"post_accept() called.")
     if IRCD.use_poll:
         IRCD.poller.register(conn, select.POLLIN | select.POLLPRI | select.POLLHUP | select.POLLERR | select.EPOLLRDNORM | select.EPOLLRDHUP)
     if listen_obj.tls:
         try:
+            client.local.socket = SSL.Connection(listen_obj.tlsctx, conn)
+            client.local.socket.set_accept_state()
             client.local.socket.do_handshake()
+
         except:
-            pass
+            msg = "This port is for TLS connections only"
+            data = f"ERROR :Closing link: {msg}"
+            conn.sendall(bytes(data + "\r\n", "utf-8"))
+            conn.shutdown(socket.SHUT_WR)
+            client.exit(msg, sockclose=0)
+            # Fallback.
+            IRCD.run_parallel_function(close_socket, args=(conn,), delay=0.1)
+            return
+
         client.local.tls = listen_obj.tlsctx
 
     """ Set to non-blocking after handshake """
@@ -259,6 +270,19 @@ def process_backbuffer():
                         buffer.remove(entry)
 
 
+def is_valid_socket(sock):
+    try:
+        return sock and sock.fileno() > 0
+    except Exception:
+        return False
+
+
+def clean_invalid_sockets(listen_sockets, read_clients, write_clients):
+    listen_sockets[:] = [sock for sock in listen_sockets if is_valid_socket(sock)]
+    read_clients[:] = [sock for sock in read_clients if is_valid_socket(sock)]
+    write_clients[:] = [sock for sock in write_clients if is_valid_socket(sock)]
+
+
 def handle_connections():
     # if IRCD.forked:
     #     logging.getLogger().removeHandler(IRCDLogger.stream_handler)
@@ -351,7 +375,11 @@ def handle_connections():
                         continue
 
             else:
-                read, write, error = select.select(listen_sockets + read_clients, write_clients, listen_sockets + read_clients, 0.5)
+                try:
+                    clean_invalid_sockets(listen_sockets, read_clients, write_clients)
+                    read, write, error = select.select(listen_sockets + read_clients, write_clients, listen_sockets + read_clients, 0.5)
+                except ValueError:
+                    continue
                 for sock in read:
                     if sock in listen_sockets:
                         if not (listen_obj := find_listen_obj_from_socket(sock)):

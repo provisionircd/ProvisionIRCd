@@ -56,8 +56,8 @@ class Listen:
         try:
             if self.tls and self.cert and self.key:
                 self.tlsctx = create_ctx(cert=self.cert, key=self.key, name=IRCD.me.name)
-                self.sock = wrap_socket(self)
-                self.sock.set_accept_state()
+                # self.sock = wrap_socket(self)
+                # self.sock.set_accept_state()
 
             if not self.listening:
                 ip = '' if self.ip == '*' else self.ip

@@ -430,7 +430,7 @@ class Client:
         except Exception as ex:
             logging.exception(ex)
 
-    def exit(self, reason: str, sock_error: bool = 0) -> None:
+    def exit(self, reason: str, sock_error: bool = 0, sockclose: int = 1) -> None:
         if IRCD.current_link_sync == self:
             IRCD.current_link_sync = None
             # logging.debug(f"[exit()] current_link_sync for {self.name} unset.")
@@ -463,7 +463,8 @@ class Client:
                 mask = self.user.realhost or self.ip
                 self.direct_send(f"ERROR :Closing link: {self.name}[{mask}] {reason}")
 
-            self.close_socket()
+            if sockclose:
+                self.close_socket()
 
         hook = Hook.LOCAL_QUIT if self.local else Hook.REMOTE_QUIT
         IRCD.run_hook(hook, self, reason)
