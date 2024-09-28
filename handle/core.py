@@ -1656,6 +1656,10 @@ class Channel:
             # Don't show the join message if `new_user` is stealthed
             # or if `client` has already seen `new_user` in the channel.
             return
+
+        if not new_user.uplink.server.synced:
+            Batch.check_batch_event(mtags=mtags, started_by=new_user.uplink, target_client=client, event="netjoin")
+
         join_message = f":{new_user.fullmask} JOIN {self.name}"
         if client.has_capability("extended-join"):
             join_message += f" {new_user.user.account} :{new_user.info}"
@@ -1674,9 +1678,6 @@ class Channel:
         for member in [m for m in self.members if m.client.local]:
             if not self.user_can_see_member(member.client, client):
                 continue
-
-            if not client.uplink.server.synced:
-                Batch.check_batch_event(mtags=mtags, started_by=client.uplink, target_client=member.client, event="netjoin")
 
             self.show_join_message(mtags, member.client, client)
 
@@ -1697,7 +1698,7 @@ class Channel:
             msg = f"*** {client.name} ({client.user.username}@{client.user.realhost}) has joined channel {self.name}"
             IRCD.log(client, "info", "join", event, msg, sync=0)
 
-        if self.name[0] != '+' and self.is_founder(client):
+        if self.name[0] != '+' and self.is_founder(client) and client.local:
             Command.do(IRCD.me, "MODE", self.name, "+o", client.name)
 
 
@@ -1897,14 +1898,6 @@ class IRCD:
     @staticmethod
     def set_setting(key, value):
         IRCD.configuration.settings[key] = value
-
-    @staticmethod
-    def set_setting_list(key, value):
-        if key not in IRCD.configuration.settings:
-            IRCD.configuration.settings[key] = []
-        if value in IRCD.configuration.settings[key]:
-            IRCD.configuration.settings[key].remove(value)
-        IRCD.configuration.settings[key].append(value)
 
     @staticmethod
     def is_except_client(what, client):
