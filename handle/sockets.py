@@ -26,7 +26,7 @@ def close_socket(sock):
     if IRCD.use_poll:
         try:
             IRCD.poller.unregister(sock)
-        except KeyError:
+        except:
             pass
 
 

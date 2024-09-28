@@ -787,7 +787,7 @@ def config_test_ulines(block):
         if server.lower() == IRCD.me.name.lower():
             conf_error(f"Invalid uline server: {server}. Cannot be this server!", block=block, item=entry)
             continue
-        IRCD.set_setting_list("ulines", server)
+        IRCD.set_setting("ulines", [server])
 
 
 def config_test_bans(block):

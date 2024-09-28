@@ -4,7 +4,6 @@ commands /join and /part
 
 from time import time
 from handle.core import Flag, Numeric, Isupport, Command, IRCD, Capability, Hook
-from handle.functions import logging
 
 
 def cmd_join(client, recv):
@@ -19,7 +18,7 @@ def cmd_join(client, recv):
             channel.do_part(client, reason="Leaving all channels")
         return
 
-    if len(client.channels) >= 100 and not client.has_permission("channel:override:join:max"):
+    if client.local and len(client.channels) >= 100 and not client.has_permission("channel:override:join:max"):
         return client.sendnumeric(Numeric.ERR_TOOMANYCHANNELS)
 
     pc = 0
@@ -29,7 +28,7 @@ def cmd_join(client, recv):
 
         IRCD.new_message(client)
         if client.local and int(time()) - client.creationtime > 5:
-            client.local.flood_penalty += 10000
+            client.local.flood_penalty += 10_000
 
         if (channel := IRCD.find_channel(chan)) and channel.find_member(client):
             """
@@ -102,7 +101,7 @@ def cmd_part(client, recv):
     for chan_name in recv[1].split(','):
         IRCD.new_message(client)
         if client.local and (int(time()) - client.creationtime) > 5:
-            client.local.flood_penalty += 10000
+            client.local.flood_penalty += 10_000
 
         channel = IRCD.find_channel(chan_name)
         if not channel or not channel.find_member(client):
