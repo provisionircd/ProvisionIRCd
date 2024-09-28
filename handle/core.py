@@ -3667,7 +3667,7 @@ class Tkl:
                 for bt in [bt for bt in bantypes if bt in Tkl.global_flags()]:
                     local_bantypes += bt
                 bantypes = local_bantypes + ' '
-            if client == IRCD.me or client.local and expire > 0:
+            if (client == IRCD.me or client.local) and expire > 0:
                 """
                 If the ban is set locally and the expire is >0, increase the expire by 1 sec.
                 That way expiring bans are shown to come from 'me'.
@@ -3687,8 +3687,6 @@ class Tkl:
             return
         for tkl in list(Tkl.table):
             if tkl.type == flag and (tkl.ident, tkl.host) == (ident, host):
-                if tkl.expire and client != IRCD.me and not client.user:
-                    continue
                 Tkl.table.remove(tkl)
                 expire = 0
                 if tkl.expire and int(time()) >= tkl.expire:
@@ -3698,9 +3696,7 @@ class Tkl:
                 sync = not tkl.is_global
                 IRCD.log(client, "info", "tkl", "TKL_DEL", msg, sync=sync)
 
-                # TODO: Maybe also sync global TKL expires?
-                #  Check if this has negative effects.
-                if tkl.is_global:  # and not expire:
+                if tkl.is_global:
                     data = f":{client.id} TKL - {flag} {tkl.ident} {tkl.host}"
                     IRCD.send_to_servers(client, [], data)
 

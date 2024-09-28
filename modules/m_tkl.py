@@ -50,17 +50,18 @@ def make_real_mask(data):
 
 
 def cmd_tkl(client, recv):
-    if len(recv) < 9:
+    if len(recv) < 5 or (recv[1] == '+' and len(recv) < 9):
         return
+
     try:
-        tkltype = recv[2]
+        flag = recv[2]
         ident = recv[3]
         host = recv[4]
         if recv[1] == '+':
             set_by = recv[5]
             expire = int(recv[6])
             set_time = recv[7]
-            if tkltype == 'E':
+            if flag == 'E':
                 bantypes = recv[8]
                 reason = ' '.join(recv[9:]).removeprefix(':')
             else:
@@ -75,12 +76,12 @@ def cmd_tkl(client, recv):
             # expire = 6
             # set_time = 7
             # reason = 8:
-            Tkl.add(client, tkltype, ident, host, bantypes, set_by, expire, set_time, reason)
+            Tkl.add(client, flag, ident, host, bantypes, set_by, expire, set_time, reason)
 
         elif recv[1] == '-':
             ident = recv[3]
             host = recv[4]
-            Tkl.remove(client, tkltype, ident, host)
+            Tkl.remove(client, flag, ident, host)
     except Exception as ex:
         logging.exception(ex)
 
