@@ -651,7 +651,9 @@ def config_test_link(block):
                         continue
                     auth["fingerprint"] = fingerprint
                 if auth_item == "common-name":
-                    auth["common-name"] = item.get_single_value("common-name")
+                    cn = item.get_single_value("common-name")
+                    cn = cn.replace(' ', '.')
+                    auth["common-name"] = cn
         else:
             if not password:
                 conf_error(f"Missing auth block in link '{block.value}'")

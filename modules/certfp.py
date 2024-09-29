@@ -34,9 +34,11 @@ def get_certfp(client):
     if not cert:
         return
     if cn := extract_client_cn(cert):
+        cn = cn.replace(' ', '.')
         client.add_md(name="cert_cn", value=cn, sync=0)
 
     if san := extract_client_san(cert):
+        cn = cn.replace(' ', '.')
         client.add_md(name="cert_san", value=san, sync=0)
 
     fingerprint = cert.digest("SHA256").decode().lower().replace(':', '')

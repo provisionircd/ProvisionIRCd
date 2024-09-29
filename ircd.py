@@ -59,7 +59,7 @@ if __name__ == "__main__":
                     # Extract the CN (Common Name) from the subject
                     subject = cert.get_subject()
                     cn = subject.commonName
-
+                    cn = cn.replace(' ', '.')
                     print(f"[{file}] CN: {cn}")
                 except Error:
                     pass

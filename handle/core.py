@@ -845,7 +845,9 @@ class Client:
                 if recv[0] == '@':
                     tag_data = recv.split()[0][1:].split(';')
                     parsed_tags = IRCD.parse_remote_mtags(self, tag_data)
-                    recv = ' '.join(recv.split(' ')[1:])
+                    # recv = ' '.join(recv.split(' ')[1:])
+                    split_point = recv.find(" :")
+                    recv = recv[split_point + 1:]
                     if not recv.strip():
                         continue
 
@@ -2103,7 +2105,6 @@ class IRCD:
         """
 
         mtags = []
-
         for tag in remote_mtags:
             value = None
             name = tag

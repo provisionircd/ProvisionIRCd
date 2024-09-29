@@ -126,6 +126,8 @@ def cmd_nick_remote(client, recv):
 def create_user_from_uid(client, info: list):
     if len(info) < 13:
         return Error.USER_UID_NOT_ENOUGH_PARAMS
+    elif len(info) > 13:
+        return Error.USER_UID_TOO_MANY_PARAMS
     signon = info[3]
     if not signon.isdigit():
         return Error.USER_UID_SIGNON_NO_DIGIT
@@ -210,8 +212,11 @@ def cmd_uid(client, recv):
         new_client.sync(cause="cmd_uid()")
         IRCD.run_hook(Hook.REMOTE_CONNECT, new_client)
     else:
+        logging.error(f"UID failed")
         match new_client:
             case Error.USER_UID_NOT_ENOUGH_PARAMS:
+                errmsg = Error.send(new_client, client.name, len(recv))
+            case Error.USER_UID_TOO_MANY_PARAMS:
                 errmsg = Error.send(new_client, client.name, len(recv))
             case Error.USER_UID_INVALID:
                 errmsg = Error.send(new_client, client.name)

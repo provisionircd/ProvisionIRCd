@@ -29,7 +29,8 @@ class Error:
 
     USER_UID_INVALID = error(), "[UID] Unable to parse UID from server {}"
     USER_UID_NOT_ENOUGH_PARAMS = error(), "[UID] Not enough parameters for UID from {}: {} != 13"
-    USER_UID_SIGNON_NO_DIGIT = error(), "Invalid timestamp received in UID: {}. Must be a timestamp."
+    USER_UID_TOO_MANY_PARAMS = error(), "[UID] Too many parameters for UID from {}: {} != 13"
+    USER_UID_SIGNON_NO_DIGIT = error(), "Invalid timestamp received in UID: {}. Must be a timestamp (int)."
 
     @staticmethod
     def send(error_code, *args):

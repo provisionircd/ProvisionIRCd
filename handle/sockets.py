@@ -42,7 +42,10 @@ def post_accept(conn, client, listen_obj):
         except:
             msg = "This port is for TLS connections only"
             data = f"ERROR :Closing link: {msg}"
-            conn.sendall(bytes(data + "\r\n", "utf-8"))
+            try:
+                conn.sendall(bytes(data + "\r\n", "utf-8"))
+            except:
+                pass
             conn.shutdown(socket.SHUT_WR)
             client.exit(msg, sockclose=0)
             # Fallback.
