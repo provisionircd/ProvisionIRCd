@@ -3658,7 +3658,7 @@ class Tkl:
         if bantypes == '*':
             bantypes = ''
         bt_string = f" [{bantypes}]" if bantypes else ''
-        if not update and not exists or (update and IRCD.find_user(set_by.split('!')[0])):
+        if (not update and not exists or (update and IRCD.find_user(set_by.split('!')[0]))) and (client == IRCD.me or client.registered):
             msg = f"*** {'Global ' if tkl.is_global else ''}{tkl.name}{bt_string} {'active' if not update else 'updated'} for {tkl.mask} by {set_by} [{reason}] expires on: {expire_string}"
             sync = not tkl.is_global
             IRCD.log(client, "info", "tkl", "TKL_ADD", msg, sync=sync)
@@ -3692,10 +3692,12 @@ class Tkl:
                 expire = 0
                 if tkl.expire and int(time()) >= tkl.expire:
                     expire = 1
-                date = f"{datetime.fromtimestamp(float(tkl.set_time)).strftime('%a %b %d %Y')} {datetime.fromtimestamp(float(tkl.set_time)).strftime('%H:%M:%S')}"
-                msg = f"*** {'Expiring ' if expire else ''}{'Global ' if tkl.is_global else ''}{tkl.name} {tkl.mask} removed (set by {tkl.set_by} on {date}) [{tkl.reason}]"
-                sync = not tkl.is_global
-                IRCD.log(client, "info", "tkl", "TKL_DEL", msg, sync=sync)
+
+                if client == IRCD.me or client.registered:
+                    date = f"{datetime.fromtimestamp(float(tkl.set_time)).strftime('%a %b %d %Y')} {datetime.fromtimestamp(float(tkl.set_time)).strftime('%H:%M:%S')}"
+                    msg = f"*** {'Expiring ' if expire else ''}{'Global ' if tkl.is_global else ''}{tkl.name} {tkl.mask} removed (set by {tkl.set_by} on {date}) [{tkl.reason}]"
+                    sync = not tkl.is_global
+                    IRCD.log(client, "info", "tkl", "TKL_DEL", msg, sync=sync)
 
                 if tkl.is_global:
                     data = f":{client.id} TKL - {flag} {tkl.ident} {tkl.host}"
