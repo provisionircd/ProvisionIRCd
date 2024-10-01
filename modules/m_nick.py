@@ -126,11 +126,11 @@ def cmd_nick_remote(client, recv):
 def create_user_from_uid(client, info: list):
     if len(info) < 13:
         return Error.USER_UID_NOT_ENOUGH_PARAMS
-    elif len(info) > 13:
-        return Error.USER_UID_TOO_MANY_PARAMS
     signon = info[3]
     if not signon.isdigit():
         return Error.USER_UID_SIGNON_NO_DIGIT
+    if existing := IRCD.find_user(info[6]):
+        return Error.USER_UID_ALREADY_IN_USE
 
     new_client = make_client(direction=client.direction, uplink=client)
     new_client = make_user(new_client)
@@ -140,9 +140,7 @@ def create_user_from_uid(client, info: list):
     new_client.user.realhost = info[5]
     new_client.id = info[6]
     logging.debug(F"Remote client {new_client.name} UID set: {new_client.id}")
-    existing_uid = [c.name for c in Client.table if c != new_client and c.id == new_client.id]
-    if existing_uid:
-        logging.warning(f"[WARNING] UID is already in use by clients: {existing_uid}")
+
     new_client.user.account = info[7]
     new_client.user.modes = info[8].replace('+', '')
     cloakhost = info[10]
@@ -161,9 +159,7 @@ def create_user_from_uid(client, info: list):
         new_client.ip = client.ip
 
     new_client.add_flag(Flag.CLIENT_REGISTERED)
-
     logging.debug(f"New remote user {new_client.name}. Uplink: {new_client.uplink.name}, direction: {new_client.direction.name}")
-
     return new_client
 
 
@@ -212,14 +208,11 @@ def cmd_uid(client, recv):
         new_client.sync(cause="cmd_uid()")
         IRCD.run_hook(Hook.REMOTE_CONNECT, new_client)
     else:
-        logging.error(f"UID failed")
         match new_client:
             case Error.USER_UID_NOT_ENOUGH_PARAMS:
                 errmsg = Error.send(new_client, client.name, len(recv))
-            case Error.USER_UID_TOO_MANY_PARAMS:
-                errmsg = Error.send(new_client, client.name, len(recv))
-            case Error.USER_UID_INVALID:
-                errmsg = Error.send(new_client, client.name)
+            case Error.USER_UID_ALREADY_IN_USE:
+                errmsg = Error.send(new_client, recv[6])
             case Error.USER_UID_SIGNON_NO_DIGIT:
                 errmsg = Error.send(new_client, signon)
             case _:
