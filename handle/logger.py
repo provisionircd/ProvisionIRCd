@@ -194,9 +194,10 @@ log_fmt = "[%(asctime)s] {%(relativepath)s:%(lineno)d} %(levelname)s - %(message
 log_paths = {
     "file": "logs/ircd.log",
     "warning": "logs/warning.log",
-    "error": "logs/error.log"
+    "error": "logs/error.log",
+    "exception": "logs/exception.log"
 }
-log_levels = [logging.DEBUG, logging.WARNING, logging.ERROR]
+log_levels = [logging.DEBUG, logging.WARNING, logging.ERROR, logging.ERROR]
 
 # Create file handlers.
 handlers = []
