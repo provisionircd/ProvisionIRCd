@@ -141,12 +141,12 @@ def sync_data(newserver):
     data = f":{IRCD.me.id} NETINFO {IRCD.maxgusers} {int(time.time())} {IRCD.versionnumber.replace('.', '')} MD5:{cloakhash} {IRCD.boottime} 0 0 :{IRCD.me.info}"
     newserver.send([], data)
 
+    IRCD.run_hook(Hook.SERVER_SYNC, newserver)
+
     logging.debug(f"We ({IRCD.me.name}) are done syncing to {newserver.name}, sending EOS.")
     newserver.send([], f":{IRCD.me.id} EOS")
     for server_client in [c for c in IRCD.global_servers() if c not in [IRCD.me, newserver] and c.server.synced]:
         newserver.send([], f":{server_client.id} EOS")
-
-    IRCD.run_hook(Hook.SERVER_SYNC, newserver)
 
 
 def deny_direct_link(client, error: int, *args):

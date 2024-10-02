@@ -28,7 +28,7 @@ def spamfilter_match(client, spamfilter, target_cause):  # filtertarget, to_targ
         return 0
 
     elif spamfilter.action == "gzline":
-        Tkl.add(client.uplink, 'Z', '*', client.ip, bantypes='',
+        Tkl.add(client, 'Z', '*', client.ip, bantypes='',
                 set_by=IRCD.me.name, expire=int(time()) + spamfilter.duration,
                 set_time=int(time()), reason=f"Spamfilter match: {reason}")
         return 0

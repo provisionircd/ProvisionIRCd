@@ -198,7 +198,7 @@ def cmd_line(client, recv):
         if not Tkl.exists(cmd_tkl.flag, get_mask):
             return IRCD.server_notice(client, f"*** Notice -- No such {cmd_tkl.name}: {get_mask}")
         else:
-            Tkl.remove(client.uplink, cmd_tkl.flag, ident, host)
+            Tkl.remove(client, cmd_tkl.flag, ident, host)
 
     else:
         if len(recv) < 3:
@@ -260,7 +260,7 @@ def cmd_line(client, recv):
 
                 set_by = client.fullrealhost
                 set_time = int(time.time())
-                Tkl.add(client.uplink, flag=cmd_tkl.flag, ident=ident, host=host, bantypes=bantypes, set_by=set_by, expire=expire, set_time=set_time, reason=reason)
+                Tkl.add(client, flag=cmd_tkl.flag, ident=ident, host=host, bantypes=bantypes, set_by=set_by, expire=expire, set_time=set_time, reason=reason)
             else:
                 return IRCD.server_notice(client, f"Invalid extended server ban: {recv[1].split(':')[0]}")
             return
@@ -293,7 +293,7 @@ def cmd_line(client, recv):
         if mask:
             set_by = client.fullrealhost
             set_time = int(time.time())
-            Tkl.add(client.uplink, flag=cmd_tkl.flag, ident=ident, host=host, bantypes=bantypes, expire=expire, set_by=set_by, set_time=set_time, reason=reason)
+            Tkl.add(client, flag=cmd_tkl.flag, ident=ident, host=host, bantypes=bantypes, expire=expire, set_by=set_by, set_time=set_time, reason=reason)
 
 
 def cmd_shun(client, recv):

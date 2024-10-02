@@ -652,7 +652,7 @@ def config_test_link(block):
                     auth["fingerprint"] = fingerprint
                 if auth_item == "common-name":
                     cn = item.get_single_value("common-name")
-                    cn = cn.replace(' ', '.')
+                    cn = cn.replace(' ', '_')
                     auth["common-name"] = cn
         else:
             if not password:

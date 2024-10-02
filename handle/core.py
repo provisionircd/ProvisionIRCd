@@ -511,12 +511,16 @@ class Client:
         Swhois.remove_from_client(self, line)
 
     def add_md(self, name: str, value: str, sync: int = 1):
+        name = name.replace(' ', '_')
+        value = value.replace(' ', '_')
         ModData.add_to_client(self, name, value, sync)
 
     def del_md(self, name: str):
+        name = name.replace(' ', '_')
         ModData.remove_from_client(self, name)
 
     def get_md_value(self, name: str):
+        name = name.replace(' ', '_')
         if md := ModData.get_from_client(self, name):
             return md.value
 
@@ -845,9 +849,11 @@ class Client:
                 if recv[0] == '@':
                     tag_data = recv.split()[0][1:].split(';')
                     parsed_tags = IRCD.parse_remote_mtags(self, tag_data)
-                    # recv = ' '.join(recv.split(' ')[1:])
-                    split_point = recv.find(" :")
-                    recv = recv[split_point + 1:]
+                    if self.user:
+                        recv = ' '.join(recv.split(' ')[1:])
+                    else:
+                        split_point = recv.find(" :")
+                        recv = recv[split_point + 1:]
                     if not recv.strip():
                         continue
 
@@ -1069,6 +1075,11 @@ class Server:
         if self == IRCD.me:
             return 1
         return 0
+
+    @property
+    def fullrealhost(self):
+        if self == IRCD.me:
+            return IRCD.me.name
 
 
 @dataclass(eq=False)
@@ -1387,7 +1398,10 @@ class Channel:
         for mode in [m.flag for m in Channelmode.table if m.type == Channelmode.LISTMODE]:
             self.List[mode] = []
 
-    def set_founder(self, client):
+    def set_founder(self, client=None):
+        if not client:
+            self.founder = {}
+            return
         if self.name[0] != '+' and client.user:
             self.founder = {"fullmask": client.fullmask, "certfp": client.get_md_value("certfp")}
 
@@ -3345,10 +3359,10 @@ class Hook:
     # Called after every outgoing SJOIN.
     # This allows modules to sync additional channel data across the network.
     # This is not the same as LOCAL_JOIN and REMOTE_JOIN module hooks.
-    # Arguments:    the channel object being synced, new server client
+    # Arguments:    channel object, new server client
     SERVER_SJOIN_OUT = hook()
 
-    # Called after all users and channels have been synced, but before we reach their EOS.
+    # Called after all users and channels have been synced, but before we send our EOS.
     # Arguments:    client
     SERVER_SYNC = hook()
 
@@ -3676,7 +3690,7 @@ class Tkl:
                 Just some nitpicky little detail. Although it doesn't work as intended anyway.
                 """
                 expire += 1
-            data = f":{client.id} TKL + {flag} {ident} {host} {set_by} {expire} {set_time} {bantypes}:{reason}"
+            data = f":{client.uplink.id} TKL + {flag} {ident} {host} {set_by} {expire} {set_time} {bantypes}:{reason}"
             IRCD.send_to_servers(client, [], data)
 
     @staticmethod
@@ -3695,12 +3709,12 @@ class Tkl:
 
                 if client == IRCD.me or client.registered:
                     date = f"{datetime.fromtimestamp(float(tkl.set_time)).strftime('%a %b %d %Y')} {datetime.fromtimestamp(float(tkl.set_time)).strftime('%H:%M:%S')}"
-                    msg = f"*** {'Expiring ' if expire else ''}{'Global ' if tkl.is_global else ''}{tkl.name} {tkl.mask} removed (set by {tkl.set_by} on {date}) [{tkl.reason}]"
+                    msg = f"*** {'Expiring ' if expire else ''}{'Global ' if tkl.is_global else ''}{tkl.name} {tkl.mask} removed by {client.fullrealhost} (set by {tkl.set_by} on {date}) [{tkl.reason}]"
                     sync = not tkl.is_global
                     IRCD.log(client, "info", "tkl", "TKL_DEL", msg, sync=sync)
 
                 if tkl.is_global:
-                    data = f":{client.id} TKL - {flag} {tkl.ident} {tkl.host}"
+                    data = f":{client.uplink.id} TKL - {flag} {tkl.ident} {tkl.host}"
                     IRCD.send_to_servers(client, [], data)
 
                 if tkl.type == 's':
