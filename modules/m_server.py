@@ -234,7 +234,7 @@ def cmd_sid(client, recv):
     new_server.info = info
     new_server.id = sid
     new_server.ip = client.ip
-    new_server.add_flag(Flag.CLIENT_REGISTERED)
+    # new_server.add_flag(Flag.CLIENT_REGISTERED)  # Handled by EOS.
     # new_server.server.synced = 1
     new_server.server.authed = 1
     logging.info(f"[SID] New server added to the network: {new_server.name} ({new_server.info})")

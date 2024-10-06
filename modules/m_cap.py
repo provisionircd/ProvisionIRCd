@@ -40,13 +40,12 @@ def cmd_cap(client, recv):
         for cap in caps.split():
             if cap.startswith('-'):
                 cap = cap[1:]
-                if cap in client.local.caps:
-                    client.local.caps.remove(cap)
+                if client.remove_capability(cap):
                     ack_caps.append('-' + cap)
                 continue
 
-            if (find_cap := Capability.find_cap(cap)) and find_cap.name not in client.local.caps:
-                client.local.caps.append(find_cap.name)
+            if Capability.find_cap(cap) and not client.has_capability(cap):
+                client.set_capability(cap)
                 ack_caps.append(cap)
 
         if ack_caps:

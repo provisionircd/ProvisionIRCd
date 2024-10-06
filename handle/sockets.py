@@ -348,7 +348,7 @@ def handle_connections():
                                 # Not yet ready to read. Wait.
                                 continue
                             except Exception as ex:
-                                if client.registered and not isinstance(ex, SSL.ZeroReturnError) and not isinstance(ex, SSL.SysCallError):
+                                if client.registered and not isinstance(ex, SSL.ZeroReturnError) and not isinstance(ex, SSL.SysCallError) and not isinstance(ex, ConnectionResetError):
                                     logging.exception(ex)
                                 recv = ''
                             if not recv:
@@ -400,7 +400,7 @@ def handle_connections():
                             # Not yet ready to read. Wait.
                             continue
                         except Exception as ex:
-                            if client.registered and not isinstance(ex, SSL.ZeroReturnError) and not isinstance(ex, SSL.SysCallError):
+                            if client.registered and not isinstance(ex, SSL.ZeroReturnError) and not isinstance(ex, SSL.SysCallError) and not isinstance(ex, ConnectionResetError):
                                 logging.exception(ex)
                             recv = ''
                         if not recv:

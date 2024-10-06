@@ -106,10 +106,7 @@ class Client:
 
     @property
     def registered(self):
-        if Flag.CLIENT_REGISTERED in self.flags:
-            return 1
-        if not self.local:
-            logging.warning(f"Remote client {self.name} is not marked as registered")
+        return 1 if Flag.CLIENT_REGISTERED in self.flags else 0
 
     @property
     def ulined(self):
@@ -177,6 +174,18 @@ class Client:
                 self.local.authpass = 0
                 return 1
             return 0
+
+    def set_capability(self, capname):
+        if not self.local or self.has_capability(capname):
+            return 0
+        self.local.caps.append(capname)
+        return 1
+
+    def remove_capability(self, capname):
+        if not self.local or not self.has_capability(capname):
+            return 0
+        self.local.caps.remove(capname)
+        return 1
 
     def has_capability(self, cap: str):
         if not self.local:
@@ -1402,12 +1411,12 @@ class Channel:
         if not client:
             self.founder = {}
             return
-        if self.name[0] != '+' and client.user:
-            self.founder = {"fullmask": client.fullmask, "certfp": client.get_md_value("certfp")}
+        if self.name[0] != '+' and client.user and client.local:
+            self.founder = {"time": int(time()), "fullmask": client.fullmask, "certfp": client.get_md_value("certfp"), "ip": client.ip, "fullrealhost": client.fullrealhost}
 
     def is_founder(self, client):
         certfp = client.get_md_value("certfp")
-        return client.fullmask == self.founder.get("fullmask") or (certfp and certfp == self.founder.get("certfp"))
+        return client.fullrealhost == self.founder.get("fullrealhost") or (certfp and certfp == self.founder.get("certfp"))
 
     def can_join(self, client: Client, key: str):
         """
@@ -1514,18 +1523,22 @@ class Channel:
         """ Returns true if `client_a` has seen `client_b` on this channel. """
         return 1 if client_b in self.seen_dict[client_a] else 0
 
-    def member_give_modes(self, client: Client, mode: str):
-        if not (member := self.find_member(client)):
+    def member_give_modes(self, client: Client, modes: str):
+        if not (member := self.find_member(client)) or not modes:
             return
-        member.modes += mode
-        # If there are any members on the channel that are not away of this user,
-        # show a join here.
-        IRCD.new_message(client)
-        for user in [c for c in self.clients() if not self.client_has_seen(c, member.client)]:
-            self.show_join_message(client.mtags, user, member.client)
+        diff = 0
+        for mode in [m for m in modes if m not in member.modes]:
+            member.modes += mode
+            diff = 1
+        if diff:
+            # If there are any members on the channel that are not away of this user,
+            # show a join here.
+            IRCD.new_message(client)
+            for user in [c for c in self.clients() if not self.client_has_seen(c, member.client)]:
+                self.show_join_message(client.mtags, user, member.client)
 
     def member_take_modes(self, client: Client, modes: str):
-        if not (member := self.find_member(client)):
+        if not (member := self.find_member(client)) or not modes:
             return
         for mode in modes:
             member.modes = member.modes.replace(mode, '')
@@ -1916,12 +1929,14 @@ class IRCD:
         IRCD.configuration.settings[key] = value
 
     @staticmethod
-    def is_except_client(what, client):
+    def is_except_client(what: str, client: Client) -> int:
         """
         :param what:        What to check for. Examples are: gline, shun, dnsbl.
                             If what == 'ban', it will collectively check for all of the following:
                             kline, gline, zline, gzline, shun, spamfilter, dnsbl
+        :type what:         str
         """
+
         if not client.user:
             return 1
 
@@ -1997,9 +2012,9 @@ class IRCD:
                                 return ban
                     case "user":
                         for mask in ban.mask:
-                            ident = '*' or client.user.username.lower()
-                            usermask = f"{ident}@{client.user.realhost.lower()}"
-                            if is_match(usermask, mask.lower()) or is_match(client.ip, mask.lower()):
+                            ident = '*' or client.user.username
+                            usermask = f"{ident}@{client.user.realhost}"
+                            if is_match(usermask.lower(), mask.lower()) or is_match(client.ip, mask.lower()):
                                 return ban
         return 0
 
@@ -3690,7 +3705,7 @@ class Tkl:
                 Just some nitpicky little detail. Although it doesn't work as intended anyway.
                 """
                 expire += 1
-            data = f":{client.uplink.id} TKL + {flag} {ident} {host} {set_by} {expire} {set_time} {bantypes}:{reason}"
+            data = f":{client.id} TKL + {flag} {ident} {host} {set_by} {expire} {set_time} {bantypes}:{reason}"
             IRCD.send_to_servers(client, [], data)
 
     @staticmethod
@@ -3714,7 +3729,7 @@ class Tkl:
                     IRCD.log(client, "info", "tkl", "TKL_DEL", msg, sync=sync)
 
                 if tkl.is_global:
-                    data = f":{client.uplink.id} TKL - {flag} {tkl.ident} {tkl.host}"
+                    data = f":{client.id} TKL - {flag} {tkl.ident} {tkl.host}"
                     IRCD.send_to_servers(client, [], data)
 
                 if tkl.type == 's':

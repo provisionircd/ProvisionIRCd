@@ -4,7 +4,7 @@
 
 import re
 
-from handle.core import Command, Flag, IRCD, Channelmode, Usermode, Isupport
+from handle.core import Command, IRCD, Channelmode, Usermode, Isupport, Numeric
 from classes.errors import Error
 from handle.handleLink import deny_direct_link
 
@@ -13,10 +13,22 @@ from handle.logger import logging
 
 def cmd_protoctl(client, recv):
     # logging.warning(f"PROTOCTL from {client.name}: {recv}")
+    if len(recv) < 2:
+        return
     try:
         for p in [p for p in recv[1:] if p not in client.local.protoctl]:
             try:
                 cap = p.split('=')[0]
+
+                if cap.upper() == "NAMESX":
+                    client.set_capability("multi-prefix")
+                    return
+                elif cap.upper() == "UHNAMES":
+                    client.set_capability("userhost-in-names")
+                    return
+
+                if client.user:
+                    return client.sendnumeric(Numeric.ERR_SERVERONLY, "PROTOCTL")
                 param = None
                 client.local.protoctl.append(cap)
                 if '=' in p:
@@ -102,7 +114,7 @@ def cmd_protoctl(client, recv):
                         return
 
                 elif cap == "MTAGS":
-                    client.local.caps.append("message-tags")
+                    client.set_capability("message-tags")
 
                 elif cap == "VL":
                     # VL: Supports V:Line information.
@@ -118,4 +130,4 @@ def cmd_protoctl(client, recv):
 
 
 def init(module):
-    Command.add(module, cmd_protoctl, "PROTOCTL", 2, Flag.CMD_SERVER)
+    Command.add(module, cmd_protoctl, "PROTOCTL")
