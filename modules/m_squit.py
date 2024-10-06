@@ -7,33 +7,31 @@ from handle.logger import logging
 
 
 def cmd_squit(client, recv):
-    logging.debug(recv)
-    if len(recv) < 3:
-        reason = client.name
-    else:
-        reason = ' '.join(recv[2:]).removeprefix(':')
     logging.warning(f"SQUIT from {client.name}: {recv}")
+    reason = client.name if len(recv) < 3 else ' '.join(recv[2:]).removeprefix(':')
+
     if client.user and client.local and not client.has_permission("server:squit"):
         return client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
 
-    # reason = f'[{client.name}] {" ".join(recv[2:])}'
-    name = recv[1]
-    if not (squit_server := IRCD.find_server(name)):
+    if not (server_matches := IRCD.find_server_match(recv[1])):
         if client.user:
-            client.sendnumeric(Numeric.ERR_NOSUCHSERVER, name)
+            client.sendnumeric(Numeric.ERR_NOSUCHSERVER, recv[1])
         return
-    if squit_server == IRCD.me:
-        return logging.error(f"We cannot SQUIT ourself: {recv}")
 
-    data = f":{client.id} {' '.join(recv)}"
-    IRCD.send_to_servers(client, [], data)
+    if recv[1] == IRCD.me.name:
+        return IRCD.server_notice(client, "Cannot use /SQUIT on ourself.")
 
-    msg = f"{client.fullrealhost} used SQUIT command for {squit_server.name}: {reason}"
-    IRCD.log(client, "info", "squit", "LINK_SQUIT", msg, sync=0)
-    # IRCD.send_snomask(client, 's', msg)
+    for squit_server in server_matches:
+        if squit_server == IRCD.me:
+            continue
 
-    squit_server.exit(reason)
-    return
+        data = f":{client.id} {' '.join(recv)}"
+        IRCD.send_to_servers(client, [], data)
+
+        msg = f"{client.fullrealhost} used SQUIT command for {squit_server.name}: {reason}"
+        IRCD.log(client, "info", "squit", "LINK_SQUIT", msg, sync=0)
+
+        squit_server.exit(reason)
 
 
 def init(module):
