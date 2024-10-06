@@ -2,8 +2,7 @@
 /names command
 """
 
-from handle.core import Numeric, Command, IRCD, Capability
-from handle.logger import logging
+from handle.core import Numeric, Command, IRCD, Capability, Isupport
 
 
 def cmd_names(client, recv):
@@ -27,6 +26,8 @@ def cmd_names(client, recv):
             channel.seen_dict[client].append(names_client)
 
         prefix = channel.get_prefix_sorted_str(names_client)
+        if not client.has_capability("multi-prefix"):
+            prefix = prefix[0]
         string = prefix + names_client.name
         if client.has_capability("userhost-in-names"):
             string += f"!{names_client.user.username}@{names_client.user.cloakhost}"
@@ -42,4 +43,7 @@ def cmd_names(client, recv):
 
 def init(module):
     Capability.add("userhost-in-names")
+    Capability.add("multi-prefix")
     Command.add(module, cmd_names, "NAMES", 1)
+    Isupport.add("NAMESX")
+    Isupport.add("UHNAMES")

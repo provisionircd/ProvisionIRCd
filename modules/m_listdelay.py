@@ -4,7 +4,7 @@ blocks /list commands for newly connected users
 
 from time import time
 
-from handle.core import IRCD, Hook, Numeric
+from handle.core import IRCD, Hook, Numeric, Isupport
 
 delay = 30
 
@@ -19,7 +19,4 @@ def delaylist(client, recv):
 
 def init(module):
     Hook.add(Hook.PRE_COMMAND, delaylist)
-
-
-def unload(ircd):
-    Hook.remove(delaylist)
+    Isupport.add("SECURELIST")
