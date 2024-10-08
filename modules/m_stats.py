@@ -8,7 +8,6 @@ import sys
 import time
 
 from handle.core import IRCD, Command, Stat, Numeric, Flag, Tkl
-from handle.logger import logging
 
 try:
     import psutil
@@ -19,7 +18,9 @@ except ImportError:
 def cmd_stats(client, recv):
     """
     View several server stats.
+    Use STATS for available flags.
     """
+
     if not client.has_permission("server:info:stats"):
         return client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
 
@@ -34,18 +35,6 @@ def cmd_stats(client, recv):
         return IRCD.server_notice(client, f"* STATS -- Unknown stats '{recv[1]}'")
 
     stat.show(client)
-
-    # DNSBL for future module.
-    # if recv[1] == 'd':
-    #     total_len = len(Internal.dnsblCache)
-    #     dnsbl = Internal.dnsblCache if len(Internal.dnsblCache) < 128 else sorted(Internal.dnsblCache)[:128]
-    #     for entry in dnsbl:
-    #         t = Internal.dnsblCache[entry]
-    #         date = f'{datetime.datetime.fromtimestamp(float(t["ctime"])).strftime("%a %b %d %Y")} {datetime.datetime.fromtimestamp(float(t["ctime"])).strftime("%H:%M:%S %Z")}'
-    #         date = date.strip()
-    #         client.sendraw(210, f':{entry} {Internal.dnsblCache[entry]["bl"]} {date}')
-    #     if len(dnsbl) == 128:
-    #         client.sendraw(210, f':Showing only first 128 entries. Total entries: {total_len}')
 
 
 def stats_exception(client):
@@ -134,9 +123,6 @@ def stats_ports(client):
                         f"[options: {', '.join(listen.options) if listen.options else 'None'}], " \
                         f"used by {len(port_clients)} client{'s' if len(port_clients) != 1 else ''}"
         IRCD.server_notice(client, listen_string)
-        # client.sendnumeric(Numeric.RPL_INFO, f"P {listen.ip}:{listen.port}"
-        #                                     f"[options: {', '.join(listen.options) if listen.options else 'None'}], "
-        #                                     f"used by {len(port_clients)} client{'s' if len(port_clients) != 1 else ''}")
 
 
 def init(module):

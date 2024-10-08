@@ -784,12 +784,16 @@ def config_test_except(block):
 
 
 def config_test_ulines(block):
+    ulines = []
     for entry in block.entries:
-        server = entry.get_single_value()
-        if server.lower() == IRCD.me.name.lower():
+        server = entry.get_single_value().lower()
+        if server in ulines:
+            continue
+        if server == IRCD.me.name.lower():
             conf_error(f"Invalid uline server: {server}. Cannot be this server!", block=block, item=entry)
             continue
-        IRCD.set_setting("ulines", [server])
+        ulines.append(server)
+    IRCD.set_setting("ulines", ulines)
 
 
 def config_test_bans(block):

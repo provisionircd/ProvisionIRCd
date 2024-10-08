@@ -3,7 +3,6 @@
 """
 
 from handle.core import IRCD, Command, Flag, Numeric, Usermode, Channelmode, Snomask
-from handle.logger import logging
 
 
 def cmd_ircdhelp(client, recv):
@@ -73,22 +72,27 @@ def cmd_ircdhelp(client, recv):
         return
 
     if recv[1].lower() == "snomasks":
-        snomasks = sorted([s for s in Snomask.table], key=lambda s: s.flag, reverse=True)
+        snomasks = sorted([s for s in Snomask.table], key=lambda s: s.flag, reverse=False)
         for sno in snomasks:
             client.sendnumeric(Numeric.RPL_HELPTLR, f" {sno.flag} = {sno.desc}")
         client.sendnumeric(Numeric.RPL_HELPTLR, '-')
         return
 
     if recv[1].lower() in ["usercmds", "opercmds"]:
-        if recv[1].lower() == "usercmds":
-            cmd_list = [cmd for cmd in Command.table if Flag.CMD_SERVER not in cmd.flags and Flag.CMD_OPER not in cmd.flags]
-        else:
-            cmd_list = [cmd for cmd in Command.table if Flag.CMD_SERVER not in cmd.flags and Flag.CMD_OPER in cmd.flags]
+        seen_funcs = set()
+        cmd_list = []
+        for cmd in Command.table:
+            if hasattr(cmd, "func") and cmd.func not in seen_funcs:
+                if recv[1].lower() == "usercmds" and Flag.CMD_SERVER not in cmd.flags and Flag.CMD_OPER not in cmd.flags:
+                    cmd_list.append(cmd)
+                    seen_funcs.add(cmd.func)
+
+                elif recv[1].lower() == "opercmds" and Flag.CMD_SERVER not in cmd.flags and Flag.CMD_OPER in cmd.flags:
+                    cmd_list.append(cmd)
+                    seen_funcs.add(cmd.func)
+
         line_queue = []
         width = max([len(c.trigger) for c in cmd_list]) + 2
-        client.sendnumeric(Numeric.RPL_HELPTLR, f"Use /{recv[0].upper()} <command> for more information, if available.")
-        client.sendnumeric(Numeric.RPL_HELPTLR, '-')
-
         for cmd in cmd_list:
             line_queue.append(cmd.trigger.upper())
             if len(line_queue) == 4:
@@ -100,6 +104,8 @@ def cmd_ircdhelp(client, recv):
             display = ''.join([t.ljust(width) for t in line_queue])
             client.sendnumeric(Numeric.RPL_HELPTLR, display)
         client.sendnumeric(Numeric.RPL_HELPTLR, ' -')
+        client.sendnumeric(Numeric.RPL_HELPTLR, f"Use /{recv[0].upper()} <command> for more information, if available.")
+        client.sendnumeric(Numeric.RPL_HELPTLR, '-')
         return
 
     else:

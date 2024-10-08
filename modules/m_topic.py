@@ -35,11 +35,11 @@ def cmd_topic(client, recv):
         if not (channel := IRCD.find_channel(recv[1])):
             return logging.error(f"[topic] Unknown channel for topic: {recv[1]}")
 
-        if not channel.topic_time or int(recv[3]) < channel.topic_time or client.uplink.server.synced:
-            channel.topic = ' '.join(recv[4:]).removeprefix(':')
+        topic_text = ' '.join(recv[4:]).removeprefix(':')
+        if not channel.topic_time or int(recv[3]) < channel.topic_time or client.uplink.server.synced and topic_text != channel.topic:
+            channel.topic = topic_text
             channel.topic_author, channel.topic_time = recv[2], int(recv[3])
             send_topic(client, channel)
-
         return
 
     if not (channel := IRCD.find_channel(recv[1])):

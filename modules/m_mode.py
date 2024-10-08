@@ -57,41 +57,44 @@ def cmd_usermode(client, recv):
         oldumodes = target.user.modes
 
         if target != client:
-            if client.user and not client.has_permission("client:set:usermode") and client.local:
-                # Not authorized to change target user modes.
+            if client.user and not client.has_permission("client:set:usermode") and client.local and Flag.CMD_OVERRIDE not in client.flags:
+                # Not authorised to change target user modes.
                 client.sendnumeric(Numeric.ERR_USERSDONTMATCH)
                 continue
 
-        if not umode.can_set(client) and client.local:
-            if umode.can_set == Usermode.allow_opers and not oper_warn and action == '+':
-                client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
-                oper_warn = 1
+        if umode.can_set == Usermode.allow_none and client.local:
             continue
 
         if action == '+':
-            if umode.can_set == Usermode.allow_opers and not client.has_permission("self:opermodes"):
-                client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
+            if umode.can_set == Usermode.allow_opers and client.local and not client.has_permission("self:opermodes") and Flag.CMD_OVERRIDE not in client.flags:
+                if not oper_warn:
+                    client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
+                    oper_warn = 1
                 continue
             if mode not in target.user.modes:
                 target.user.modes += mode
 
-            # Handle snomasks
-            if mode == 's' and target.user.oper and param:
+            # Handle snomasks.
+            if mode == 's' and param and (target.user.oper or Flag.CMD_OVERRIDE in client.flags):
                 sno_action = '+'
                 for sno in param:
                     if sno in "+-":
                         sno_action = sno
                         continue
+                    if not IRCD.get_snomask(sno):
+                        continue
                     if sno_action == '-' and sno in target.user.snomask:
                         target.user.snomask = target.user.snomask.replace(sno, '')
-                    elif sno_action == '+' and sno in target.user.oper.snomasks and sno not in target.user.snomask:
-                        target.user.snomask += sno
+                    elif sno_action == '+' and sno not in target.user.snomask:
+                        if (target.user.oper and sno in target.user.oper.snomasks) or Flag.CMD_OVERRIDE in client.flags:
+                            target.user.snomask += sno
 
-        elif action == '-' and mode in target.user.modes:
-            if mode in IRCD.get_setting("modelock") and not client.has_permission("self:modelock"):
+        elif action == '-':
+            if mode in IRCD.get_setting("modelock") and client.local and not client.has_permission("self:modelock") and Flag.CMD_OVERRIDE not in client.flags:
                 client.sendnumeric(Numeric.ERR_CANNOTCHANGEUMODE, mode, "This mode is locked")
                 continue
-            target.user.modes = target.user.modes.replace(mode, '')
+            if mode in target.user.modes:
+                target.user.modes = target.user.modes.replace(mode, '')
 
         if target.user.modes != oldumodes:
             if action != prevaction:
@@ -120,12 +123,10 @@ def cmd_usermode(client, recv):
 
     if modebuf:
         # Broadcast buffer.
-        mtags = []
-        IRCD.new_message(client)
         modes = ''.join(modebuf)
         if target.local:
             data = f":{client.name} MODE {target.name} {modes}"
-            target.send(mtags, data)
+            target.send([], data)
 
         sync_modes = ''
         for mode in modes:
@@ -226,7 +227,6 @@ def display_channel_list_entries(client, channel, mode):
             return 1
         for result, callback in Hook.call(Hook.CHAN_LIST_ENTRY, args=(client, channel, mode)):
             if result == 1:
-                # Success.
                 return 1
 
     return 0
@@ -234,6 +234,7 @@ def display_channel_list_entries(client, channel, mode):
 
 def send_modelines(client, channel, modebuf, parambuf, send_ts=0):
     def send_one_line():
+        IRCD.new_message(client)
         server_params = []
         for param in params_out:
             param_split = param.split(':')
@@ -259,9 +260,8 @@ def send_modelines(client, channel, modebuf, parambuf, send_ts=0):
     params_out = []
     action = ''
     paramcount = 0
-    parammode_count = 0
     for mode in modebuf:
-        if mode in ['+', '-']:
+        if mode in "+-":
             action = mode
             modes_out += action
             continue
@@ -272,13 +272,12 @@ def send_modelines(client, channel, modebuf, parambuf, send_ts=0):
             if (action == '-' and cmode.unset_with_param) or action == '+':
                 params_out.append(parambuf[paramcount])
                 paramcount += 1
-                parammode_count += 1
-        total_len = len(''.join(modes_out) + ' ' + ' '.join(params_out))
-        if parammode_count == MAXMODES or total_len > 500:
+        modes_count = len(''.join(modes_out).replace('+', '').replace('-', ''))
+        total_len = modes_count + len(params_out)
+        if modes_count == MAXMODES or total_len > 510:
             send_one_line()
-            modes_out = action
+            modes_out = ''
             params_out = []
-            parammode_count = 0
     if modes_out:
         send_one_line()
 

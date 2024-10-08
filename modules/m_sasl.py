@@ -56,16 +56,21 @@ def cmd_authenticate(client, recv):
     if not (saslrequest := SaslRequest.get_from_id(client.id)):
         saslrequest = SaslRequest(client=client, user_id=client.id)
         saslrequest.mech = recv[1]
-        data = f":{IRCD.me.name} SASL {SaslInfo.server.name} {client.id} H {client.ip} {client.ip}"
-        IRCD.send_to_servers(client, [], data)
-        data = f":{IRCD.me.name} SASL {SaslInfo.server.name} {client.id} S {recv[1]}"
-        IRCD.send_to_servers(client, [], data)
+        data = f":{IRCD.me.id} SASL {SaslInfo.server.name} {client.id} H {client.ip} {client.ip}"
+        # TODO: Sending to one server directly should not cause issues.
+        # IRCD.send_to_servers(client, [], data)
+        IRCD.send_to_one_server(SaslInfo.server, [], data)
+
+        data = f":{IRCD.me.id} SASL {SaslInfo.server.name} {client.id} S {recv[1]}"
+        # IRCD.send_to_servers(client, [], data)
+        IRCD.send_to_one_server(SaslInfo.server, [], data)
         return
 
     if not saslrequest.token and saslrequest.mech:
         saslrequest.token = recv[1]
-        data = f":{IRCD.me.name} SASL {SaslInfo.server.name} {client.id} C {recv[1]}"
-        IRCD.send_to_servers(client, [], data)
+        data = f":{IRCD.me.id} SASL {SaslInfo.server.name} {client.id} C {recv[1]}"
+        # IRCD.send_to_servers(client, [], data)
+        IRCD.send_to_one_server(SaslInfo.server, [], data)
 
 
 def cmd_sasl(client, recv):
@@ -80,8 +85,7 @@ def cmd_sasl(client, recv):
 
     if recv[1] in [IRCD.me.name, IRCD.me.id]:
         # :00B SASL dev.provisionweb.org <C|D> [...]
-        target_client = IRCD.find_user(recv[2])
-        if not target_client:
+        if not (target_client := IRCD.find_user(recv[2])):
             return
         if recv[3] == 'C':
             target_client.send([], f"AUTHENTICATE {recv[4]}")
@@ -96,7 +100,7 @@ def cmd_sasl(client, recv):
                 saslrequest.mech = None
                 saslrequest.failed_attempts += 1
                 if saslrequest.failed_attempts >= 3:
-                    target_client.client.exit("Too many SASL authentication failures")
+                    target_client.exit("Too many SASL authentication failures")
         return
 
     data = f":{client.name} {' '.join(recv)}"

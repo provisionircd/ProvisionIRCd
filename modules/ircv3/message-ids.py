@@ -15,7 +15,7 @@ class MessageId(MessageTag):
 
 
 def add_msgid(client):
-    msgid = str(uuid.uuid1()).replace('-', '')[:20]
+    msgid = str(uuid.uuid1()).replace('-', '')[:22]
     tag = MessageId(value=msgid)
     client.mtags.append(tag)
 

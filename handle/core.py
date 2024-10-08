@@ -63,6 +63,7 @@ class Flag(Enum):
     CMD_USER = flag()
     CMD_SERVER = flag()
     CMD_OPER = flag()
+    CMD_OVERRIDE = flag()
 
     CLIENT_SHUNNED = flag()
     CLIENT_ON_HOLD = flag()
@@ -340,7 +341,8 @@ class Client:
             IRCD.local_user_count -= 1
         IRCD.global_user_count -= 1
 
-        if (self.local or not self.uplink.server.squit) and self.registered and not self.ulined and (self.local or self.uplink.server.synced):
+        if self.registered and not self.ulined and (self.local or (not self.uplink.server.squit and self.uplink.server.synced)):
+            # if (self.local or not self.uplink.server.squit) and self.registered and not self.ulined and (self.local or self.uplink.server.synced):
             msg = f"*** Client exiting: {self.name} ({self.user.username}@{self.user.realhost}) [{self.ip}] ({reason})"
             event = "LOCAL_USER_QUIT" if self.local else "REMOTE_USER_QUIT"
             IRCD.log(self, "info", "quit", event, msg, sync=0)
@@ -509,9 +511,13 @@ class Client:
     def is_stealth(self):
         return 0
 
-    def add_flag(self, f: Flag):
+    def add_flag(self, f: Flag) -> None:
         if f not in self.flags:
             self.flags.append(f)
+
+    def del_flag(self, f: Flag) -> None:
+        if f in self.flags:
+            self.flags.remove(f)
 
     def add_swhois(self, line: str, tag: str, remove_on_deoper: int = 0):
         Swhois.add_to_client(self, line, tag=tag, remove_on_deoper=remove_on_deoper)
@@ -1185,6 +1191,8 @@ class Command:
             if cmd := Command.find_command(client, trigger):
                 client.last_command = recv
                 cmd.func(client, recv=list(recv))
+                if client.user:
+                    client.del_flag(Flag.CMD_OVERRIDE)
                 IRCD.run_hook(Hook.POST_COMMAND, client, trigger, recv)
                 client.mtags = []
                 client.flood_safe_off()
@@ -2413,7 +2421,7 @@ class IRCD:
         return [c for c in Client.table if not c.registered and c.local]
 
     @staticmethod
-    def find_user(find: str):
+    def find_user(find: str) -> Client | None:
         if not find:
             return
         find = find.removeprefix(':')
@@ -2523,6 +2531,7 @@ class IRCD:
         if not client.local:
             """ Remote clients mtags are already stored -- don't overwrite """
             return
+        client.mtags.clear()
         IRCD.run_hook(Hook.NEW_MESSAGE, client)
         # Filter duplicate tags from self.sender.mtags, keeping only first.
         filtered_tags = []
@@ -2742,7 +2751,7 @@ class ModData:
         md.value = value
         md.sync = sync
         # logging.debug(f"Added ModData '{md.name}' to {client.name}: '{md.value}'")
-        if md.sync and client.id:
+        if md.sync and client.id and client.registered:
             data = f":{client.uplink.id} MD client {client.id} {md.name} :{md.value}"
             IRCD.send_to_servers(client, mtags=[], data=data)
 

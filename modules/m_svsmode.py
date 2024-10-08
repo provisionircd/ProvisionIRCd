@@ -2,11 +2,17 @@
 /svsmode, /svs2mode and /svssno command (server)
 """
 
-from handle.core import IRCD, Command, Flag, Hook
-from handle.functions import logging
+from handle.core import IRCD, Command, Flag, Hook, Numeric
 
 
 def cmd_svsmode(client, recv):
+    """
+    SVSMODE is used to change a user's modes.
+    Using SVS2MODE will display the change to the target user.
+    -
+    Server-only command.
+    """
+
     if not (target := IRCD.find_user(recv[1])):
         return
 
@@ -52,31 +58,41 @@ def cmd_svsmode(client, recv):
 
 
 def cmd_svssno(client, recv):
+    """
+    SVSSNO is used to change a user's snomasks.
+    Using SVS2SNO will display the change to the target user.
+    -
+    Server-only command.
+    """
+
     if not (target := IRCD.find_user(recv[1])):
         return
 
     action = ''
-    snomasks = ''
+    current_snomask = target.user.snomask
+
     for m in recv[2]:
         if m in "+-" and m != action:
             action = m
-            snomasks += action
             continue
 
-        if action == '+':
-            if recv[0].lower() == "svssno":
-                target.snomasks += m
-            snomasks += m
+        if not IRCD.get_snomask(m):
+            continue
 
-        elif action == '-':
-            if recv[0].lower() == "svssno":
-                target.snomasks = target.snomasks.replace(m, '')
-            snomasks += m
+        if action == '+' and m not in target.user.snomask:
+            target.user.snomask += m
 
-    cmd_mode = Command.find_command(client, "MODE")
-    cmd_mode.do(client, "MODE", target.name, "+s", snomasks)
+        elif action == '-' and m in target.user.snomask:
+            target.user.snomask = target.user.snomask.replace(m, '')
 
-    data = ' '.join(recv)
+    if not recv[2].lstrip('-'):
+        target.user.snomask = ''
+
+    if recv[0].lower() == "svs2sno":
+        if current_snomask != target.user.snomask and target.local:
+            target.sendnumeric(Numeric.RPL_SNOMASK, target.user.snomask)
+
+    data = f":{client.id} {' '.join(recv)}"
     IRCD.send_to_servers(client, [], data)
 
 
