@@ -36,17 +36,15 @@ def sjoin_check_key(ourkey, theirkey):
     if ourkey == theirkey:
         return 0
 
-    our_score = 0
-    their_score = 0
-    for char in ourkey:
-        our_score += ord(char)
-    for char in theirkey:
-        their_score += ord(char)
+    our_score = sum(ord(char) for char in ourkey)
+    their_score = sum(ord(char) for char in theirkey)
 
     if our_score > their_score:
         return 1
+    elif our_score < their_score:
+        return -1
 
-    return -1
+    return 1 if ourkey > theirkey else -1
 
 
 def init(module):
