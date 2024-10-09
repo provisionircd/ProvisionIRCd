@@ -21,6 +21,16 @@ def send_topic(client, channel):
     client.mtags = []
 
 
+def local_topic_win(client, local_topic, remote_topic):
+    our_score = sum(ord(char) for char in local_topic)
+    their_score = sum(ord(char) for char in remote_topic)
+
+    if our_score == their_score:
+        return 1 if IRCD.me.name < (client.name if client.server else client.uplink.name) else 0
+
+    return 1 if our_score > their_score else 0
+
+
 def cmd_topic(client, recv):
     """
     Syntax: TOPIC <channel> [text]
@@ -36,7 +46,15 @@ def cmd_topic(client, recv):
             return logging.error(f"[topic] Unknown channel for topic: {recv[1]}")
 
         topic_text = ' '.join(recv[4:]).removeprefix(':')
-        if not channel.topic_time or int(recv[3]) < channel.topic_time or client.uplink.server.synced and topic_text != channel.topic:
+        recv_topic_older = 1 if not channel.topic_time or int(recv[3]) < channel.topic_time else 0
+        remote_chan_older = 1 if 0 < channel.remote_creationtime < channel.local_creationtime else 0
+        same_ts = 1 if channel.local_creationtime == channel.remote_creationtime else 0
+
+        local_win = local_topic_win(client, channel.topic, topic_text)
+        if channel.topic and same_ts and int(recv[3]) == channel.topic_time and local_win:
+            return
+
+        if (not client.uplink.server.synced and remote_chan_older) or (same_ts and (recv_topic_older or not local_win)) or client.uplink.server.synced:
             channel.topic = topic_text
             channel.topic_author, channel.topic_time = recv[2], int(recv[3])
             send_topic(client, channel)

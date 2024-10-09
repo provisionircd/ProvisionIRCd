@@ -1405,6 +1405,8 @@ class Channel:
     topic_author: str = None
     topic_time: int = 0
     creationtime: int = 0
+    local_creationtime: int = 0
+    remote_creationtime: int = 0
     founder: dict = field(default_factory=dict)
     List: dict = field(default_factory=dict)
 
@@ -2451,6 +2453,7 @@ class IRCD:
         channel = Channel()
         channel.name = name
         channel.creationtime = int(time())
+        channel.local_creationtime = int(time())
         channel.init_lists()
         channel.set_founder(client)
         Channel.table.append(channel)
