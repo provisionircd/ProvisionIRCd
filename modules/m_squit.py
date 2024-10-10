@@ -7,7 +7,7 @@ from handle.logger import logging
 
 
 def cmd_squit(client, recv):
-    logging.warning(f"SQUIT from {client.name}: {recv}")
+    logging.debug(f"SQUIT from {client.name}: {recv}")
     reason = client.name if len(recv) < 3 else ' '.join(recv[2:]).removeprefix(':')
 
     if client.user and client.local and not client.has_permission("server:squit"):
@@ -16,6 +16,8 @@ def cmd_squit(client, recv):
     if not (server_matches := IRCD.find_server_match(recv[1])):
         if client.user:
             client.sendnumeric(Numeric.ERR_NOSUCHSERVER, recv[1])
+        else:
+            logging.error(f"SQUIT received from {client.name} for non-existent server: {recv[1]} (no matches found)")
         return
 
     if recv[1] == IRCD.me.name:
@@ -28,8 +30,9 @@ def cmd_squit(client, recv):
         data = f":{client.id} {' '.join(recv)}"
         IRCD.send_to_servers(client, [], data)
 
-        msg = f"{client.fullrealhost} used SQUIT command for {squit_server.name}: {reason}"
-        IRCD.log(client, "info", "squit", "LINK_SQUIT", msg, sync=0)
+        if squit_server.synced:
+            msg = f"{client.fullrealhost} used SQUIT for {squit_server.name}: {reason}"
+            IRCD.log(client, "info", "squit", "LINK_SQUIT", msg, sync=0)
 
         squit_server.exit(reason)
 
