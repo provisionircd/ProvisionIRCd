@@ -35,6 +35,7 @@ def cmd_eos(client, recv):
         for mtags, data in IRCD.send_after_eos[client]:
             logging.warning(f"Delayed data: {data.rstrip()}")
             IRCD.send_to_one_server(client, mtags, data)
+        del IRCD.send_after_eos[client]
 
     for batch in Batch.pool:
         started_by = client if client.local else client.uplink

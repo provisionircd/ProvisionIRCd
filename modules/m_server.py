@@ -193,20 +193,14 @@ def cmd_sid(client, recv):
     sid = recv[3]
 
     if existing := IRCD.find_server(name):
-        # Convert timestamp to datetime object
         dt_object = datetime.fromtimestamp(existing.creationtime)
-
-        # Format datetime object to string
         formatted_time = dt_object.strftime("%Y-%m-%d %H:%M:%S")
-
         time_elapsed = datetime.now() - dt_object
-
-        # Breakdown the difference into days, hours, minutes, and seconds
         days = time_elapsed.days
         hours, remainder = divmod(time_elapsed.seconds, 3600)
         minutes, seconds = divmod(remainder, 60)
 
-        client.send([], f"SQUIT {name} :Name {name} is already in use on that network")
+        client.direct_send(f"SQUIT {name} :Name {name} is already in use on the network")
         logging.warning(f"New server {name} denied because it was already found on the network")
         logging.warning(f"Connect date: {formatted_time}")
         logging.warning(f"Time connected: {days} days, {hours} hours, {minutes} minutes, {seconds} seconds")

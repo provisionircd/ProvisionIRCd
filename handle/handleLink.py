@@ -69,7 +69,7 @@ def sync_channels(newserver):
                 split_sjoin_list = sjoin_list[i:i + 20]
                 sjoin_modes = f"+{channel.modes}{modeparams} " if first_sjoin else ''
                 data = f"{channel.creationtime} {channel.name} {sjoin_modes}:{' '.join(split_sjoin_list)}"
-                logging.debug(f"[sync_channels()] Sending SJOIN data: {data}")
+                # logging.debug(f"[sync_channels()] Sending SJOIN data: {data}")
                 newserver.send([], f":{IRCD.me.id} SJOIN {data}")
                 first_sjoin = 0
             if channel.topic:
