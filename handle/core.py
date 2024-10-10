@@ -300,7 +300,7 @@ class Client:
             logging.error(f"Tried to sync user {self.id} but it has no nickname yet?")
             return
 
-        logging.debug(f"Syncing user {self.name} to all locally connected servers.")
+        # logging.debug(f"Syncing user {self.name} to all locally connected servers.")
         sync_modes = ''
         for mode in self.user.modes:
             umode = IRCD.get_usermode_by_flag(mode)

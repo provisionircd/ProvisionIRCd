@@ -205,6 +205,25 @@ def find_sock_from_fd(fd: int):
             return sock
 
 
+def process_client_buffer(client):
+    buffer = client.local.temp_recvbuffer
+    messages = []
+    while 1:
+        delimiter_index = buffer.find('\n')
+        if delimiter_index == -1:
+            # No complete message in buffer yet
+            break
+        # Extract the message (including the delimiter)
+        message = buffer[:delimiter_index + 1]
+        # Remove the message from the buffer
+        buffer = buffer[delimiter_index + 1:]
+        message = message.strip("\r\n")
+        messages.append(message)
+    client.local.temp_recvbuffer = buffer
+    for message in messages:
+        post_sockread(client, message)
+
+
 def post_sockread(client, recv):
     client.local.bytes_received += len(recv)
     client.local.messages_received += 1
@@ -286,15 +305,32 @@ def clean_invalid_sockets(listen_sockets, read_clients, write_clients):
     write_clients[:] = [sock for sock in write_clients if is_valid_socket(sock)]
 
 
-def handle_connections():
-    # if IRCD.forked:
-    #     logging.getLogger().removeHandler(IRCDLogger.stream_handler)
+def get_full_recv(client, sock):
+    """
+    Return values:
 
-    last_debug = 0
+    1:  Data read was OK.
+    0:  No data was read.
+    -1: Closed connection or error.
+    """
+
+    while 1:
+        try:
+            part = sock.recv(4096)
+            if not part:
+                return -1
+            client.local.temp_recvbuffer += part.decode()
+        except (SSL.WantReadError, BlockingIOError):
+            if client.local.temp_recvbuffer:
+                return 1
+            else:
+                return 0
+        except:
+            return -1
+
+
+def handle_connections():
     while IRCD.running:
-        # if (int(time()) - last_debug) > (3600 / 2):
-        #     logging.debug(f"Half-hourly debug print.")
-        #     last_debug = int(time())
         try:
             for client in [c for c in list(Client.table) if c.exitted]:
                 try:
@@ -342,22 +378,19 @@ def handle_connections():
                             if not client.local.handshake:
                                 # Handshake not finished yet - waiting.
                                 continue
-                            try:
-                                recv = sock.recv(16384).decode()
-                            except SSL.WantReadError:
-                                # Not yet ready to read. Wait.
-                                continue
-                            except Exception as ex:
-                                if client.registered and not isinstance(ex, SSL.ZeroReturnError) and not isinstance(ex, SSL.SysCallError) and not isinstance(ex, ConnectionResetError):
-                                    logging.exception(ex)
-                                recv = ''
-                            if not recv:
+
+                            bytes_read = get_full_recv(client, sock)
+                            if bytes_read == -1:
                                 client.exit("Read error", sock_error=1)
                                 continue
-                            post_sockread(client, recv)
+                            elif bytes_read == 0:
+                                continue
+                            else:
+                                process_client_buffer(client)
                         continue
 
                     if Event & (select.POLLOUT | select.EPOLLOUT):
+                        # logging.debug(f"POLLOUT or EPOLLOUT")
                         if not (client := find_client_from_socket(sock)):
                             close_socket(sock)
                             continue
@@ -394,19 +427,16 @@ def handle_connections():
                         if not (client := find_client_from_socket(sock)):
                             close_socket(sock)
                             continue
-                        try:
-                            recv = sock.recv(16384).decode()
-                        except SSL.WantReadError:
-                            # Not yet ready to read. Wait.
-                            continue
-                        except Exception as ex:
-                            if client.registered and not isinstance(ex, SSL.ZeroReturnError) and not isinstance(ex, SSL.SysCallError) and not isinstance(ex, ConnectionResetError):
-                                logging.exception(ex)
-                            recv = ''
-                        if not recv:
+
+                        bytes_read = get_full_recv(client, sock)
+                        if bytes_read == -1:
                             client.exit("Read error", sock_error=1)
                             continue
-                        post_sockread(client, recv)
+                        elif bytes_read == 0:
+                            continue
+                        else:
+                            process_client_buffer(client)
+
                     continue
 
                 for sock in write:
