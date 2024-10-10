@@ -342,7 +342,6 @@ class Client:
         IRCD.global_user_count -= 1
 
         if self.registered and not self.ulined and (self.local or (not self.uplink.server.squit and self.uplink.server.synced)):
-            # if (self.local or not self.uplink.server.squit) and self.registered and not self.ulined and (self.local or self.uplink.server.synced):
             msg = f"*** Client exiting: {self.name} ({self.user.username}@{self.user.realhost}) [{self.ip}] ({reason})"
             event = "LOCAL_USER_QUIT" if self.local else "REMOTE_USER_QUIT"
             IRCD.log(self, "info", "quit", event, msg, sync=0)
@@ -368,43 +367,44 @@ class Client:
                 channel.remove_client(self)
 
     def server_exit(self, reason):
-        netsplit_reason = self.name + ' ' + self.uplink.name
-        if not self.server:
-            logging.error(f"server_exit() called on non-server client: {self.name}")
-            return
-        if self.server.synced:
-            if self.local:
-                IRCD.log(self.uplink, "error", "link", "LINK_LOST", f"Lost connection to server {self.name}: {reason}", sync=0)
-            if not Batch.find_batch_by(self):
-                Batch.create_new(started_by=self, batch_type="netsplit", additional_data=netsplit_reason)
-        else:
-            if self.local and not self.local.incoming and not self.server.link.auto_connect:
-                IRCD.log(IRCD.me, "error", "link", "LINK_OUT_FAIL", f"Unable to connect to {self.name}: {reason}", sync=0)
+        try:
+            netsplit_reason = self.name + ' ' + self.uplink.name
+            if not self.server:
+                logging.error(f"server_exit() called on non-server client: {self.name}")
+                return
+            if self.server.synced:
+                if self.local:
+                    IRCD.log(self.uplink, "error", "link", "LINK_LOST", f"Lost connection to server {self.name}: {reason}", sync=0)
+                if not Batch.find_batch_by(self):
+                    Batch.create_new(started_by=self, batch_type="netsplit", additional_data=netsplit_reason)
+            else:
+                if self.local and not self.local.incoming and not self.server.link.auto_connect:
+                    IRCD.log(IRCD.me, "error", "link", "LINK_OUT_FAIL", f"Unable to connect to {self.name}: {reason}", sync=0)
 
-        if not self.server.synced:
-            IRCD.do_delayed_process()
+            if not self.server.synced:
+                IRCD.do_delayed_process()
 
-        if self.server.synced:
-            try:
-                self.server.squit = 1
-                if self.registered:
-                    data = f"SQUIT {self.name} :{reason.removeprefix(':')}"
-                    IRCD.send_to_servers(self, [], data)
-            except Exception as ex:
-                logging.exception(ex)
+            logging.debug(f"[server_exit()] Broadcasting to all other servers that server {self.name} has quit")
+            data = f"SQUIT {self.name} :{reason.removeprefix(':')}"
+            IRCD.send_to_servers(self, [], data)
 
-        for remote_client in [c for c in Client.table if c.uplink == self]:
-            logging.debug(f"Exiting {remote_client.name} because it was uplinked to {self.name}")
-            remote_client.exit(netsplit_reason)
+            self.server.squit = 1
+            for remote_client in [c for c in Client.table if c.uplink == self]:
+                if remote_client.server:
+                    logging.debug(f"Exiting server {remote_client.name} because it was uplinked to {self.name}")
+                remote_client.exit(netsplit_reason)
 
-        if self in IRCD.send_after_eos:
-            del IRCD.send_after_eos[self]
+            if self in IRCD.send_after_eos:
+                del IRCD.send_after_eos[self]
 
-        IRCD.run_hook(Hook.SERVER_DISCONNECT, self)
+            IRCD.run_hook(Hook.SERVER_DISCONNECT, self)
 
-        for batch in Batch.pool:
-            if batch.started_by == self and batch.batch_type == "netsplit":
-                batch.end()
+            for batch in Batch.pool:
+                if batch.started_by == self and batch.batch_type == "netsplit":
+                    batch.end()
+
+        except Exception as ex:
+            logging.exception(ex)
 
     def kill(self, reason: str, killed_by=None) -> None:
         if not self.user:
@@ -931,6 +931,7 @@ class Client:
         if type(data) != str:
             logging.error(f"Wrong data type @ send(): {data}")
             return
+
         data = data.strip()
         if not data or self.exitted \
                 or self not in Client.table or not self.local \
@@ -969,16 +970,18 @@ class Client:
                 if not line.strip():
                     continue
 
-                self.local.socket.sendall(bytes(line + "\r\n", "utf-8"))
-                self.local.bytes_sent += len(line + "\r\n")
+                sent = self.local.socket.send(bytes(line + "\r\n", "utf-8"))
+                self.local.bytes_sent += sent
                 self.local.messages_sent += 1
 
-                if line.split()[0].lower() in ["ping", "pong", "privmsg", "notice"] and self.registered:
-                    debug_out = 0
-                if len(line.split()) > 1 and line.split()[1].lower() in ["ping", "pong", "privmsg", "notice", "tagmsg"] and self.registered:
-                    debug_out = 0
-                if len(line.split()) > 2 and line.split()[2].lower() in ["ping", "pong", "privmsg", "notice", "tagmsg"] and self.registered:
-                    debug_out = 0
+                commands = ["ping", "pong", "privmsg", "notice", "tagmsg"]
+                if self.registered:
+                    split_line = line.split()
+                    for i in range(min(3, len(split_line))):
+                        if split_line[i].lower() in commands:
+                            debug_out = 0
+                            break
+
                 if debug_out:
                     logging.debug(f"[OUT] {self.name}[{self.ip}] < {line}")
                 write_done = time()
@@ -1029,6 +1032,7 @@ class LocalClient:
     protoctl: list = field(default_factory=list)
     recvbuffer: [] = field(repr=False, default_factory=list)  # This is data that the client sends to the server.
     sendbuffer: str = ''
+    temp_recvbuffer: str = ''
     backbuffer: [] = field(repr=False, default_factory=list)
     sendq_buffer: [] = field(repr=False, default_factory=list)
     auto_connect: int = 0
@@ -2614,7 +2618,7 @@ class IRCD:
 
     @staticmethod
     def server_notice(client: Client, data: str):  # server: Client):
-        if not client.local:
+        if client.server or not client.local:
             return
         data = f":{client.uplink.name} NOTICE {client.name} :{data}"
         client.send([], data)
