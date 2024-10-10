@@ -29,7 +29,8 @@ class Blacklist:
         if client not in Blacklist.lookups:
             """ Removed early by QUIT hook """
             return
-        Blacklist.lookups[client].remove(dnsbl)
+        if dnsbl in Blacklist.lookups[client]:
+            Blacklist.lookups[client].remove(dnsbl)
         if not Blacklist.lookups[client]:
             if client.ip in Blacklist.process:
                 Blacklist.process.remove(client.ip)
@@ -113,6 +114,8 @@ def blacklist_check(client):
         IRCD.delay_client(client, 1, "blacklist")
         Blacklist.process.append(client.ip)
         for dnsbl in Dnsbl.table:
+            if client not in Blacklist.lookups:
+                Blacklist.lookups[client] = []
             Blacklist.lookups[client].append(dnsbl)
             IRCD.run_parallel_function(target=dnsbl_check_client, args=(client, dnsbl))
 
