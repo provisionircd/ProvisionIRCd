@@ -125,10 +125,31 @@ def stats_ports(client):
         IRCD.server_notice(client, listen_string)
 
 
+def stats_servers(client):
+    for server_client in IRCD.global_servers():
+        dt_object = datetime.datetime.fromtimestamp(server_client.creationtime)
+        formatted_time = dt_object.strftime("%Y-%m-%d %H:%M:%S")
+        time_elapsed = datetime.datetime.now() - dt_object
+        days = time_elapsed.days
+        hours, remainder = divmod(time_elapsed.seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+
+        name = server_client.name
+        uplink = server_client.uplink
+        synced = server_client.server.synced
+
+        IRCD.server_notice(client, '-')
+        stat_string = f"{name} (Uplink: {uplink.name}, direction: {client.direction.name}, synced: {synced})"
+        IRCD.server_notice(client, stat_string)
+        IRCD.server_notice(client, f"    Connect date: {formatted_time} ({days} days, {hours} hours, {minutes} minutes, {seconds} seconds ago)")
+        IRCD.server_notice(client, f"    Last message received: {int(time.time()) - server_client.local.last_msg_received} seconds ago")
+
+
 def init(module):
     Command.add(module, cmd_stats, "STATS", 0, Flag.CMD_OPER)
     Stat.add(module, stats_exception, 'e', "View exceptions list")
     Stat.add(module, stats_links, 'l', "View link information")
+    Stat.add(module, stats_servers, 's', "View info about all connected servers")
     Stat.add(module, stats_links_all, 'L', "View link all information, including unlinked")
     Stat.add(module, stats_opers, 'O', "View oper blocks")
     Stat.add(module, stats_uptime, 'u', "View uptime information")
