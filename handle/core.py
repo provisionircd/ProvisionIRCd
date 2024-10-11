@@ -1207,7 +1207,6 @@ class Command:
 @dataclass(eq=False)
 class Usermode:
     table: ClassVar[list] = []
-
     flag: str = ''
     is_global: int = 1
     unset_on_deoper: int = 0
@@ -1417,6 +1416,17 @@ class Channel:
     # This dict keeps track of which users have seen other users on the channel.
     seen_dict: dict = field(default_factory=dict)
 
+    @staticmethod
+    def initialize_class():
+        Hook.add(Hook.LOOP, Channel.expire_founder)
+
+    @staticmethod
+    def expire_founder():
+        for channel in [c for c in Channel.table if c.founder]:
+            last_seen = channel.founder["last_seen"]
+            if int(time()) >= last_seen + 3600 and not channel.founder_is_online():
+                channel.set_founder(client=None)
+
     def init_lists(self):
         for mode in [m.flag for m in Channelmode.table if m.type == Channelmode.LISTMODE]:
             self.List[mode] = []
@@ -1426,11 +1436,18 @@ class Channel:
             self.founder = {}
             return
         if self.name[0] != '+' and client.user and client.local:
-            self.founder = {"time": int(time()), "fullmask": client.fullmask, "certfp": client.get_md_value("certfp"), "ip": client.ip, "fullrealhost": client.fullrealhost}
+            self.founder = {"last_seen": int(time()),
+                            "fullmask": client.fullmask,
+                            "certfp": client.get_md_value("certfp"),
+                            "ip": client.ip,
+                            "fullrealhost": client.fullrealhost}
 
     def is_founder(self, client):
         certfp = client.get_md_value("certfp")
         return client.fullrealhost == self.founder.get("fullrealhost") or (certfp and certfp == self.founder.get("certfp"))
+
+    def founder_is_online(self):
+        return next((c for c in self.clients() if self.is_founder(c)), 0)
 
     def can_join(self, client: Client, key: str):
         """
@@ -1672,6 +1689,10 @@ class Channel:
         if self.membercount == 0 and 'P' not in self.modes:
             IRCD.destroy_channel(IRCD.me, self)
 
+        if self.is_founder(client):
+            if client not in Client.table:
+                self.founder["last_seen"] = int(time())
+
     def do_part(self, client: Client, reason: str = ''):
         reason = reason[:128]
         data = f":{client.fullmask} PART {self.name}{' :' + reason if reason else ''}"
@@ -1741,7 +1762,7 @@ class Channel:
             msg = f"*** {client.name} ({client.user.username}@{client.user.realhost}) has joined channel {self.name}"
             IRCD.log(client, "info", "join", event, msg, sync=0)
 
-        if self.name[0] != '+' and self.is_founder(client) and client.local:
+        if self.name[0] != '+' and self.is_founder(client) and client.local and 'r' not in self.modes:
             Command.do(IRCD.me, "MODE", self.name, "+o", client.name)
 
 
@@ -3833,3 +3854,6 @@ class Tkl:
 
     def __repr__(self):
         return f"<TKL '{self.type}' -> '{self.mask}'>"
+
+
+Channel.initialize_class()
