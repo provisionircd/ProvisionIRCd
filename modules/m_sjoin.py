@@ -15,23 +15,19 @@ def get_users_from_memberlist(memberlist: list) -> list:
     list_prefixes = [m.sjoin_prefix for m in IRCD.channel_modes() if m.type == m.LISTMODE]
     for entry in memberlist:
         if entry[0] == '<':
-            if not re.match(r"<(.*),(.*)>(.*)", entry):
+            if not (match := re.match(r"<(.*),(.*)>(.*)", entry)):
                 continue
-            entry = re.search(r"<(.*),(.*)>(.*)", entry).groups()[2]
+            entry = match.groups()[2]
         user_uid = ''
         for char in entry:
             if char in list_prefixes:
                 # Not interested in those.
                 break
-
             if char in user_prefixes:
                 # Skip prefixes.
                 continue
-            else:
-                user_uid += char
-        if user_uid:
-            if not (user := IRCD.find_user(user_uid)):
-                continue
+            user_uid += char
+        if user_uid and (user := IRCD.find_user(user_uid)):
             users.append(user)
     return users
 
@@ -76,11 +72,11 @@ def get_listmodes_from_memberlist(remote_server, memberlist: list) -> (list, lis
 
     for entry in memberlist:
         if entry[0] == '<':
-            if not re.match(r"<(.*),(.*)>(.*)", entry):
+            if not (match := re.match(r"<(.*),(.*)>(.*)", entry)):
                 logging.error(f"Malformed SJSBY format received: {entry} -- skipping entry.")
                 IRCD.send_snomask(remote_server, 's', f"ERROR: Malformed SJSBY format received: {entry} -- some channel modes may not have been synced correctly!")
                 continue
-            timestamp, setter, entry = re.search(r"<(.*),(.*)>(.*)", entry).groups()
+            timestamp, setter, entry = match.groups()
         for char in entry:
             if char in known_list_prefixes:
                 if cmode := next((cm for cm in IRCD.channel_modes() if cm.sjoin_prefix == char), 0):
@@ -89,42 +85,34 @@ def get_listmodes_from_memberlist(remote_server, memberlist: list) -> (list, lis
     return listmodes_modebuf, listmodes_parambuf
 
 
-def do_normal_join(server_client, channel_object, memberlist):
+def do_normal_join(server_client, channel_object, memberlist: list) -> None:
     # Join all remote members from memberlist to local channel.
     for user in [c for c in get_users_from_memberlist(memberlist) if not channel_object.find_member(c)]:
-        logging.debug(f"[do_normal_join] Joining remote user {user.name} to channel {channel_object.name}")
+        # logging.debug(f"[do_normal_join] Joining remote user {user.name} to channel {channel_object.name}")
         mtags = server_client.recv_mtags if server_client.server.synced else []
         channel_object.do_join(mtags, user)
         user.mtags = []
 
 
-def send_modelines(server, channel_object, modebuf, parambuf: list, action):
-    if Isupport.get("MAXMODES"):
-        maxmodes = Isupport.get("MAXMODES").value
-    else:
-        maxmodes = 8
-    modes_out = []
-    params_out = []
+def send_modelines(server, channel_object, modebuf: list, parambuf: list, action: str) -> None:
+    maxmodes = Isupport.get("MODES").value if Isupport.get("MODES") else 8
+    modes_out, params_out = [], []
     paramcount = 0
 
-    def send_one_line():
+    def send_one_line() -> None:
         modebuf_string = ''.join(modes_out)
-        parambuf_string = ''
-        if params_out:
-            parambuf_string = ' '.join(params_out)
+        parambuf_string = ' '.join(params_out) if params_out else ''
         data = f":{server.name} MODE {channel_object.name} {action}{modebuf_string}{' ' + parambuf_string if parambuf_string else ''}"
         for client in [c for c in channel_object.clients() if c.local]:
             Batch.check_batch_event(mtags=client.mtags, started_by=server, target_client=client, event="netjoin")
             client.send(client.mtags, data)
             client.mtags = []
 
-    for mode in modebuf:
-        if mode in ['+', '-']:
-            continue
+    for mode in [m for m in modebuf if m not in "+-"]:
         cmode = IRCD.get_channelmode_by_flag(mode)
         modes_out.append(mode)
         if mode in IRCD.get_parammodes_str():
-            if (action == '-' and cmode.unset_with_param) or action == '+':
+            if ((action == '-' and cmode.unset_with_param) or action == '+') and len(parambuf) > paramcount:
                 param = parambuf[paramcount]
                 params_out.append(param)
                 paramcount += 1
@@ -138,38 +126,55 @@ def send_modelines(server, channel_object, modebuf, parambuf: list, action):
         send_one_line()
 
 
-def set_remote_modes(remote_server, channel_object, remote_modes: str, remote_params: list, memberlist):
-    remote_modes = remote_modes.replace('+', '')
-    modebuf_give = []
-    parambuf_give = []
+def handle_modes(channel_object, remote_modes: str, remote_params: list, action: str, common_modes=None) -> tuple:
+    if common_modes is None:
+        common_modes = {}
+    modebuf = []
+    parambuf = []
     paramcount = 0
-    for mode in remote_modes:
-        if mode in IRCD.get_parammodes_str():
-            current_param = channel_object.get_param(mode)
-            param = remote_params[paramcount]
-            if current_param != param:
-                channel_object.add_param(mode, param)
-                modebuf_give.append(mode)
-                parambuf_give.append(param)
-                paramcount += 1
-                continue
-            paramcount += 1
-            continue
-        if mode not in channel_object.modes:
-            modebuf_give.append(mode)
 
-    channel_object.modes = remote_modes.replace('+', '')
+    for mode in remote_modes:
+        if not (cmode := IRCD.get_channelmode_by_flag(mode)):
+            continue
+        if action == '-' and mode in common_modes and mode not in IRCD.get_parammodes_str():
+            continue
+        if mode in IRCD.get_parammodes_str() and len(remote_params) > paramcount:
+            param, ourparam = remote_params[paramcount], channel_object.get_param(mode)
+            paramcount += 1
+            if param == ourparam:
+                continue
+            modebuf.append(mode)
+            if action == '+':
+                if (ourparam and cmode.sjoin_check(ourparam, param) == -1) or not ourparam:
+                    parambuf.append(param)
+                    channel_object.add_param(mode, param)
+            elif action == '-':
+                channel_object.del_param(mode)
+                parambuf.append(ourparam)
+        elif action == '+' and mode not in channel_object.modes:
+            channel_object.modes += mode
+            modebuf.append(mode)
+        elif action == '-' and mode in channel_object.modes:
+            channel_object.modes = channel_object.modes.replace(mode, '')
+            modebuf.append(mode)
+
+    return modebuf, parambuf
+
+
+def set_remote_modes(remote_server, channel_object, remote_modes: str, remote_params: list, memberlist: list) -> None:
+    remote_modes = remote_modes.replace('+', '')
+    modebuf_give, parambuf_give = handle_modes(channel_object, remote_modes, remote_params, action='+')
+    channel_object.modes = remote_modes
 
     # +vhoaq etc.
     usermodes = get_usermodes_from_memberlist(remote_server, memberlist)
     for entry in usermodes:
         client, modes = entry
         if channel_object.create_member(client):
+            channel_object.member_give_modes(client, modes)
             for mode in modes:
-                channel_object.member_give_modes(client, mode)
                 modebuf_give.append(mode)
                 parambuf_give.append(client.name)
-            # logging.debug(f"[set_remote_modes()] Joining {client.name} to {channel_object.name}")
             channel_object.do_join(remote_server.recv_mtags, client)
         else:
             logging.error(f"[set_remote_modes()] Attempted to join {client.name} to {channel_object.name} but it already exists.")
@@ -184,101 +189,44 @@ def set_remote_modes(remote_server, channel_object, remote_modes: str, remote_pa
         modebuf_give.append(listmode)
         parambuf_give.append(mask)
 
-    send_modelines(remote_server, channel_object, modebuf_give, parambuf_give, '+')
+    send_modelines(remote_server, channel_object, modebuf_give, parambuf_give, action='+')
 
 
-def remote_wins(remote_server, channel_object, remote_modes: str, remote_params: list, memberlist: list, remote_channel_creation):
-    # Clear locally created channel object attributes.
-    modebuf_remove = []
-    parambuf_remove = []
-    paramcount = 0
-    remote_same_modes = ''
-
-    for mode in channel_object.modes:
-        logging.debug(f"Local mode: {mode} -- remote_modes: {remote_modes}")
-        cmode = IRCD.get_channelmode_by_flag(mode)
-        if mode in IRCD.get_parammodes_str():
-            logging.debug(f"Mode is parammode: {mode}")
-            param = remote_params[paramcount]
-            paramcount += 1
-            ourparam = channel_object.get_param(mode)
-            if param != ourparam:
-                modebuf_remove.append(mode)
-                channel_object.del_param(mode)
-                if cmode.unset_with_param:
-                    parambuf_remove.append(ourparam)
-            continue
-        if mode not in remote_modes:
-            modebuf_remove.append(mode)
-        else:
-            remote_same_modes += mode
-        continue
+def remote_wins(remote_server, channel_object, remote_modes: str, remote_params: list, memberlist: list, remote_channel_creation: int) -> None:
+    common_modes = set(channel_object.modes) & set(remote_modes)
+    modebuf_remove, parambuf_remove = handle_modes(channel_object, channel_object.modes, remote_params, action='-', common_modes=common_modes)
 
     # Now remove +vhoaq etc.
     for client in channel_object.clients():
         for membermode in channel_object.get_modes_of_client_str(client):
             modebuf_remove.append(membermode)
             parambuf_remove.append(client.name)
+        client_membermodes = channel_object.get_modes_of_client_str(client)
+        channel_object.member_take_modes(client, client_membermodes)
 
     # Remove bans etc.
     for listmode in channel_object.List:
         for entry in channel_object.List[listmode]:
             modebuf_remove.append(listmode)
             parambuf_remove.append(entry.mask)
-
-    send_modelines(remote_server, channel_object, modebuf_remove, parambuf_remove, '-')
-    channel_object.modes = ''.join(set(channel_object.modes).intersection(remote_same_modes))
     channel_object.init_lists()
-    for client in channel_object.clients():
-        client_membermodes = channel_object.get_modes_of_client_str(client)
-        channel_object.member_take_modes(client, client_membermodes)
 
     channel_object.creationtime = remote_channel_creation
-
-    # do_normal_join(remote_server, channel_object, memberlist)
+    send_modelines(remote_server, channel_object, modebuf_remove, parambuf_remove, action='-')
 
     # Now give remote modes to local channel.
     set_remote_modes(remote_server, channel_object, remote_modes, remote_params, memberlist)
 
 
-def merge_modes(remote_server, channel_object, remote_modes: str, remote_params: list, memberlist: list):
-    paramcount = 0
-    param = ''
-    merge_modebuf = ''
-    merge_parambuf = []
-
-    for mode in remote_modes:
-        if not (cmode := IRCD.get_channelmode_by_flag(mode)):
-            continue
-
-        if mode in IRCD.get_parammodes_str():
-            # Set the param in case we need it.
-            param = remote_params[paramcount]
-            paramcount += 1
-
-        if mode not in channel_object.modes:
-            merge_modebuf += mode
-            channel_object.modes += mode
-
-        if mode in IRCD.get_parammodes_str():
-            if ourparam := channel_object.get_param(mode):
-                if cmode.sjoin_check(ourparam, param) == -1:
-                    # `-1` means they win.
-                    logging.debug(f"Remote wins +{mode} param conditions.")
-                    merge_modebuf += mode
-                    merge_parambuf.append(param)
-                    channel_object.add_param(mode, param)
-
+def merge_modes(remote_server, channel_object, remote_modes: str, remote_params: list, memberlist: list) -> None:
+    merge_modebuf, merge_parambuf = handle_modes(channel_object, remote_modes, remote_params, action='+')
     # +vhoaq etc.
-    usermodes = get_usermodes_from_memberlist(remote_server, memberlist)
-    for entry in usermodes:
-        client, modes = entry
+    for client, modes in get_usermodes_from_memberlist(remote_server, memberlist):
         if channel_object.create_member(client):
+            channel_object.member_give_modes(client, modes)
             for mode in modes:
-                channel_object.member_give_modes(client, mode)
                 merge_modebuf += mode
                 merge_parambuf.append(client.name)
-            logging.debug(f"[merge_modes()] Joining {client.name} to {channel_object.name}")
             channel_object.do_join(remote_server.recv_mtags, client)
         else:
             logging.error(f"[merge_modes()] Attempted to join {client.name} to {channel_object.name} but it already exists.")
@@ -286,58 +234,50 @@ def merge_modes(remote_server, channel_object, remote_modes: str, remote_params:
     # Merge/update listmodes.
     listmodes_modebuf, listmodes_parambuf = get_listmodes_from_memberlist(remote_server, memberlist)
     for listmode, listparam in zip(listmodes_modebuf, listmodes_parambuf):
-        have = 0
-        # Now compare their mask with ours.
         timestamp, setter, mask = listparam
         timestamp = int(timestamp)
-        for entry in channel_object.List[listmode]:
-            if entry.mask == mask:
-                have = 1
-                if entry.set_time > timestamp:
-                    entry.set_time = timestamp
-                    entry.setter = setter
-                break
-        if not have:
-            channel_object.add_to_list(remote_server, mask=mask, _list=channel_object.List[listmode], setter=setter, timestamp=timestamp)
+        found = next((e for e in channel_object.List[listmode] if e.mask == mask), None)
+        if found:
+            if found.set_time > timestamp:
+                found.set_time, found.setter = timestamp, setter
+        else:
+            channel_object.add_to_list(remote_server, mask, channel_object.List[listmode], setter, timestamp)
             merge_modebuf += listmode
             merge_parambuf.append(mask)
 
-    # logging.debug(f"Merge modebuf: {merge_modebuf}")
-    # logging.debug(f"Merge parambuf: {merge_parambuf}")
-    # do_normal_join(remote_server, channel_object, memberlist)
     send_modelines(remote_server, channel_object, merge_modebuf, merge_parambuf, action='+')
 
 
-def cmd_sjoin(client, recv):
-    logging.debug(f"SJOIN from {client.name}: {recv}")
+def cmd_sjoin(client, recv: list) -> None:
+    # logging.debug(f"SJOIN from {client.name}: {recv}")
     channel_name = recv[2]
     if channel_name[0] == '&':
-        logging.error(f"ERROR: received a local channel from remote server: {channel_name}")
+        logging.error(f"ERROR: received a local channel from remote server {client.name}: {channel_name}")
         return client.exit("Sync error! Remote server tried to link local channels.")
 
-    channel_object = IRCD.find_channel(channel_name)
-    if not channel_object:
-        # Channel did not exist on Internal.
+    if not (channel_object := IRCD.find_channel(channel_name)):
         channel_object = IRCD.create_channel(IRCD.me, channel_name)
 
+    channel_object.set_founder(client=None)
     remote_channel_creation = int(recv[1])
+    channel_object.remote_creationtime = remote_channel_creation
     channel_modes = ''
     channel_modes_params = []
     memberlist = []
+
     idx = 3
     for param in recv[idx:]:
-        if not param.startswith(':'):
-            if not channel_modes:
-                channel_modes = param
-            else:
-                channel_modes_params.append(param)
-        else:
+        if param.startswith(':'):
             memberlist = recv[idx:]
             memberlist[0] = memberlist[0][1:]
             if not memberlist[0].strip():
                 logging.error(f"Found empty member in memberlist on position {idx}. Removing last entry. Received data: {recv}")
                 del memberlist[0]
             break
+        if not channel_modes:
+            channel_modes = param
+        else:
+            channel_modes_params.append(param)
         idx += 1
 
     # Start our netjoin batch, if one doesn't already exist.
@@ -346,11 +286,13 @@ def cmd_sjoin(client, recv):
 
     # Force merge trigger, debug.
     # remote_channel_creation = channel_object.creationtime
+    # channel_object.local_creationtime = remote_channel_creation
+    # channel_object.remote_creationtime = remote_channel_creation
 
     if remote_channel_creation < channel_object.creationtime:
-        # Remote channel is dominant. Replacing modes with remote channel
-        # Clear the local modes.
+        # Remote channel is dominant. Replacing modes with remote channel. Clear the local modes.
         logging.debug(f"Remote channel {channel_name} is dominant, clearing local channel modes and setting theirs.")
+        channel_object.name = channel_name
         remote_wins(client, channel_object, channel_modes, channel_modes_params, memberlist, remote_channel_creation)
 
     elif remote_channel_creation > channel_object.creationtime:
@@ -364,8 +306,9 @@ def cmd_sjoin(client, recv):
             logging.debug(f"Equal timestamps for remote channel {channel_object.name} -- merging modes.")
         merge_modes(client, channel_object, channel_modes, channel_modes_params, memberlist)
 
-    IRCD.run_hook(Hook.SERVER_SJOIN_IN, client, recv)
+    if not client.registered:
+        IRCD.run_hook(Hook.SERVER_SJOIN_IN, client, recv)
 
 
-def init(module):
+def init(module) -> None:
     Command.add(module, cmd_sjoin, "SJOIN", 4, Flag.CMD_SERVER)
