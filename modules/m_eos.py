@@ -9,7 +9,7 @@ from handle.logger import logging
 def cmd_eos(client, recv):
     if IRCD.current_link_sync in [client, client.uplink, client.direction]:
         IRCD.current_link_sync = None
-        logging.debug(f"current_link_sync for {client.name} unset.")
+        # logging.debug(f"current_link_sync for {client.name} unset.")
     if client.server.synced:
         return
 
@@ -31,9 +31,9 @@ def cmd_eos(client, recv):
 
     """ Send held back data for this client """
     if client in IRCD.send_after_eos:
-        logging.warning(f"Now sending previously held back server data to {client.name}")
+        logging.debug(f"Now sending previously held back server data to {client.name}")
         for mtags, data in IRCD.send_after_eos[client]:
-            logging.warning(f"Delayed data: {data.rstrip()}")
+            logging.debug(f"Delayed data: {data.rstrip()}")
             IRCD.send_to_one_server(client, mtags, data)
         del IRCD.send_after_eos[client]
 

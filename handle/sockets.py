@@ -46,7 +46,10 @@ def post_accept(conn, client, listen_obj):
                 conn.sendall(bytes(data + "\r\n", "utf-8"))
             except:
                 pass
-            conn.shutdown(socket.SHUT_WR)
+            try:
+                conn.shutdown(socket.SHUT_WR)
+            except OSError:
+                pass
             client.exit(msg, sockclose=0)
             # Fallback.
             IRCD.run_parallel_function(close_socket, args=(conn,), delay=0.1)

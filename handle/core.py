@@ -778,7 +778,6 @@ class Client:
 
         self.creationtime = int(time())
         self.idle_since = int(time())
-        self.add_flag(Flag.CLIENT_REGISTERED)
         self.sendnumeric(Numeric.RPL_WELCOME, IRCD.me.name, self.name, self.user.username, self.user.realhost)
         self.sendnumeric(Numeric.RPL_YOURHOST, IRCD.me.name, IRCD.version)
         created_date = datetime.fromtimestamp(IRCD.boottime).strftime("%a %b %d %Y")
@@ -795,6 +794,7 @@ class Client:
         Command.do(self, "MOTD")
 
         self.sync(cause="welcome_user()")
+        self.add_flag(Flag.CLIENT_REGISTERED)
 
         # Give modes on connect.
         if conn_modes := IRCD.get_setting("modes-on-connect"):
@@ -3724,7 +3724,7 @@ class Tkl:
         if bantypes == '*':
             bantypes = ''
         bt_string = f" [{bantypes}]" if bantypes else ''
-        if (not update and not exists or (update and IRCD.find_user(set_by.split('!')[0]))) and (client == IRCD.me or client.registered):
+        if (not update and not exists or (update and IRCD.find_user(set_by.split('!')[0]))) and (client == IRCD.me or (client.uplink not in [IRCD.me, IRCD.me.uplink] and client.uplink.registered)):
             msg = f"*** {'Global ' if tkl.is_global else ''}{tkl.name}{bt_string} {'active' if not update else 'updated'} for {tkl.mask} by {set_by} [{reason}] expires on: {expire_string}"
             sync = not tkl.is_global
             IRCD.log(client, "info", "tkl", "TKL_ADD", msg, sync=sync)
@@ -3735,12 +3735,6 @@ class Tkl:
                     local_bantypes += bt
                 bantypes = local_bantypes + ' '
             if (client == IRCD.me or client.local) and expire > 0:
-                """
-                If the ban is set locally and the expire is >0, increase the expire by 1 sec.
-                That way expiring bans are shown to come from 'me'.
-                For example, if `server1` sets a global ban, then the ban expire message should also originate from `server1`.
-                Just some nitpicky little detail. Although it doesn't work as intended anyway.
-                """
                 expire += 1
             data = f":{client.id} TKL + {flag} {ident} {host} {set_by} {expire} {set_time} {bantypes}:{reason}"
             IRCD.send_to_servers(client, [], data)

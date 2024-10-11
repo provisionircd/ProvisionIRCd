@@ -409,7 +409,7 @@ def cmd_channelmode(client, recv):
             # Such as limit, +l
             if action == '+':
                 if result := cmode.is_ok(client, channel, action, mode, param, cmode.CHK_PARAM) or not client.local:
-                    logging.debug(f"Allowed to {action}{mode} {param}: {result} by {cmode.is_ok}")
+                    # logging.debug(f"Allowed to {action}{mode} {param}: {result} by {cmode.is_ok}")
                     channel.add_param(mode, param)
                     if mode not in channel.modes:
                         channel.modes += mode

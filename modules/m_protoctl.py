@@ -35,7 +35,7 @@ def cmd_protoctl(client, recv):
                     param = p.split('=')[1]
                 if cap == "EAUTH" and param:
                     name = param.split(',')[0]
-                    logging.debug(f"EAUTH name: {name}")
+                    # logging.debug(f"EAUTH name: {name}")
                     if IRCD.find_server(name):  # and server_exists != client:
                         logging.warning(f"[EAUTH] Server with name {name} already exists.")
                         deny_direct_link(client, Error.SERVER_NAME_EXISTS, name)
@@ -47,7 +47,7 @@ def cmd_protoctl(client, recv):
                         deny_direct_link(client, Error.SERVER_SID_EXISTS, param)
                         return
                     client.id = param
-                    logging.debug(f"[PROTOCTL] SID for {client.name} set: {client.id}")
+                    # logging.debug(f"[PROTOCTL] SID for {client.name} set: {client.id}")
 
                 elif cap == "CHANMODES":
                     local_modes = IRCD.get_chmodes_str_categorized().replace(',', '')

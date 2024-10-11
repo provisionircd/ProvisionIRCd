@@ -124,7 +124,7 @@ def sync_users(newserver):
         return
     logging.debug(f"Syncing all global registered users to {newserver.name}")
     for client in [c for c in IRCD.global_registered_users() if c.direction != newserver and c.registered]:
-        logging.debug(f"Syncing user {client.name} (UID: {client.id}) (uplink={client.uplink.name}, direction={client.direction.name}) to {newserver.name}")
+        # logging.debug(f"Syncing user {client.name} (UID: {client.id}) (uplink={client.uplink.name}, direction={client.direction.name}) to {newserver.name}")
         client.sync(server=newserver, cause="sync_users()")
 
 

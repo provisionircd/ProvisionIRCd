@@ -139,7 +139,7 @@ def create_user_from_uid(client, info: list):
     new_client.user.username = info[4]
     new_client.user.realhost = info[5]
     new_client.id = info[6]
-    logging.debug(F"Remote client {new_client.name} UID set: {new_client.id}")
+    # logging.debug(F"Remote client {new_client.name} UID set: {new_client.id}")
 
     new_client.user.account = info[7]
     new_client.user.modes = info[8].replace('+', '')
@@ -159,7 +159,7 @@ def create_user_from_uid(client, info: list):
         new_client.ip = client.ip
 
     new_client.add_flag(Flag.CLIENT_REGISTERED)
-    logging.debug(f"New remote user {new_client.name}. Uplink: {new_client.uplink.name}, direction: {new_client.direction.name}")
+    # logging.debug(f"New remote user {new_client.name}. Uplink: {new_client.uplink.name}, direction: {new_client.direction.name}")
     return new_client
 
 

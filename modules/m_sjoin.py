@@ -253,7 +253,9 @@ def cmd_sjoin(client, recv: list) -> None:
     channel_name = recv[2]
     if channel_name[0] == '&':
         logging.error(f"ERROR: received a local channel from remote server {client.name}: {channel_name}")
-        return client.exit("Sync error! Remote server tried to link local channels.")
+        msg = f"Link failed for {client.name}: Sync error! Server {client.name} tried to link local channels!"
+        client.direct_send(f"ERROR :{msg}")
+        return client.exit(msg)
 
     if not (channel_object := IRCD.find_channel(channel_name)):
         channel_object = IRCD.create_channel(IRCD.me, channel_name)
@@ -291,13 +293,13 @@ def cmd_sjoin(client, recv: list) -> None:
 
     if remote_channel_creation < channel_object.creationtime:
         # Remote channel is dominant. Replacing modes with remote channel. Clear the local modes.
-        logging.debug(f"Remote channel {channel_name} is dominant, clearing local channel modes and setting theirs.")
+        # logging.debug(f"Remote channel {channel_name} is dominant, clearing local channel modes and setting theirs.")
         channel_object.name = channel_name
         remote_wins(client, channel_object, channel_modes, channel_modes_params, memberlist, remote_channel_creation)
 
     elif remote_channel_creation > channel_object.creationtime:
         # Do nothing, our channel state will remain untouched.
-        logging.debug(f"Local channel {channel_name} is dominant. Not processing remote modes. Joining users.")
+        # logging.debug(f"Local channel {channel_name} is dominant. Not processing remote modes. Joining users.")
         do_normal_join(client, channel_object, memberlist)
 
     elif remote_channel_creation == channel_object.creationtime:
