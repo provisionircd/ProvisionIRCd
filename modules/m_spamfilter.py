@@ -61,7 +61,7 @@ def spamfilter_check(client, target, to_target, target_cause):
     # return target_cause if allow and target in ["a", "c", "p", "n", "t", "N"] else Hook.DENY
 
 
-def spamfilter_chanmsgcheck(client, channel, msg):
+def spamfilter_chanmsgcheck(client, channel, msg, prefix):
     msg = ' '.join(msg)
     return spamfilter_check(client, 'c', to_target=channel.name, target_cause=msg)
 
@@ -76,7 +76,7 @@ def spamfilter_usernoticecheck(client, target, msg):
     return spamfilter_check(client, 'n', to_target=target.name, target_cause=msg)
 
 
-def spamfilter_channoticecheck(client, channel, msg):
+def spamfilter_channoticecheck(client, channel, msg, prefix):
     msg = ' '.join(msg)
     return spamfilter_check(client, 'N', to_target=channel.name, target_cause=msg)
 

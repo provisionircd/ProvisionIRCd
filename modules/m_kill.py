@@ -4,9 +4,6 @@
 
 from handle.core import IRCD, Command, Numeric, Flag
 
-from handle.functions import is_match
-from handle.logger import logging
-
 
 def cmd_kill(client, recv):
     """

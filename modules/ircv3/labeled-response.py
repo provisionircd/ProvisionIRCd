@@ -56,6 +56,7 @@ def ircv3_label_post_command(client, trigger, recv):
             Labeltag object was saved in case some module clears the mtags list.
             """
             client.mtags[0:0] = [Currentcmd.labeltag]
+            # logging.debug(f"Label tag added to beginning of tags for {client.name}")
         batch = None
         if len(Currentcmd.buffer) == 0:
             data = f":{IRCD.me.name} ACK"

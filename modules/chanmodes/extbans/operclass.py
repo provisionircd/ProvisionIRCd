@@ -5,7 +5,6 @@ operclass bans/exceptions/invex
 
 from handle.core import Extban
 from handle.functions import is_match
-from handle.logger import logging
 
 
 def operclass_is_valid(client, channel, action, mode, param):

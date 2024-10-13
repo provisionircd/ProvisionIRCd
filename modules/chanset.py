@@ -7,12 +7,10 @@ import time
 from datetime import datetime
 
 from handle.core import IRCD, Hook, Command, Flag, Channel, Client, Numeric
-from handle.logger import logging
 
 
 class Activities:
     kicks = {}
-    joins = {}
 
     @staticmethod
     def add_kick(target_client, channel):
@@ -74,7 +72,7 @@ def cmd_chanset(client, recv):
         return client.sendnumeric(Numeric.ERR_NOSUCHCHANNEL, recv[1])
 
     override = 0
-    if client not in channel.clients():
+    if not channel.find_member(client):
         if not client.has_permission("channel:override:chanset"):
             return client.sendnumeric(Numeric.ERR_NOTONCHANNEL, channel.name)
         else:

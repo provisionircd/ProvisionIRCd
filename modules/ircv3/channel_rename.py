@@ -3,7 +3,6 @@
 """
 
 from handle.core import Command, Capability, IRCD, Flag, Numeric
-from handle.logger import logging
 
 
 # https://ircv3.net/specs/extensions/channel-rename
@@ -47,7 +46,7 @@ def cmd_rename(client, recv):
     if client.local:
         IRCD.server_notice(client, f"Channel {channel.name} successfully changed to {name}")
 
-    IRCD.send_to_servers(client, f":{client.uid} RENAME {channel.name} {name}")
+    IRCD.send_to_servers(client, [], f":{client.uid} RENAME {channel.name} {name}")
 
     old_name = channel.name
     channel.name = name

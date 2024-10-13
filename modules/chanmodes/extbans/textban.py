@@ -29,7 +29,7 @@ def blockmsg_is_valid(client, channel, action, mode, param):
     return param
 
 
-def check_text_block(client, channel, msg: list):
+def check_text_block(client, channel, msg: list, prefix: str):
     for tb in channel.List['b']:
         mask_split = tb.mask.split(':')
         timed = 1 if mask_split[0][1:] == TimedBans.name else 0

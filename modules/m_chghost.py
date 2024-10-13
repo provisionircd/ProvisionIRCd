@@ -3,7 +3,6 @@
 """
 
 from handle.core import IRCD, Command, Capability, Numeric, Flag
-from handle.logger import logging
 
 
 def cmd_chghost(client, recv):
@@ -11,10 +10,10 @@ def cmd_chghost(client, recv):
     Changes a users' cloak host.
     Syntax: CHGHOST <user> <newhost>
     """
-    logging.debug(f"CHGHOST from {client.name}: {recv}")
+
     if not (target := IRCD.find_user(recv[1])):
         return client.sendnumeric(Numeric.ERR_NOSUCHNICK, recv[1])
-    host = str(recv[2][:64]).strip()
+    host = str(recv[2][:64]).strip().removeprefix(':')
     for c in str(host):
         if c.lower() not in IRCD.HOSTCHARS:
             host = host.replace(c, '')
@@ -27,7 +26,6 @@ def cmd_chghost(client, recv):
                           f"*** {client.name} ({client.user.username}@{client.user.realhost}) "
                           f"used CHGHOST to change the host of {target.name} to \"{target.user.cloakhost}\"")
     data = f":{client.id} CHGHOST {target.id} :{target.user.cloakhost}"
-    logging.debug(f"Syncing CHGHOST to servers: {data}")
     IRCD.send_to_servers(client, [], data)
 
 
@@ -36,7 +34,7 @@ def cmd_chgident(client, recv):
     Changes the ident (username) part of a user.
     Syntax: CHGIDENT <target> <newident>
     """
-    logging.debug(f"CHGIDENT from {client.name}: {recv}")
+
     if not (target := IRCD.find_user(recv[1])):
         return client.sendnumeric(Numeric.ERR_NOSUCHNICK, recv[1])
     ident = str(recv[2][:12]).strip().removeprefix(':')

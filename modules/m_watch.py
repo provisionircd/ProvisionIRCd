@@ -2,8 +2,6 @@
 /watch command
 """
 
-import time
-
 from handle.core import IRCD, Command, Isupport, Numeric, Hook
 from handle.logger import logging
 

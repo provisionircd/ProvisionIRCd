@@ -3,7 +3,6 @@
 """
 
 from handle.core import Flag, IRCD, Command
-from handle.logger import logging
 
 
 def cmd_quit(client, recv):

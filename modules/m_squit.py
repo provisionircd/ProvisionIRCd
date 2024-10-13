@@ -23,18 +23,18 @@ def cmd_squit(client, recv):
     if recv[1] == IRCD.me.name:
         return IRCD.server_notice(client, "Cannot use /SQUIT on ourself.")
 
-    for squit_server in server_matches:
-        if squit_server == IRCD.me:
+    for squit_client in server_matches:
+        if squit_client == IRCD.me:
             continue
 
         data = f":{client.id} {' '.join(recv)}"
         IRCD.send_to_servers(client, [], data)
 
-        if squit_server.synced:
-            msg = f"{client.fullrealhost} used SQUIT for {squit_server.name}: {reason}"
+        if squit_client.server.synced:
+            msg = f"{client.fullrealhost} used SQUIT for {squit_client.name}: {reason}"
             IRCD.log(client, "info", "squit", "LINK_SQUIT", msg, sync=0)
 
-        squit_server.exit(reason)
+        squit_client.exit(reason)
 
 
 def init(module):

@@ -3,7 +3,6 @@
 """
 
 from handle.core import IRCD, Numeric, Command
-from handle.logger import logging
 
 
 def cmd_lusers(client, recv):

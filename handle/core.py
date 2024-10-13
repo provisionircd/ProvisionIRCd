@@ -20,7 +20,7 @@ from threading import Thread, Timer
 from time import time
 from datetime import datetime, timezone
 from dataclasses import dataclass, field
-from typing import NewType, ClassVar, Callable
+from typing import ClassVar, Callable
 
 import select
 from _socket import gethostbyaddr
@@ -29,18 +29,6 @@ from handle.functions import is_match, IPtoBase64
 from handle.logger import logging, IRCDLogger
 
 gc.enable()
-
-Client = NewType("Client", None)
-LocalClient = NewType("LocalCLient", None)
-User = NewType("User", None)
-Server = NewType("Server", None)
-Allow = NewType("Allow", None)
-ConnectClass = NewType("ConnectClass", None)
-Listen = NewType("Listen", None)
-Link = NewType("Link", None)
-Operclass = NewType("Operclass", None)
-Module = NewType("Module", None)
-IRCD = NewType("IRCD", None)
 
 flag_idx = 100
 hook_idx = 100
@@ -80,12 +68,12 @@ class Flag(Enum):
 @dataclass(eq=False)
 class Client:
     table: ClassVar[list] = []
-    server: Server = None
-    user: User = None
-    local: LocalClient = None
-    class_: ConnectClass = None
-    direction: Client = None
-    uplink: Server = None
+    server: "Server" = None
+    user: "User" = None
+    local: "LocalClient" = None
+    class_: "ConnectClass" = None  # noqa: F821
+    direction: "Client" = None
+    uplink: "Client" = None
     id: str = None  # UID for users, SID for servers
     flags: list = field(default_factory=list)
     name: str = '*'
@@ -93,7 +81,6 @@ class Client:
     ip: str = None
     port: int = 0
     hopcount: int = 0
-    lastnick: int = 0
     moddata: list = field(default_factory=list)
     # MessageTag objects this client has generated.
     mtags: list = field(default_factory=list)
@@ -123,28 +110,15 @@ class Client:
 
     @property
     def channels(self):
-        channels = []
-        for channel in Channel.table:
-            for member in channel.members:
-                if member.client == self:
-                    channels.append(channel)
-                    break
-        return channels
+        return [channel for channel in Channel.table if any(client is self for client in channel.member_by_client)]
 
     @property
     def fullmask(self):
-        if self.user:
-            return f"{self.name}!{self.user.username}@{self.user.cloakhost}"
-        else:
-            return self.name
+        return f"{self.name}!{self.user.username}@{self.user.cloakhost}" if self.user else self.name
 
     @property
     def fullrealhost(self):
-        if self.user:
-            ident = self.user.username or '*'
-            return f"{self.name}!{ident}@{self.user.realhost if self.user.realhost else '*'}"
-        else:
-            return self.name
+        return f"{self.name}!{self.user.username or '*'}@{self.user.realhost or '*'}" if self.user else self.name
 
     def get_ext_info(self):
         ext_info = ''
@@ -172,7 +146,6 @@ class Client:
 
         if self.user:
             if self.name != '*' and self.user.username != '' and self.local.nospoof == 0:
-                self.local.authpass = 0
                 return 1
             return 0
 
@@ -205,23 +178,21 @@ class Client:
         """
         Returns true when a user has any of the given modes.
         """
+
         if not self.user:
             return 0
-        for mode in modes:
-            if mode in self.user.modes:
-                return 1
-        return 0
+        user_modes_set = set(self.user.modes)
+        return any(mode in user_modes_set for mode in modes)
 
     def has_modes_all(self, modes: str):
         """
-        Returns true if the user has all of the given modes.
+        Returns true if the user has all the given modes.
         """
+
         if not self.user:
             return 0
-        for mode in modes:
-            if mode not in self.user.modes:
-                return 0
-        return 1
+        user_modes_set = set(self.user.modes)
+        return all(mode in user_modes_set for mode in modes)
 
     def sendnumeric(self, replycode, *args):
         if not self.user and not self.local or not hasattr(IRCD, "me"):
@@ -243,6 +214,7 @@ class Client:
             if t not in ["host", "ident", "gecos"]:
                 logging.error(f"Incorrect type received in setinfo(): {t}")
                 return 0
+            info = info.removeprefix(':')
             if self.registered and t in ["host", "ident"]:
                 for c in str(info):
                     if c.lower() not in IRCD.HOSTCHARS:
@@ -280,18 +252,16 @@ class Client:
             return 0
 
     def sync(self, server=None, cause=None):
-        if not IRCD.local_servers():
+        if not IRCD.local_servers() or not self.user:
             return
+
         s2smd_tags = []
         if s2stag := MessageTag.find_tag("s2s-md"):
             for md in self.moddata:
-                name = s2stag.name + '/' + md.name
                 tag = s2stag(value=md.value)
-                tag.name = name
+                tag.name = f"{s2stag.name}/{md.name}"
                 s2smd_tags.append(tag)
 
-        if not self.user:
-            return
         if not self.local and self.uplink.exitted:
             logging.warning(f"Not syncing user {self.name} because its uplink server {self.uplink.name} exitted abruptly.")
             return
@@ -300,39 +270,24 @@ class Client:
             logging.error(f"Tried to sync user {self.id} but it has no nickname yet?")
             return
 
-        # logging.debug(f"Syncing user {self.name} to all locally connected servers.")
-        sync_modes = ''
-        for mode in self.user.modes:
-            umode = IRCD.get_usermode_by_flag(mode)
-            if umode and umode.is_global:
-                sync_modes += mode
+        sync_modes = ''.join(mode for mode in self.user.modes if (umode := IRCD.get_usermode_by_flag(mode)) and umode.is_global)
+
         binip = IPtoBase64(self.ip) if self.ip.replace('.', '').isdigit() else self.ip
         data = f":{self.uplink.id} UID {self.name} {self.hopcount + 1} {self.creationtime} {self.user.username} {self.user.realhost} {self.id} {self.user.account} +{sync_modes} {self.user.cloakhost} {self.user.cloakhost} {binip} :{self.info}"
-        if server:
-            server.send(s2smd_tags, data)
-        else:
-            IRCD.send_to_servers(self, s2smd_tags, data)
+
+        (server.send(s2smd_tags, data) if server else IRCD.send_to_servers(self, s2smd_tags, data))
 
         for md in self.moddata:
             data = f":{self.uplink.id} MD client {self.id} {md.name} :{md.value}"
-            if server:
-                server.send([], data)
-            else:
-                IRCD.send_to_servers(self, [], data)
+            (server.send([], data) if server else IRCD.send_to_servers(self, [], data))
 
         if self.user.away:
             data = f":{self.id} AWAY :{self.user.away}"
-            if server:
-                server.send([], data)
-            else:
-                IRCD.send_to_servers(self, [], data)
+            (server.send([], data) if server else IRCD.send_to_servers(self, [], data))
 
         for swhois in self.user.swhois:
             data = f":{IRCD.me.id} SWHOIS {self.id} + {swhois.tag} :{swhois.line}"
-            if server:
-                server.send([], data)
-            else:
-                IRCD.send_to_servers(self, [], data)
+            (server.send([], data) if server else IRCD.send_to_servers(self, [], data))
 
         IRCD.run_hook(Hook.SERVER_UID_OUT, self, server)
 
@@ -367,44 +322,48 @@ class Client:
                 channel.remove_client(self)
 
     def server_exit(self, reason):
-        try:
-            netsplit_reason = self.name + ' ' + self.uplink.name
-            if not self.server:
-                logging.error(f"server_exit() called on non-server client: {self.name}")
-                return
-            if self.server.synced:
-                if self.local:
-                    IRCD.log(self.uplink, "error", "link", "LINK_LOST", f"Lost connection to server {self.name}: {reason}", sync=0)
-                if not Batch.find_batch_by(self):
-                    Batch.create_new(started_by=self, batch_type="netsplit", additional_data=netsplit_reason)
-            else:
-                if self.local and not self.local.incoming and not self.server.link.auto_connect:
-                    IRCD.log(IRCD.me, "error", "link", "LINK_OUT_FAIL", f"Unable to connect to {self.name}: {reason}", sync=0)
+        if not self.server:
+            logging.error(f"server_exit() called on non-server client: {self.name}")
+            return
 
-            if not self.server.synced:
-                IRCD.do_delayed_process()
+        netsplit_reason = self.name + ' ' + self.uplink.name
 
+        # End the netjoin batch if it hasn't been ended by EOS due to sudden connection drop.
+        for batch in Batch.pool:
+            started_by = self if self.local else self.uplink
+            if batch.started_by in [started_by, started_by.direction] and batch.batch_type == "netjoin":
+                batch.end()
+
+        if self.server.synced:
+            if self.local:
+                IRCD.log(self.uplink, "error", "link", "LINK_LOST", f"Lost connection to server {self.name}: {reason}", sync=0)
+            if not Batch.find_batch_by(self.direction):
+                Batch.create_new(started_by=self.direction, batch_type="netsplit", additional_data=netsplit_reason)
+        else:
+            if self.local and not self.local.incoming and not self.server.link.auto_connect:
+                IRCD.log(IRCD.me, "error", "link", "LINK_OUT_FAIL", f"Unable to connect to {self.name}: {reason}", sync=0)
+            IRCD.do_delayed_process()
+
+        if self.server.authed:
             logging.debug(f"[server_exit()] Broadcasting to all other servers that server {self.name} has quit")
             data = f"SQUIT {self.name} :{reason.removeprefix(':')}"
             IRCD.send_to_servers(self, [], data)
 
-            self.server.squit = 1
-            for remote_client in [c for c in Client.table if c.uplink == self]:
-                if remote_client.server:
-                    logging.debug(f"Exiting server {remote_client.name} because it was uplinked to {self.name}")
-                remote_client.exit(netsplit_reason)
+        self.server.squit = 1
+        for remote_client in [c for c in Client.table if c.uplink == self]:
+            if remote_client.server:
+                logging.debug(f"Exiting server {remote_client.name} because it was uplinked to {self.name}")
+            remote_client.exit(netsplit_reason)
 
-            if self in IRCD.send_after_eos:
-                del IRCD.send_after_eos[self]
+        if self in IRCD.send_after_eos:
+            del IRCD.send_after_eos[self]
 
-            IRCD.run_hook(Hook.SERVER_DISCONNECT, self)
+        for batch in Batch.pool:
+            started_by = self if self.local else self.uplink
+            if batch.started_by in [started_by, started_by.direction] and batch.batch_type == "netsplit":
+                batch.end()
 
-            for batch in Batch.pool:
-                if batch.started_by == self and batch.batch_type == "netsplit":
-                    batch.end()
-
-        except Exception as ex:
-            logging.exception(ex)
+        IRCD.run_hook(Hook.SERVER_DISCONNECT, self)
 
     def kill(self, reason: str, killed_by=None) -> None:
         if not self.user:
@@ -433,8 +392,6 @@ class Client:
                 self.send([], data)
 
             self.exit(quitreason)
-            for channel in [c for c in IRCD.get_channels() if c.is_founder(self)]:
-                channel.founder = {}
             data = f":{killed_by.id} KILL {self.id} :{reason}"
             IRCD.send_to_servers(killed_by, mtags=[], data=data)
 
@@ -444,15 +401,14 @@ class Client:
     def exit(self, reason: str, sock_error: bool = 0, sockclose: int = 1) -> None:
         if IRCD.current_link_sync == self:
             IRCD.current_link_sync = None
-            # logging.debug(f"[exit()] current_link_sync for {self.name} unset.")
         if self not in Client.table:
             # Already removed.
             self.close_socket()
             return
         if self in Client.table:
             Client.table.remove(self)
-        if self.registered:
-            logging.debug(f"Exiting client {self.name}[{self.ip}]. Reason: {reason}")
+        # if self.registered:
+        #     logging.debug(f"Exiting client {self.name}[{self.ip}]. Reason: {reason}")
         if self.server:
             self.server_exit(reason)
         if self.user and self.registered:
@@ -477,8 +433,9 @@ class Client:
             if sockclose:
                 self.close_socket()
 
-        hook = Hook.LOCAL_QUIT if self.local else Hook.REMOTE_QUIT
-        IRCD.run_hook(hook, self, reason)
+        if self.registered:
+            hook = Hook.LOCAL_QUIT if self.local else Hook.REMOTE_QUIT
+            IRCD.run_hook(hook, self, reason)
         gc.collect()
         del self
 
@@ -564,36 +521,33 @@ class Client:
         if self.is_flood_safe():
             self.local.sendq_buffer = []
             return
+
         if self.local and self.user:
             if not self.local.flood_penalty_time:
                 self.local.flood_penalty_time = int(time())
-            if self.class_:
-                sendq = self.class_.sendq
-                recvq = self.class_.recvq
-            else:
-                sendq, recvq = 65536, 65536
+
+            sendq = self.class_.sendq if self.class_ else 65536
+            recvq = self.class_.recvq if self.class_ else 65536
 
             real_buffer_str = '\r\n'.join([e[1] for e in self.local.backbuffer])
             real_sendq_str = '\r\n'.join([e[1] for e in self.local.sendq_buffer])
+
             buffer_len_recv = len(real_buffer_str)
             buffer_len_send = len(real_sendq_str)
-            if buffer_len_recv >= recvq:
-                flood_type = "recvq"
-            else:
-                flood_type = "sendq"
+
+            flood_type = "recvq" if buffer_len_recv >= recvq else "sendq"
+            flood_limit = recvq if flood_type == "recvq" else sendq
+            flood_amount = buffer_len_recv if flood_type == "recvq" else buffer_len_send
+
             if buffer_len_recv > recvq or buffer_len_send > sendq:
-                flood_amount = buffer_len_recv if flood_type == "recvq" else buffer_len_send
-                flood_limit = recvq if flood_type == "recvq" else sendq
                 if self.registered:
                     IRCD.send_snomask(self, 'f',
                                       f"*** Flood -- {self.name} ({self.user.username}@{self.user.realhost})"
                                       f"has reached their max {'RecvQ' if flood_type == 'recvq' else 'SendQ'} ({flood_amount}) while the limit is {flood_limit}")
                 self.exit("Excess Flood")
-                return
             else:
                 cmd_len = len(self.local.recvbuffer)
-                max_cmds = recvq / 50
-                max_cmds = int(max_cmds)
+                max_cmds = int(recvq / 50)
                 if (cmd_len >= max_cmds) and (self.registered and self.seconds_since_signon() >= 1):
                     if self.registered:
                         IRCD.send_snomask(self, 'f',
@@ -602,18 +556,16 @@ class Client:
                     self.exit("Excess Flood")
                     return
 
-                if self.user:
-                    flood_penalty_treshhold = 1_000_000 if 'o' not in self.user.modes else 10_000_000
-                    if int(time()) - self.local.flood_penalty_time >= 60:
-                        self.local.flood_penalty = 0
-                        self.local.flood_penalty_time = 0
-                    if self.local.flood_penalty >= flood_penalty_treshhold:
-                        if self.registered:
-                            IRCD.send_snomask(self, 'f',
-                                              f"*** Flood -- {self.name} ({self.user.username}@{self.user.realhost}) has reached "
-                                              f"their max flood penalty ({self.local.flood_penalty}) while the limit is {flood_penalty_treshhold}")
-                        self.exit("Excess Flood")
-                        return
+                flood_penalty_treshhold = 1_000_000 if 'o' not in self.user.modes else 10_000_000
+                if int(time()) - self.local.flood_penalty_time >= 60:
+                    self.local.flood_penalty = 0
+                    self.local.flood_penalty_time = 0
+                if self.local.flood_penalty >= flood_penalty_treshhold:
+                    if self.registered:
+                        IRCD.send_snomask(self, 'f',
+                                          f"*** Flood -- {self.name} ({self.user.username}@{self.user.realhost}) has reached "
+                                          f"their max flood penalty ({self.local.flood_penalty}) while the limit is {flood_penalty_treshhold}")
+                    self.exit("Excess Flood")
 
     def assign_host(self):
         if not self.user:
@@ -626,10 +578,10 @@ class Client:
             return
 
         if IRCD.get_setting("resolvehost"):
-            realhost = ''
+            realhost = IRCD.hostcache.get(self.ip, None)
             cache = 0
-            if self.ip in IRCD.hostcache:
-                _, realhost = IRCD.hostcache[self.ip]
+            if realhost:
+                realhost = realhost[1]
                 cache = 1
             try:
                 if not realhost:
@@ -638,74 +590,63 @@ class Client:
                 if realhost == "localhost" and not ipaddress.IPv4Address(self.ip).is_private:
                     # https://ipinfo.io/AS7552/27.71.152.0/21
                     # All those IP addresses seem to resolve to localhost.
-                    raise Exception
-                self.user.realhost = realhost
-                IRCD.server_notice(self, f"*** Found your hostname: {self.user.realhost}{' [cached]' if cache else ''}")
+                    realhost = self.ip
+
+                IRCD.server_notice(self, f"*** Found your hostname: {realhost}{' [cached]' if cache else ''}")
             except:
-                self.user.realhost = self.ip
+                realhost = self.ip
                 IRCD.server_notice(self, f"*** Couldn't resolve your hostname, using IP address instead")
 
         else:
             IRCD.server_notice(self, f"*** Host resolution disabled, using IP address instead")
-            self.user.realhost = self.ip
+            realhost = self.ip
 
+        self.user.realhost = realhost
         self.user.cloakhost = IRCD.get_cloak(self)
 
     def add_user_modes(self, modes):
         if not self.local:
             logging.error(f"Attempted to call add_user_modes() on non-local user: {self.name} {modes}")
             return
-        for mode in list(modes):
-            if not IRCD.get_usermode_by_flag(mode):
-                logging.debug(f"[add_user_modes()] Could not find mode: {mode}")
-                modes.remove(mode)
-                continue
 
-        filtered_modes = ''
-        for mode in [m for m in modes if m not in self.user.modes]:
-            filtered_modes += mode
+        valid_modes = []
+        for mode in modes:
+            if IRCD.get_usermode_by_flag(mode) and mode not in self.user.modes:
+                valid_modes.append(mode)
 
-        if filtered_modes:
-            modes = ''.join(filtered_modes)
-            self.user.modes += modes
-            data = f":{self.name} MODE {self.name} +{modes}"
+        if valid_modes:
+            new_modes = ''.join(valid_modes)
+            self.user.modes += new_modes
+            data = f":{self.name} MODE {self.name} +{new_modes}"
             self.send([], data)
-            data = f":{self.id} MODE {self.name} +{modes}"
-            IRCD.send_to_servers(self, [], data=data)
+            data = f":{self.id} MODE {self.name} +{new_modes}"
+            IRCD.send_to_servers(self, [], data)
 
     def assign_class(self):
         """
         Assign class only after registration is complete.
         """
+
         clientmask_ip = f"{self.user.username}@{self.ip}"
         clientmask_host = f"{self.user.username}@{self.user.realhost}"
+
         for allow in IRCD.configuration.allow:
-            allow_match = is_match(allow.mask, clientmask_host) or is_match(allow.mask, clientmask_ip)
-            if allow_match:
+            if is_match(allow.mask, clientmask_host) or is_match(allow.mask, clientmask_ip):
                 allow_class = allow
                 if allow.password and self.local.authpass != allow.password:
-                    logging.debug(f"Matching class '{allow_class}' requires a password, but password was invalid.")
-                    logging.debug(f"Required: {allow.password}, received: {self.local.authpass}")
-                    # Reject policy? Next class or kill client?:
                     if "reject-on-auth-fail" in allow.options:
-                        logging.debug(f"Killing client: reject-on-auth-fail")
                         self.sendnumeric(Numeric.ERR_PASSWDMISMATCH)
                         self.exit("Invalid password")
                         return 0
-                    logging.debug(f"Allow-block requires a password, but the correct password was not given.")
-                    logging.debug("Trying next allow block...")
                     continue
 
-                # Check if allow-block as options.
                 if allow.options:
                     if "tls" in allow.options and not self.local.tls:
-                        logging.debug(f"Allow-block requires TLS, client is plain. Trying next allow-block...")
                         continue
 
-                # Check for "block" entries.
                 if allow.block:
                     for entry in allow.block:
-                        clientmask_ip = f"{self.user.username}@{self.local.ip}"
+                        clientmask_ip = f"{self.user.username}@{self.ip}"
                         clientmask_host = f"{self.user.username}@{self.user.realhost}"
                         if is_match(entry, clientmask_ip) or is_match(entry, clientmask_host):
                             logging.info(f"Client {self} blocked by '{allow_class}': {entry}")
@@ -717,21 +658,19 @@ class Client:
                     self.exit(f"You are not authorised to connect to this server")
                     return 0
 
-                self.set_class_obj(class_match)
-
-                self.local.allow = allow_class
-
-                ip_count = len([c.local for c in IRCD.local_clients() if c.class_ and c.class_.name == allow.class_obj and c.ip == self.ip])
-                class_count = len([c.local for c in Client.table if c.local and c.class_ == self.class_])
+                ip_count = len([c for c in IRCD.local_clients() if c.class_ == class_match and c.ip == self.ip])
+                class_count = len([c for c in IRCD.local_clients() if c.class_ == class_match])
 
                 if ip_count > allow.maxperip:
                     self.exit("Maximum connections from this IP reached.")
                     return 0
 
-                if class_count > self.class_.max:
+                if class_count > class_match.max:
                     self.exit("Maximum connections for this class reached")
                     return 0
-                break
+
+                self.set_class_obj(class_match)
+                return 1
 
         if not self.class_:
             self.exit(f"You are not authorised to connect to this server")
@@ -740,19 +679,15 @@ class Client:
         return 1
 
     def register_user(self):
-        # Assign class here.
         if not self.assign_class():
             return
 
-        """ Calling this in a thread so we can delay PRE_CONNECT hook without affecting other clients. """
-        # Thread(target=welcome_user, args=(client,)).start()
         self.welcome_user()
-        return
 
     def welcome_user(self):
         if self.registered:
             return
-        # logging.debug(f"New local user {self.name} UID: {self.id}")
+
         for result, hook_obj in Hook.call(Hook.PRE_CONNECT, args=(self,)):
             if result == Hook.DENY:
                 logging.debug(f"Connection process denied for user {self.name} by module: {hook_obj}")
@@ -796,14 +731,11 @@ class Client:
         self.sync(cause="welcome_user()")
         self.add_flag(Flag.CLIENT_REGISTERED)
 
-        # Give modes on connect.
         if conn_modes := IRCD.get_setting("modes-on-connect"):
-            conn_modes = ''.join([m for m in conn_modes if m.isalpha() and m not in self.user.modes])
-            modes = list(conn_modes)
+            modes = list(set(m for m in conn_modes if m.isalpha() and m not in self.user.modes))
             if self.local.tls:
                 modes.append('z')
-            modes = list(set(modes))
-            if len(modes) > 0:
+            if modes:
                 self.add_user_modes(modes)
 
         IRCD.run_hook(Hook.LOCAL_CONNECT, self)
@@ -841,74 +773,71 @@ class Client:
         try:
             for line in list(self.local.recvbuffer):
                 time_to_execute, recv = line
-                if self.user:
-                    if time_to_execute - time() > 0 and 'o' not in self.user.modes:
-                        continue
+                if self.user and time_to_execute - time() > 0 and 'o' not in self.user.modes:
+                    continue
 
                 cmd = recv.split()[0].upper()
 
                 # logging.warning(f"Msg from {self.name}: {recv}")
-                if self.server and IRCD.current_link_sync and IRCD.current_link_sync != self and cmd != "SQUIT":
-                    if self not in IRCD.process_after_eos:
-                        IRCD.process_after_eos.append(self)
-                        logging.debug(f"Currently in the middle of syncing to {IRCD.current_link_sync.name}, processing {self.name} recvbuffer after.")
+                if (self.server and IRCD.current_link_sync and IRCD.current_link_sync != self
+                        and cmd != "SQUIT" and self not in IRCD.process_after_eos):
+                    IRCD.process_after_eos.append(self)
+                    logging.debug(f"Currently syncing to {IRCD.current_link_sync.name}, processing {self.name} recvbuffer after.")
                     continue
 
-                if line in self.local.recvbuffer:
-                    self.local.recvbuffer.remove(line)
+                self.local.recvbuffer.remove(line)
 
                 if not (recv := recv.strip()):
                     continue
 
                 parsed_tags = []
-                if recv[0] == '@':
-                    tag_data = recv.split()[0][1:].split(';')
+                if recv.startswith('@'):
+                    tag_data = recv[1:].split()[0].split(';')
                     parsed_tags = IRCD.parse_remote_mtags(self, tag_data)
-                    if self.user:
-                        recv = ' '.join(recv.split(' ')[1:])
-                    else:
-                        split_point = recv.find(" :")
-                        recv = recv[split_point + 1:]
+                    recv = ' '.join(recv.split(' ')[1:]) if self.user else recv[recv.find(" :") + 1:]
                     if not recv.strip():
                         continue
 
                 source_client = self
-                find_source = recv.split()[0][1:]
-                if recv[0] == ':':
+                if recv.startswith(':'):
+                    find_source = recv[1:].split()[0]
                     if self.server:
                         if not IRCD.find_client(find_source) and self.server.authed:
                             logging.warning(f"Unknown server message from {find_source}: {recv}")
                             continue
-                        # if not source_client:
-                        #     source_client = self
                         recv = recv.split(' ', maxsplit=1)[1]
-                        if not (source_client := IRCD.find_client(find_source)):
-                            source_client = self
-                        # logging.warning(f"Source client changed from {self.name} to {source_client.name}")
-                        if self.server.authed:
-                            """ Change source_client """
-                            if not (source_client := IRCD.find_client(find_source)):
-                                source_client = self
-                        elif not (source_client := IRCD.find_user(find_source)):
-                            source_client = self
+                        source_client = IRCD.find_client(find_source) or self
+                        if not self.server.authed:
+                            source_client = IRCD.find_user(find_source) or self
 
-                seen = []
-                for tag in list(parsed_tags):
-                    if tag.name in seen:
-                        parsed_tags.remove(tag)
-                        continue
-                    seen.append(tag.name)
+                # source_client = self
+                # find_source = recv.split()[0][1:]
+                # if recv[0] == ':':
+                #     if self.server:
+                #         if not IRCD.find_client(find_source) and self.server.authed:
+                #             logging.warning(f"Unknown server message from {find_source}: {recv}")
+                #             continue
+                #         # if not source_client:
+                #         #     source_client = self
+                #         recv = recv.split(' ', maxsplit=1)[1]
+                #         if not (source_client := IRCD.find_client(find_source)):
+                #             source_client = self
+                #         # logging.warning(f"Source client changed from {self.name} to {source_client.name}")
+                #         if self.server.authed:
+                #             """ Change source_client """
+                #             if not (source_client := IRCD.find_client(find_source)):
+                #                 source_client = self
+                #         elif not (source_client := IRCD.find_user(find_source)):
+                #             source_client = self
+
+                seen = set()
+                parsed_tags = [tag for tag in parsed_tags if not (tag.name in seen or seen.add(tag.name))]
 
                 if self.server:
                     source_client.mtags = parsed_tags
 
                 source_client.recv_mtags = parsed_tags
                 recv = recv.split(' ')
-                for result, callback in Hook.call(Hook.PRE_COMMAND, args=(self, recv)):
-                    if result == Hook.DENY:
-                        logging.debug(f"PRE_COMMAND denied by {callback}")
-                        logging.debug(f"Recv: {recv}")
-                        return
                 command = recv[0].upper()
                 if (cmd := Command.find_command(source_client, command, *recv)) not in [0, 1]:
                     result, *args = cmd.check(source_client, recv)
@@ -932,11 +861,10 @@ class Client:
             logging.error(f"Wrong data type @ send(): {data}")
             return
 
-        data = data.strip()
-        if not data or self.exitted \
-                or self not in Client.table or not self.local \
-                or not self.local.socket or (self.local.socket and self.local.socket.fileno() < 0):
+        if self.exitted or self not in Client.table or not self.local or not self.local.socket or self.local.socket.fileno() < 0:
             return
+
+        data = data.strip()
         if call_hook:
             data_list = data.split(' ')
             IRCD.run_hook(Hook.PACKET, IRCD.me, self.direction, self, data_list)
@@ -948,27 +876,22 @@ class Client:
             data = f"@" + ';'.join([t.string for t in mtags]) + ' ' + data
 
         if IRCD.use_poll:
-            # logging.debug(f"Setting {self.local.socket} flags to write mode")
             IRCD.poller.modify(self.local.socket, select.POLLOUT)
+
         self.local.sendbuffer += data + "\r\n"
 
         if self.user and 'o' not in self.user.modes:
-            sendq_buffer_time = time()
             """ Keep the backbuffer entry duration based on the incoming data length. """
             delay = len(data) / 10
-            sendq_buffer_time += delay
+            sendq_buffer_time = time() + delay
             self.local.sendq_buffer.append([sendq_buffer_time, data])
             self.check_flood()
 
     def direct_send(self, data):
         """ Directly sends data to a socket. """
-        write_time = 0
-        write_start = time()
-        debug_out = 0 if self.server else 0
+        debug_out = 0
         try:
-            for line in data.split('\n'):
-                if not line.strip():
-                    continue
+            for line in [line for line in data.split('\n') if line.strip()]:
 
                 sent = self.local.socket.send(bytes(line + "\r\n", "utf-8"))
                 self.local.bytes_sent += sent
@@ -984,29 +907,13 @@ class Client:
 
                 if debug_out:
                     logging.debug(f"[OUT] {self.name}[{self.ip}] < {line}")
-                write_done = time()
-                write_time = (write_done - write_start) * 1000
-                if write_time >= 100:
-                    logging.debug(f"Writing to {self.name}[{self.ip}] took {write_time:.2f} millseconds seconds. Data: {line}")
 
         except OpenSSL.SSL.WantReadError:
             """ Not ready to write yet. """
             return 0
 
-        except (OpenSSL.SSL.WantReadError, OpenSSL.SSL.SysCallError, OpenSSL.SSL.Error, Exception) as ex:
+        except (OpenSSL.SSL.WantReadError, OpenSSL.SSL.SysCallError, OpenSSL.SSL.Error, BrokenPipeError, Exception) as ex:
             error_message = f"Write error: {str(ex)}"
-            if (isinstance(ex, OpenSSL.SSL.WantReadError)
-                    or isinstance(ex, OpenSSL.SSL.SysCallError)
-                    or isinstance(ex, OpenSSL.SSL.Error)
-                    or isinstance(ex, ConnectionAbortedError)
-                    and not self.registered):
-                """ Most likely a non-TLS socket on a TLS port. Not showing exception message. """
-                pass
-            else:
-                logging.exception(ex)
-                if write_time >= 100:
-                    logging.warning(f"Failed to write to {self.name}[{self.ip}] after {write_time} milliseconds. Data: {data}")
-
             self.exit(error_message)
 
         return 1
@@ -1014,7 +921,7 @@ class Client:
 
 @dataclass(eq=False)
 class LocalClient:
-    allow: Allow = None
+    allow: "Allow" = None  # noqa: F821
     authpass: str = ''
     socket: socket = None
     caps: list = field(default_factory=list)
@@ -1044,26 +951,15 @@ class User:
     account: str = '*'
     modes: str = ''
     operlogin: str = None  # The oper account as defined in confg.
-    operclass: Operclass = None
-    server: Server = None
+    operclass: "Operclass" = None  # noqa: F821
+    server: "Server" = None
     username: str = ''
     realhost: str = ''
     cloakhost: str = ''
     snomask: str = ''
     swhois: list = field(default_factory=list)  # Swhois dataclasses
     away: str = ''
-    away_since: int = 0
     oper = None
-
-    @property
-    def channels(self):
-        channels = []
-        for channel in Channel.table:
-            for member in channel.members:
-                if member.client.user == self:
-                    channels.append(channel)
-                    break
-        return channels
 
 
 @dataclass(eq=False)
@@ -1114,7 +1010,7 @@ class Command:
     parameters: int = 0
     flags: int = None
     func: Callable = None
-    module: Module = None
+    module: "Module" = None  # noqa: F821
 
     @staticmethod
     def add(module, func: Callable, trigger: str, params: int = 0, *flags: Flag):
@@ -1183,8 +1079,9 @@ class Command:
                     if alias.type == "services" and target.uplink.name.lower() != IRCD.get_setting("services").lower():
                         return 1
 
-                if target:
-                    Command.do(client, "PRIVMSG", alias.target, *recv[1:])
+                if target_client := IRCD.find_client(alias.target):
+                    data = f":{client.name} PRIVMSG {target_client.name}@{IRCD.get_setting('services')} :{' '.join(recv[1:])}"
+                    IRCD.send_to_one_server(target_client.uplink, client.mtags, data)
                     return 1
         return 0
 
@@ -1193,6 +1090,11 @@ class Command:
         try:
             trigger = recv[0]
             if cmd := Command.find_command(client, trigger):
+                for result, callback in Hook.call(Hook.PRE_COMMAND, args=(client, recv)):
+                    if result == Hook.DENY:
+                        logging.debug(f"PRE_COMMAND denied by {callback}")
+                        logging.debug(f"Recv: {recv}")
+                        return
                 client.last_command = recv
                 cmd.func(client, recv=list(recv))
                 if client.user:
@@ -1211,7 +1113,7 @@ class Usermode:
     is_global: int = 1
     unset_on_deoper: int = 0
     can_set: Callable = None
-    module: Module = None
+    module: "Module" = None  # noqa: F821
     desc: str = ''
 
     @staticmethod
@@ -1288,7 +1190,7 @@ class Channelmode:
     is_ok: Callable = None
     get_param: callable = lambda p: None
     conv_param: callable = lambda p: p
-    module: Module = None
+    module: "Module" = None  # noqa: F821
     desc: str = ''
     param_help: str = ''
 
@@ -1377,7 +1279,7 @@ class Snomask:
     table: ClassVar[list] = []
     flag: str = ''
     is_global: int = 0
-    module: Module = None
+    module: "Module" = None  # noqa: F821
 
     @staticmethod
     def add(module, flag: str, is_global: int = 0, desc=''):
@@ -1399,6 +1301,7 @@ class Channel:
     name: str = ''
     # This list will hold ChannelMember objects.
     members: list = field(default_factory=list)
+    member_by_client: dict = field(default_factory=dict)
     invites: list = field(default_factory=list)
     modes: str = ''
     membercount: int = 0
@@ -1410,44 +1313,14 @@ class Channel:
     creationtime: int = 0
     local_creationtime: int = 0
     remote_creationtime: int = 0
-    founder: dict = field(default_factory=dict)
     List: dict = field(default_factory=dict)
 
     # This dict keeps track of which users have seen other users on the channel.
     seen_dict: dict = field(default_factory=dict)
 
-    @staticmethod
-    def initialize_class():
-        Hook.add(Hook.LOOP, Channel.expire_founder)
-
-    @staticmethod
-    def expire_founder():
-        for channel in [c for c in Channel.table if c.founder]:
-            last_seen = channel.founder["last_seen"]
-            if int(time()) >= last_seen + 3600 and not channel.founder_is_online():
-                channel.set_founder(client=None)
-
     def init_lists(self):
         for mode in [m.flag for m in Channelmode.table if m.type == Channelmode.LISTMODE]:
             self.List[mode] = []
-
-    def set_founder(self, client=None):
-        if not client:
-            self.founder = {}
-            return
-        if self.name[0] != '+' and client.user and client.local:
-            self.founder = {"last_seen": int(time()),
-                            "fullmask": client.fullmask,
-                            "certfp": client.get_md_value("certfp"),
-                            "ip": client.ip,
-                            "fullrealhost": client.fullrealhost}
-
-    def is_founder(self, client):
-        certfp = client.get_md_value("certfp")
-        return client.fullrealhost == self.founder.get("fullrealhost") or (certfp and certfp == self.founder.get("certfp"))
-
-    def founder_is_online(self):
-        return next((c for c in self.clients() if self.is_founder(c)), 0)
 
     def can_join(self, client: Client, key: str):
         """
@@ -1470,7 +1343,7 @@ class Channel:
         Check if `user` can see `target` on `channel`
         """
 
-        if user == target:
+        if user == target or target.server:
             return 1
 
         if target.is_stealth():
@@ -1482,40 +1355,49 @@ class Channel:
         return 1
 
     def clients(self, client_cap=None, prefix=None) -> list:
-        clients = []
-        for client in [m.client for m in self.members]:
-            if client_cap and not client.has_capability(client_cap):
-                continue
-            if prefix and prefix not in self.get_prefix_sorted_str(client) and 'o' not in client.user.modes:
-                continue
-            clients.append(client)
-        return clients
+        result = []
+        append_result = result.append
+        get_prefix_sorted_str = self.get_prefix_sorted_str
+        prefix_check = prefix is not None
+        client_cap_check = client_cap is not None
 
-    def get_clients_generator(self, client_cap=None, prefix=None):
-        clients = (m.client for m in self.members
-                   if (not client_cap or client_cap and m.client.has_capability(client_cap))
-                   and (not prefix or prefix and (prefix in self.get_prefix_sorted_str(m.client) or 'o' in m.client.user.modes)))
-        return clients
+        for client in self.member_by_client:
 
-    def member_modes(self, client: Client):
-        for member in self.members:
-            if member.client == client:
-                # User is on channel.
-                return member.modes
-        return ''
+            if client_cap_check and not client.has_capability(client_cap):
+                continue
+
+            if prefix_check:
+                membermodes_sorted = self.get_membermodes_sorted(reverse=False)
+                prefix_rank_map = {obj.prefix: obj.rank for obj in membermodes_sorted}
+
+                specified_rank = min((prefix_rank_map[pfx] for pfx in prefix if pfx in prefix_rank_map), default=0)
+                client_rank = self.get_sender_rank(client)
+
+                if 'o' not in client.user.modes and client_rank < specified_rank:
+                    continue
+
+            append_result(client)
+
+        return result
 
     def find_member(self, client):
-        return next((m for m in self.members if m.client == client), 0)
+        return self.member_by_client.get(client, 0)
 
     @staticmethod
-    def get_membermodes_sorted() -> list:
-        return sorted([cmode for cmode in Channelmode.table if cmode.type == cmode.MEMBER and cmode.prefix and cmode.rank], key=lambda c: c.rank, reverse=True)
+    def get_membermodes_sorted(reverse=True) -> list:
+        return sorted([cmode for cmode in Channelmode.table if cmode.type == cmode.MEMBER and cmode.prefix and cmode.rank], key=lambda c: c.rank, reverse=reverse)
 
     def get_modes_of_client_str(self, client: Client) -> str:
         modes = ''
         for cmode in [cmode for cmode in Channel.get_membermodes_sorted() if self.client_has_membermodes(client, cmode.flag)]:
             modes += cmode.flag
         return modes
+
+    def get_sender_rank(self, client):
+        membermodes_sorted = self.get_membermodes_sorted(reverse=False)
+        client_prefixes_str = self.get_prefix_sorted_str(client)
+        client_ranks = [mode.rank for mode in membermodes_sorted if mode.prefix in client_prefixes_str]
+        return max(client_ranks) if client_ranks else 0
 
     def get_prefix_sorted_str(self, client):
         prefix = ''
@@ -1534,19 +1416,24 @@ class Channel:
 
     def broadcast(self, client, data):
         IRCD.new_message(client)
-        for member in [member for member in self.members if member.client.local]:
-            if not self.user_can_see_member(member.client, client):
+        batch_event = not client.uplink.server.synced
+        user_can_see_member = self.user_can_see_member
+        client_mtags = client.mtags
+
+        for broadcast_to in self.member_by_client:
+            if not broadcast_to.local or not user_can_see_member(broadcast_to, client):
                 continue
-            if not client.uplink.server.synced:
-                Batch.check_batch_event(mtags=client.mtags, started_by=client, target_client=member.client, event="netjoin")
-            member.client.send(client.mtags, data)
+            if batch_event:
+                Batch.check_batch_event(mtags=client_mtags, started_by=client, target_client=broadcast_to, event="netjoin")
+            broadcast_to.send(client_mtags, data)
 
     def create_member(self, client):
         if not self.find_member(client):
             member = ChannelMember()
             member.join_time = int(time())
             member.client = client
-            self.members.append(member)
+            # self.members.append(member)
+            self.member_by_client[client] = member
             self.seen_dict[client] = []
             return 1
 
@@ -1678,7 +1565,8 @@ class Channel:
     def remove_client(self, client: Client):
         self.membercount -= 1
         if member := self.find_member(client):
-            self.members.remove(member)
+            # self.members.remove(member)
+            self.member_by_client.pop(member.client, None)
         else:
             logging.debug(f"Unable to remove {client.name} (uplink={client.uplink.name}) from channel {self.name}: member not found")
 
@@ -1689,25 +1577,19 @@ class Channel:
         if self.membercount == 0 and 'P' not in self.modes:
             IRCD.destroy_channel(IRCD.me, self)
 
-        if self.is_founder(client):
-            if client not in Client.table:
-                self.founder["last_seen"] = int(time())
-
     def do_part(self, client: Client, reason: str = ''):
         reason = reason[:128]
         data = f":{client.fullmask} PART {self.name}{' :' + reason if reason else ''}"
-        for member in [m for m in self.members if m.client.local]:
-            if not self.user_can_see_member(member.client, client) or client not in self.seen_dict[member.client]:
+        for member_client in [c for c in self.member_by_client if c.local]:
+            if not self.user_can_see_member(member_client, client) or client not in self.seen_dict[member_client]:
                 continue
-            member.client.send(client.mtags, data)
+            member_client.send(client.mtags, data)
 
         if self.name[0] != '&':  # and (client.local or (client.server and client.server.synced)):
             data = f":{client.id} PART {self.name}{' :' + reason if reason else ''}"
             IRCD.send_to_servers(client, client.mtags, data)
 
         self.remove_client(client)
-        if self.is_founder(client):
-            self.founder = {}
 
         if (client.local and client.registered) or (not client.local and client.uplink.server.synced) and not client.ulined:
             msg = f"*** {client.name} ({client.user.username}@{client.user.realhost}) has left channel {self.name}"
@@ -1739,20 +1621,20 @@ class Channel:
         if invite := self.get_invite(client):
             self.del_invite(invite)
 
-        for member in [m for m in self.members if m.client.local]:
-            if not self.user_can_see_member(member.client, client):
+        for member_client in [c for c in self.member_by_client if c.local]:
+            if not self.user_can_see_member(member_client, client):
                 continue
 
-            self.show_join_message(mtags, member.client, client)
+            self.show_join_message(mtags, member_client, client)
 
-        if len(self.members) == 1 and client.local:
+        if self.membercount == 1 and client.local:
             if self.name[0] != '+' and 'P' not in self.modes:
                 self.member_give_modes(client, 'o')
             # Ensure that 'modes-on-join' are also set on +channels.
             if modes_on_join := IRCD.get_setting("modes-on-join"):
                 Command.do(IRCD.me, "MODE", self.name, *modes_on_join.split(), str(self.creationtime))
 
-        if self.name[0] != '&':
+        if self.name[0] != '&' and IRCD.local_servers():
             prefix = self.get_sjoin_prefix_sorted_str(client)
             data = f":{client.uplink.id} SJOIN {self.creationtime} {self.name} :{prefix}{client.id}"
             IRCD.send_to_servers(client, client.mtags, data)
@@ -1761,9 +1643,6 @@ class Channel:
             event = "LOCAL_JOIN" if client.local else "REMOTE_JOIN"
             msg = f"*** {client.name} ({client.user.username}@{client.user.realhost}) has joined channel {self.name}"
             IRCD.log(client, "info", "join", event, msg, sync=0)
-
-        if self.name[0] != '+' and self.is_founder(client) and client.local and 'r' not in self.modes:
-            Command.do(IRCD.me, "MODE", self.name, "+o", client.name)
 
 
 @dataclass
@@ -1880,14 +1759,12 @@ class Configuration:
 
 @dataclass(eq=False)
 class IRCD:
-    me: None
+    me: "Client" = None
     configuration: Configuration = Configuration()  # Final configuration class.
-    build_conf: Configuration = Configuration()  # Configuration class.
-    # configuration: None
     hostinfo: str = ''
     conf_path: str = ''
     conf_file: str = ''
-    isupport: ClassVar[list] = []  # Isupport classes
+    isupport: ClassVar[list] = []
     throttle: ClassVar[dict] = {}
     hostcache: ClassVar[dict] = {}
     maxusers: int = 0
@@ -1896,9 +1773,10 @@ class IRCD:
     global_user_count: int = 0
     local_client_count: int = 0
     global_client_count: int = 0
-    channels: int = 0
     channel_count: int = 0
     rehashing: int = 0
+    rootdir: str = ''
+    confdir: str = ''
     default_tlsctx = None
     current_link_sync: Client = None
     process_after_eos: ClassVar[list] = []
@@ -2160,14 +2038,6 @@ class IRCD:
 
     @staticmethod
     def parse_remote_mtags(self, remote_mtags) -> list:
-        """
-        Received remote tag: msgid=43c8a33695c511edbaaa
-        Received remote tag: dev.provisionweb.org/oper=admin
-        Received remote tag: time=2023-01-16T17:43:19.400Z
-
-        Add these tags to outgoing messages to local users.
-        """
-
         mtags = []
         for tag in remote_mtags:
             value = None
@@ -2197,17 +2067,6 @@ class IRCD:
         IRCD.current_link_sync = None
 
     @staticmethod
-    def client_match_real_mask(client, mask):
-        """
-        Checks if `mask` matches any of `client` real mask or IP.
-        """
-        ident = client.user.username or '*'
-        masks = [f"{ident}@{client.user.realhost}", f"{ident}@{client.ip}", client.ip]
-        if len(mask) == 1 and any(is_match(mask[0], m) for m in masks):
-            return 1
-        return 0
-
-    @staticmethod
     def client_match_mask(client, mask):
         targets = [
             f"{client.name}!{client.user.username}@{client.user.realhost}",
@@ -2215,10 +2074,6 @@ class IRCD:
             f"{client.name}!{client.user.username}@{client.user.cloakhost}",
         ]
         return int(any(is_match(mask, target) for target in targets))
-
-    @staticmethod
-    def port_in_use(port: int):
-        return next((ls for ls in IRCD.configuration.listen if ls.port == port and ls.listening), 0)
 
     @staticmethod
     def run_parallel_function(target, args=(), delay=0.0):
@@ -2326,16 +2181,6 @@ class IRCD:
         utc_time = datetime.now(timezone.utc).timestamp()
         time_string = f"{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S')}.{round(utc_time % 1000)}Z"
         return time_string
-
-    @staticmethod
-    def get_allow(client):
-        # Assign a class to client based on allow-block.
-        for allow in IRCD.configuration.allow:
-            clientmask_ip = f"{client.user.username}@{client.ip}"
-            clientmask_hostname = f"{client.user.username}@{client.hostname}"
-            allow_match = is_match(allow.mask, clientmask_ip) or is_match(allow.mask, clientmask_hostname)
-            if allow_match:
-                return allow
 
     @staticmethod
     def get_class_from_name(name: str):
@@ -2451,10 +2296,11 @@ class IRCD:
     def find_user(find: str) -> Client | None:
         if not find:
             return
-        find = find.removeprefix(':')
+        user, server = (find.removeprefix(':').split('@', 1) + [''])[:2]
         for client in [c for c in Client.table if c.user and c.id]:
-            if find.lower() in [client.name.lower(), client.id.lower()]:
-                return client
+            if user.lower() in [client.name.lower(), client.id.lower()]:
+                if not server or (server and client.uplink.name.lower() == server.lower()):
+                    return client
 
     @staticmethod
     def find_channel(name: str):
@@ -2480,7 +2326,6 @@ class IRCD:
         channel.creationtime = int(time())
         channel.local_creationtime = int(time())
         channel.init_lists()
-        channel.set_founder(client)
         Channel.table.append(channel)
         IRCD.channel_count += 1
         IRCD.run_hook(Hook.CHANNEL_CREATE, client, channel)
@@ -2539,24 +2384,13 @@ class IRCD:
         return matches
 
     @staticmethod
-    def find_remote_server(find: str):
-        if not find:
-            return
-        find = find.removeprefix(':')
-        for client in Client.table:
-            if not client.server or not client.id or not client.registered:
-                continue
-            if find.lower() in [client.name.lower(), client.id.lower()]:
-                return client
-
-    @staticmethod
     def run_hook(hook, *args) -> None:
         for _, _ in Hook.call(hook, args=args):
             pass
 
     @staticmethod
     def new_message(client):
-        if not client.local:
+        if not client.local and client.recv_mtags:
             """ Remote clients mtags are already stored -- don't overwrite """
             return
         client.mtags.clear()
@@ -2574,6 +2408,7 @@ class IRCD:
         Send a message to a single server in a straight line
         skipping irrelevant servers.
         """
+
         destination = client if client.local else client.direction
         destination.send(mtags, data)
 
@@ -2582,11 +2417,11 @@ class IRCD:
         """
         :param client:      The server from where this message is coming from.
         """
+
         for to_client in [to_client for to_client in Client.table if to_client.server and to_client.local]:  # and to_client.server.synced]:
             if client and client != IRCD.me and to_client == client.direction or to_client.exitted:
                 continue
-            # logging.debug(f"Syncing from {client.name} to {to_client.name}: {data}")
-            # logging.debug(f"Client direction: {client.direction.name}")
+
             if IRCD.current_link_sync == to_client:
                 """ Destination server is not done syncing. """
                 logging.warning(f"[send_to_servers()] Trying to sync data to server {to_client.name} but we're still syncing. Sending after we receive their EOS.")
@@ -2624,7 +2459,7 @@ class IRCD:
         return next((sn for sn in Snomask.table if sn.flag == flag), 0)
 
     @staticmethod
-    def send_snomask(client: Client, flag: str, data: str):
+    def send_snomask(client: Client, flag: str, data: str, sendsno: int = 1):
         if not (snomask := IRCD.get_snomask(flag)):
             return
         data = data.removeprefix(':')
@@ -2633,7 +2468,7 @@ class IRCD:
             Batch.check_batch_event(mtags=c.mtags, started_by=source, target_client=c, event="netjoin")
             local_data = f":{source.name} NOTICE {c.name} :{data}"
             c.send([], local_data)
-        if snomask.is_global:
+        if snomask.is_global and sendsno:
             out_data = f":{source.id} SENDSNO {flag} :{data}"
             IRCD.send_to_servers(client, [], out_data)
 
@@ -2941,7 +2776,7 @@ class Numeric:
     ERR_ACCEPTNOT = 458, "{} :is not found on your ACCEPT list."
     ERR_NEEDMOREPARAMS = 461, ":{} Not enough parameters"
     ERR_ALREADYREGISTRED = 462, ":You may not reregister"
-    ERR_PASSWDMISMATCH = 464, "Password mismatch"
+    ERR_PASSWDMISMATCH = 464, ":Password mismatch"
     ERR_CHANNELISFULL = 471, "{} :Cannot join channel (+l)"
     ERR_UNKNOWNMODE = 472, "{} :unknown mode"
     ERR_INVITEONLYCHAN = 473, "{} :Cannot join channel (+i)"
@@ -3160,6 +2995,7 @@ class Hook:
 
     # This hook is called early in the connection phase.
     # Basically the only useful information in this phase is the IP address and the socket object of the connection.
+    # Arguments:        Client
     NEW_CONNECTION = hook()
 
     # Used by modules to check if the handshake is completed.
@@ -3219,12 +3055,12 @@ class Hook:
     # Arguments:    client, newnick
     REMOTE_NICKCHANGE = hook()
 
-    # Called before a local user attempts to join a channel.
-    # Arguments:    client, channel, key
-    # Return:       Hook.DENY or Hook.CONTINUE
+    # Called when a user joins the channel, but before sending TOPIC and NAMES.
+    # Does not return anything.
+    # Arguments:    client, channel
     PRE_LOCAL_JOIN = hook()
 
-    # Gets called when a local user joins a channel.
+    # Gets called when a local user has joined a channel.
     # Arguments:    client, channel
     LOCAL_JOIN = hook()
 
@@ -3285,20 +3121,20 @@ class Hook:
 
     # Called before a local user sends a channel message.
     # If you do not need to modify the message, you can use CAN_SEND_TO_CHANNEL hook.
-    # Arguments:    client, channel, message as list, so it can be modified
+    # Arguments:    client, channel, message as list, statusmsg_prefix
     # Returns:      Hook.DENY or Hook.CONTINUE
     PRE_LOCAL_CHANMSG = hook()
 
     # This is called after a local user has sent a channel message.
-    # Arguments:    client, channel, message
+    # Arguments:    client, channel, message, statusmsg_prefix
     LOCAL_CHANMSG = hook()
 
     # Called when a remote user sends a channel message.
-    # Arguments:    client, channel, message
+    # Arguments:    client, channel, message, statusmsg_prefix
     REMOTE_CHANMSG = hook()
 
     # Called before a local user sends a private user message.
-    # Arguments:    client, target, message as list, so it can be modified.
+    # Arguments:    client, target, message as list, statusmsg_prefix
     # Return:       Hook.DENY or Hook.CONTINUE
     PRE_LOCAL_USERMSG = hook()
 
@@ -3326,7 +3162,12 @@ class Hook:
 
     PRE_LOCAL_CHANNOTICE = hook()
 
+    # Called whenever a local channel notice has been sent.
+    # Arguments:    client, channel, message, statusmsg_prefix
     LOCAL_CHANNOTICE = hook()
+
+    # Called whenever a remote channel notice has been sent.
+    # Arguments:    client, channel, message, statusmsg_prefix
     REMOTE_CHANNOTICE = hook()
 
     PRE_LOCAL_USERNOTICE = hook()
@@ -3469,6 +3310,7 @@ class Hook:
         :param kwargs:      Command keyword arguments to pass to the book callback
         :return:            0 for success, anything else for process
         """
+
         kwargs = kwargs or {}
         if hook_type not in Hook.hooks:
             # Hook not implemented yet.
@@ -3479,15 +3321,15 @@ class Hook:
             try:
                 yield callback(*args, **kwargs), callback
             except Exception as ex:
-                logging.error(f"Args: {args}")
+                # logging.error(f"Args: {args}")
                 logging.exception(f"Exception in callback {callback}, args {args}: {ex}")
                 break
 
     @staticmethod
     def add(hook_type, callback, priority=0):
         Hook.hooks.setdefault(hook_type, [])
-        Hook.hooks[hook_type] = [(cb, prio) for cb, prio in Hook.hooks[hook_type] if cb.__module__ != callback.__module__]
-        Hook.hooks[hook_type].append((callback, priority))
+        if (callback, priority) not in Hook.hooks[hook_type]:
+            Hook.hooks[hook_type].append((callback, priority))
 
     @staticmethod
     def remove(callback):
@@ -3496,14 +3338,6 @@ class Hook:
             Hook.hooks[hook] = [(cb, prio) for cb, prio in Hook.hooks[hook] if cb != callback]
             if any(cb == callback for cb, _ in Hook.hooks[hook]):
                 logging.debug(f"Unhooked: {hook} -> {callback}")
-
-    @staticmethod
-    def remove_(callback):
-        for hook in list(Hook.hooks):
-            for hook_cb, priority in list(Hook.hooks[hook]):
-                if hook_cb == callback:
-                    Hook.hooks[hook].remove((callback, priority))
-                    logging.debug(f"Unhooked: {hook} -> {callback}")
 
 
 class Batch:
@@ -3535,13 +3369,11 @@ class Batch:
         :param target_client:   Target client to show this BATCH event to.
         :param event:           Batch event: netjoin or netsplit.
         """
-        # logging.warning(f"Looking for a batch started by {started_by.name}")
+
         for batch in Batch.pool:
-            # logging.warning(f"Found a batch started by {batch.started_by.name}")
             if batch.started_by in [started_by, started_by.uplink, started_by.direction] and batch.batch_type == event:
                 if (batch.tag.name, batch.tag.value) not in [(t.name, t.value) for t in mtags]:
                     mtags[0:0] = [batch.tag]
-                    # mtags.append(batch.tag)
                 if target_client not in batch.users:
                     batch.announce_to(target_client)
 
@@ -3570,7 +3402,7 @@ class Batch:
             return
         if client not in self.users:
             data = f":{IRCD.me.name} BATCH +{self.label} {self.batch_type}{' ' + self.additional_data if self.additional_data else ''}"
-            client.send([], data)
+            client.send([tag for tag in client.mtags if tag.name == "label"], data)
             self.users.append(client)
 
     @staticmethod
@@ -3683,7 +3515,6 @@ class Tkl:
     @property
     def is_global(self):
         return self.type in Tkl.global_flags()
-        # return 1 if (self.type in Tkl.global_flags() or (self.type == 'E' and [t for t in self.bantypes if t in Tkl.global_flags()])) else 0
 
     @staticmethod
     def add(client, flag, ident, host, bantypes, set_by, expire, set_time, reason):
@@ -3724,7 +3555,9 @@ class Tkl:
         if bantypes == '*':
             bantypes = ''
         bt_string = f" [{bantypes}]" if bantypes else ''
-        if (not update and not exists or (update and IRCD.find_user(set_by.split('!')[0]))) and (client == IRCD.me or (client.uplink not in [IRCD.me, IRCD.me.uplink] and client.uplink.registered)):
+        if (client.user and client.uplink == IRCD.me) or (client.user and client.uplink.server.synced) or client.server.synced:
+            # if (not update and not exists or (update and IRCD.find_user(set_by.split('!')[0]))) \
+            #         and ((client.user and client.uplink == IRCD.me) or client.server.synced):
             msg = f"*** {'Global ' if tkl.is_global else ''}{tkl.name}{bt_string} {'active' if not update else 'updated'} for {tkl.mask} by {set_by} [{reason}] expires on: {expire_string}"
             sync = not tkl.is_global
             IRCD.log(client, "info", "tkl", "TKL_ADD", msg, sync=sync)
@@ -3750,7 +3583,7 @@ class Tkl:
             if tkl.type == flag and (tkl.ident, tkl.host) == (ident, host):
                 Tkl.table.remove(tkl)
                 expire = 0
-                if tkl.expire and int(time()) >= tkl.expire:
+                if tkl.expire and int(time()) >= (tkl.expire - 1):
                     expire = 1
 
                 if client == IRCD.me or client.registered:
@@ -3848,6 +3681,3 @@ class Tkl:
 
     def __repr__(self):
         return f"<TKL '{self.type}' -> '{self.mask}'>"
-
-
-Channel.initialize_class()

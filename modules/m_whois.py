@@ -6,7 +6,6 @@ import datetime
 import time
 
 from handle.core import Flag, Numeric, Command, Usermode, IRCD, Hook
-from handle.logger import logging
 
 
 class WhowasData:
@@ -135,7 +134,7 @@ def cmd_whois(client, recv):
     if 'S' not in target.user.modes and not target.ulined:
         if 'c' not in target.user.modes or ('o' in client.user.modes or target == client):
             channels = []
-            for channel in target.user.channels:
+            for channel in target.channels:
                 visible = 1
                 if not channel.user_can_see_member(client, target):
                     if client.has_permission("channel:see:whois"):

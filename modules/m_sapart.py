@@ -2,8 +2,6 @@
 /sapart command
 """
 
-import re
-
 from handle.core import IRCD, Command, Numeric, Flag
 
 
@@ -39,7 +37,7 @@ def cmd_sajoinpart(client, recv):
         if not channel.find_member(target):
             return client.sendnumeric(Numeric.ERR_USERNOTINCHANNEL, target.name, channel.name)
     elif recv[0].lower() == "sajoin":
-        if target in channel.clients():
+        if channel.find_member(target):
             return client.sendnumeric(Numeric.ERR_USERONCHANNEL, target.name, channel.name)
 
     what = {'join' if recv[0].lowerIO == 'sajoin' else 'part'}

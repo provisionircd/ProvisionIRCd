@@ -3,9 +3,8 @@ provides chmode +H (channel message history support)
 """
 
 from time import time
-from datetime import datetime
+from datetime import datetime, timezone
 
-from handle.logger import logging
 from handle.core import IRCD, Channelmode, Hook, Batch, MessageTag, Numeric, Command
 from handle.validate_conf import conf_error
 
@@ -92,13 +91,6 @@ def history_validate_param(client, channel, action, mode, param, CHK_TYPE):
         return 1
 
 
-def send_empty_batch(client, channel):
-    if client.has_capability("batch"):
-        batch = Batch(started_by=IRCD.me)
-        client.send([], data=f":{IRCD.me.name} BATCH +{batch.label} chathistory {channel.name}")
-        client.send([], data=f":{IRCD.me.name} BATCH -{batch.label}")
-
-
 def clear_history_channel_destroy(client, channel):
     if channel in ChatHistory.backlog:
         del ChatHistory.backlog[channel]
@@ -114,18 +106,18 @@ def add_to_historybuf(client, channel, message, sendtype):
         ChatHistory.backlog[channel] = []
     while limit and len(ChatHistory.backlog[channel]) >= limit:
         ChatHistory.backlog[channel] = ChatHistory.backlog[channel][1:]
-    utc_time = datetime.utcnow().timestamp()
+    utc_time = utc_time = datetime.now(timezone.utc).timestamp()
     history_obj = ChatHistory(sender=client.fullmask, mtags=client.mtags, svid=client.user.account, utc_time=utc_time, sendtype=sendtype, data=message)
     ChatHistory.add_to_buff(channel, history_obj)
 
 
-def add_to_historybuf_privmsg(client, channel, message):
+def add_to_historybuf_privmsg(client, channel, message, prefix):
     if 'H' not in channel.modes:
         return
     add_to_historybuf(client, channel, message, sendtype="PRIVMSG")
 
 
-def add_to_historybuf_notice(client, channel, message):
+def add_to_historybuf_notice(client, channel, message, prefix):
     if 'H' not in channel.modes:
         return
     add_to_historybuf(client, channel, message, sendtype="NOTICE")
@@ -320,7 +312,7 @@ def check_expired_backlog():
 
         param = channel.get_param('H')
         expire = int(param.split(':')[1])
-        utc_time = int(datetime.utcnow().timestamp())
+        utc_time = datetime.now(timezone.utc).timestamp()
         for history_entry in list(ChatHistory.backlog[channel]):
             if utc_time - int(history_entry.utc_time) >= (expire * 60):
                 ChatHistory.backlog[channel].remove(history_entry)

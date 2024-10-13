@@ -52,12 +52,10 @@ def generate_cert(key_out, cert_out, name):
     if not name:
         logging.error(f"Missing name in generate_cert()")
         exit()
-        return
-    # create a key pair
+
     k = crypto.PKey()
     k.generate_key(crypto.TYPE_RSA, 4096)
 
-    # create a self-signed cert
     cert = crypto.X509()
     # https://cryptography.io/en/latest/x509/tutorial/#creating-a-self-signed-certificate
 

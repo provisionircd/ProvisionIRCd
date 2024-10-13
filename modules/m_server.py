@@ -3,8 +3,6 @@
 """
 
 import re
-from datetime import datetime
-from time import time
 
 from handle.core import Flag, Command, Client, IRCD
 from classes.errors import Error
@@ -23,18 +21,16 @@ def auth_incoming_link(client):
     try:
         client.local.socket.getpeername()
         client.local.socket.getsockname()
-    except:
+    except OSError:
         # Closed early.
         return
 
     if client.name.lower() == IRCD.me.name.lower():
-        # client.send([], f"SQUIT :Remote server has the same name as us: {IRCD.me.name}")
         deny_direct_link(client, Error.SERVER_LINK_NAME_COLLISION, client.name)
         logging.debug(f"Link denied for {client.name}: server names are the same")
         return 0
 
-    if not (link := next((l for l in IRCD.configuration.links if l.name.lower() == client.name.lower()), 0)):
-        # client.send([], f"SQUIT :Remote server does not have a link block matching our name")
+    if not (link := next((link for link in IRCD.configuration.links if link.name.lower() == client.name.lower()), 0)):
         deny_direct_link(client, Error.SERVER_LINK_NOMATCH)
         logging.debug(f"Link denied for {client.name}: server not found in conf")
         return 0
@@ -48,16 +44,12 @@ def auth_incoming_link(client):
     client.class_ = IRCD.get_class_from_name(class_name)
 
     if not client.class_:
-        # client.send([], f"SQUIT :Remote server was unable to assign a class to our connection")
         deny_direct_link(client, Error.SERVER_LINK_NOCLASS)
         logging.debug(f"Link denied for {client.name}: unable to assign class to connection")
         return 0
 
-    # logging.debug(f"New server {client.name} has been put in class: {client.local.cls.name}")
-
     class_count = len([c.local for c in Client.table if c.local and c.class_ == client.class_])
     if class_count > client.class_.max:
-        # client.send([], f"SQUIT :Remote server reached the max connections for the link class")
         deny_direct_link(client, Error.SERVER_LINK_MAXCLASS, client.class_.name)
         logging.debug(f"Link denied for {client.name}: max connections for this class")
         return 0
@@ -116,17 +108,13 @@ def auth_incoming_link(client):
                 logging.debug(f"Link authenticated by certificate fingerprint")
                 client.server.link = link
                 return 1
-            # client.send([], f"SQUIT :Remote server requires a certificate fingerprint to link")
             deny_direct_link(client, Error.SERVER_LINK_NOMATCH_CERTFP)
             logging.debug(f"Link denied for {client.name}: certificate fingerprint mismatch")
             logging.debug(f"Required: {link.password}")
             logging.debug(f"Received: {client_certfp}")
-            # if client.local.incoming:
-            #     data = f"Link denied for {client.name}: certificate fingerprint mismatch"
             return 0
 
         if client.local.authpass != link.password:
-            # client.send([], f"SQUIT :Passwords do not match")
             deny_direct_link(client, Error.SERVER_LINK_INCORRECT_PASSWORD)
             logging.debug(f"Link denied for {client.name}: incorrect password")
             return 0
@@ -158,18 +146,14 @@ def cmd_server(client, recv):
     client.name = name
     client.hopcount = int(recv[2])
 
+    info = ' '.join(recv[3:])
     if "VL" in client.local.protoctl:
-        vl = recv[3].split()[0]
-        # logging.debug(f"VL set: {vl}")
-        info = ' '.join(recv[3:][1:])
+        vl = recv[3].split()[0].removeprefix(':')
         version, flags, num = vl.split('-')
-    else:
-        info = ' '.join(recv[3:])
+        info = ' '.join(recv[4:])
 
     info = info.removeprefix(':')
-
     client.info = info
-    # logging.debug(f"Server info set: {info}")
     if not client.local.authpass:
         return client.exit("Missing password")
 
@@ -177,7 +161,7 @@ def cmd_server(client, recv):
         return
 
     client.server.authed = 1
-    logging.info(f"[SERVER] New server incoming: {client.name}. Uplink: {client.uplink.name}, direction: {client.direction.name}")
+    logging.info(f"[SERVER] New server: {client.name}. Uplink: {client.uplink.name}, direction: {client.direction.name}")
     if client.local.incoming:
         start_link_negotiation(client)
 
@@ -192,21 +176,10 @@ def cmd_sid(client, recv):
     hopcount = int(recv[2])
     sid = recv[3]
 
-    if existing := IRCD.find_server(name):
-        dt_object = datetime.fromtimestamp(existing.creationtime)
-        formatted_time = dt_object.strftime("%Y-%m-%d %H:%M:%S")
-        time_elapsed = datetime.now() - dt_object
-        days = time_elapsed.days
-        hours, remainder = divmod(time_elapsed.seconds, 3600)
-        minutes, seconds = divmod(remainder, 60)
-
-        client.direct_send(f"SQUIT {name} :Name {name} is already in use on the network")
-        logging.warning(f"New server {name} denied because it was already found on the network")
-        logging.warning(f"Connect date: {formatted_time}")
-        logging.warning(f"Time connected: {days} days, {hours} hours, {minutes} minutes, {seconds} seconds")
-        logging.warning(f"Last message received: {int(time()) - existing.local.last_msg_received} seconds ago.")
-        logging.warning(f"Uplink: {existing.uplink}")
-        logging.warning(f"Uplink EOS: {existing.synced}")
+    if IRCD.find_server(name):
+        err_msg = f"Server {name} is already in use on the network"
+        client.direct_send(f":{IRCD.me.id} ERROR :{err_msg}")
+        client.exit(err_msg)
         return
 
     if IRCD.find_server(sid):
@@ -228,8 +201,6 @@ def cmd_sid(client, recv):
     new_server.info = info
     new_server.id = sid
     new_server.ip = client.ip
-    # new_server.add_flag(Flag.CLIENT_REGISTERED)  # Handled by EOS.
-    # new_server.server.synced = 1
     new_server.server.authed = 1
     logging.info(f"[SID] New server added to the network: {new_server.name} ({new_server.info})")
     logging.info(f"[SID] SID: {new_server.id}, Hopcount: {new_server.hopcount}")

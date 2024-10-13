@@ -2,8 +2,6 @@
 channel mode +l (limit users on channel)
 """
 
-import logging
-
 from handle.core import Channelmode, Numeric, Hook
 
 

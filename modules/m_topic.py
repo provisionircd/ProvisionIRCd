@@ -73,7 +73,7 @@ def cmd_topic(client, recv):
 
     oper_override = 0
     text = ' '.join(recv[2:]).removeprefix(':')
-    if client not in channel.clients():
+    if not channel.find_member(client):
         if not client.has_permission("channel:override:topic:notinchannel"):
             return client.sendnumeric(Numeric.ERR_NOTONCHANNEL, channel.name)
         oper_override = 1

@@ -1,18 +1,20 @@
 #!/usr/bin python3
 
-import argparse, sys, os
+import argparse
+import os
+import sys
 
 from OpenSSL.crypto import load_certificate, FILETYPE_PEM, Error
 
 from classes.configuration import ConfigBuild
-from handle.logger import logging
 from handle.core import Server, IRCD
+from handle.logger import logging
 from handle.sockets import handle_connections
 from handle.log import log
 
 if __name__ == "__main__":
     if sys.platform.startswith("linux") and os.geteuid() == 0:
-        print("Do not run as root.")
+        logging.error("Do not run as root!")
         exit()
 
     parser = argparse.ArgumentParser(description="ProvisionIRCd")
@@ -34,7 +36,7 @@ if __name__ == "__main__":
 
     if mkp and args.mkpasswd:
         hashed = bcrypt.hashpw(args.mkpasswd.encode(), bcrypt.gensalt()).decode()
-        print(f"Your salted password: {hashed}")
+        logging.info(f"Your salted password: {hashed}")
         exit()
 
     if args.certfp:
@@ -44,9 +46,11 @@ if __name__ == "__main__":
                     cert = cert.read()
                     cert = load_certificate(FILETYPE_PEM, cert)
                     fingerprint = cert.digest("sha256").decode().replace(':', '').lower()
-                    print(f"[{file}] Fingerprint: {fingerprint}")
+                    logging.info(f"[{file}] Fingerprint: {fingerprint}")
                 except Error:
                     pass
+                except Exception as ex:
+                    logging.error(f"Unable to read certificate file {file}: {ex}")
         exit()
 
     if args.certcn:
@@ -60,13 +64,15 @@ if __name__ == "__main__":
                     subject = cert.get_subject()
                     cn = subject.commonName
                     cn = cn.replace(' ', '_')
-                    print(f"[{file}] CN: {cn}")
+                    logging.info(f"[{file}] CN: {cn}")
                 except Error:
                     pass
+                except Exception as ex:
+                    logging.error(f"Unable to read certificate file {file}: {ex}")
         exit()
 
     if sys.version_info < (3, 10, 0):
-        print("Python version 3.10 or higher is required.")
+        logging.error("Python version 3.10 or higher is required.")
         sys.exit()
 
     try:

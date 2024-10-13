@@ -5,7 +5,6 @@ provides usermodes +g and /accept command (callerid)
 import time
 
 from handle.core import IRCD, Command, Usermode, MessageTag, Isupport, Numeric, Hook
-from handle.logger import logging
 
 
 class CallerIDData:
@@ -164,7 +163,7 @@ def cmd_accept(client, recv):
 def callerid_eos(remote_server):
     for client in CallerIDData.accept_list:
         if data := [a for a in CallerIDData.get_acceptlist(client)]:
-            remote_server._send(f":{client.id} ACCEPT {','.join(data)}")
+            remote_server.send([], f":{client.id} ACCEPT {','.join(data)}")
 
 
 def callerid_quit(client, reason):

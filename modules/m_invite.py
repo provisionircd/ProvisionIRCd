@@ -49,8 +49,8 @@ def cmd_invite(client, recv):
             'i': " [Overriding +i]" if 'i' in channel.modes else '',
             'l': " [Overriding +l]" if 'l' in channel.modes and channel.membercount >= channel.limit else '',
             'k': " [Overriding +k]" if 'k' in channel.modes else '',
-            'R': " [Overriding +R]" if 'R' in channel.modes and 'r' not in invite_client.modes else '',
-            'z': " [Overriding +z]" if 'z' in channel.modes and 'z' not in invite_client.modes else ''
+            'R': " [Overriding +R]" if 'R' in channel.modes and 'r' not in invite_client.user.modes else '',
+            'z': " [Overriding +z]" if 'z' in channel.modes and 'z' not in invite_client.user.modes else ''
         }
         s = next((msg for key, msg in overrides.items() if msg), '')
         msg = f"*** OperOverride by {client.name} ({client.user.username}@{client.user.realhost}) with INVITE {invite_client.name} {channel.name}{s}"

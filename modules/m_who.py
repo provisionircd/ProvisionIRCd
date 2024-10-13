@@ -2,8 +2,6 @@
 /who command
 """
 
-import logging
-
 from handle.core import IRCD, Command, Isupport, Numeric
 from handle.functions import is_match
 

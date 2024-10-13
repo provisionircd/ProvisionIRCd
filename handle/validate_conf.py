@@ -316,6 +316,8 @@ def config_test_allow(block):
     mask, _class, maxperip = block.get_single_value("mask"), block.get_single_value("class"), block.get_single_value("maxperip")
     if mask and _class and maxperip:
         allow = Allow(mask=mask, class_obj=_class, maxperip=maxperip)
+        if password := block.get_single_value("password"):
+            allow.password = password
         if options := block.get_items("options"):
             for option in options:
                 opt = option.get_single_value('options')
@@ -445,7 +447,7 @@ def config_test_spamfilter(block):
     spamfilter_targets = ''.join(spamfilter_targets)
 
     valid_actions = ["warn", "block", "kill", "gzline"]
-    spamfilter_action, action_item = block.get_single_value("action"), block.get_item("action")
+    spamfilter_action = block.get_single_value("action")
     if spamfilter_action not in valid_actions:
         conf_error(f"Invalid action: {spamfilter_action}", block)
         spamfilter_action = None

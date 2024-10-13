@@ -4,7 +4,6 @@
 
 from classes.configuration import ConfigBuild
 from handle.core import Command, IRCD, Numeric, Flag
-from handle.logger import logging
 import gc
 
 gc.enable()

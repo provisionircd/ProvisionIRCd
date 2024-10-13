@@ -3,7 +3,6 @@
 """
 
 from handle.core import Command, Capability, Flag, IRCD
-from handle.logger import logging
 
 
 def cmd_sethost(client, recv):

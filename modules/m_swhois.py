@@ -3,7 +3,6 @@
 """
 
 from handle.core import Command, IRCD, Flag
-from handle.logger import logging
 
 
 def cmd_swhois(client, recv):

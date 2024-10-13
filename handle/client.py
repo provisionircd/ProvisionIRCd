@@ -33,7 +33,7 @@ def make_client(direction, uplink) -> Client | None:
         logging.error(f"Could not make_client(), 'direction' should be None (for locally accepted clients), or a local client when creating a new remote client!")
         logging.error(f"Direction was: {direction.name}")
         exit()
-        return
+
     client = Client()
     client.direction = direction if direction else uplink
     client.uplink = uplink

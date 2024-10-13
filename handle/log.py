@@ -68,11 +68,7 @@ def log(client, level: str, rootevent: str, event: str, message: str, sync: int 
     out_msg = f"{level_colored} ({rootevent}) {message}"
 
     if log_entry.snomask:
-        for oper_client in [c for c in IRCD.local_users(usermodes='o')]:
-            if log_entry.snomask not in oper_client.user.snomask:
-                continue
-            data = f":{source.name} NOTICE {oper_client.name} :{out_msg}"
-            oper_client.send([], data)
+        IRCD.send_snomask(client, log_entry.snomask, out_msg, sendsno=0)
 
     if log_chan := IRCD.find_channel(IRCD.get_setting("logchan")):
         data = f":{source.name} PRIVMSG {log_chan.name} :{out_msg}"

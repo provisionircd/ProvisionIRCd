@@ -5,7 +5,6 @@
 from time import time
 
 from handle.core import Flag, Numeric, Isupport, Command, IRCD, Hook
-from handle.logger import logging
 
 MAXTARGETS = 8
 
@@ -51,7 +50,7 @@ def send_channel_message(client, channel, message: str, sendtype: str, prefix: s
         allow = 1
         _msg = message.split(' ')
         hook = Hook.PRE_LOCAL_CHANMSG if sendtype == "PRIVMSG" else Hook.PRE_LOCAL_CHANNOTICE
-        for result, callback in Hook.call(hook, args=(client, channel, _msg)):
+        for result, callback in Hook.call(hook, args=(client, channel, _msg, prefix)):
             if result == Hook.DENY:
                 allow = 0
                 break
@@ -75,13 +74,15 @@ def send_channel_message(client, channel, message: str, sendtype: str, prefix: s
         for to_client in broadcast_users:
             to_client.send(client.mtags, broadcast_data)
 
-    data = f":{client.id} {sendtype} {channel.name} :{message}"
+    data = f":{client.id} {sendtype} {prefix}{channel.name} :{message}"
     IRCD.send_to_servers(client, client.mtags, data)
 
-    # Check for module hooks (channel messages).
     if client.user:
-        hook = Hook.LOCAL_CHANMSG if client.local else Hook.REMOTE_CHANMSG
-        IRCD.run_hook(hook, client, channel, message)
+        if sendtype == "PRIVMSG":
+            hook = Hook.LOCAL_CHANMSG if client.local else Hook.REMOTE_CHANMSG
+        else:
+            hook = Hook.LOCAL_CHANNOTICE if client.local else Hook.REMOTE_CHANNOTICE
+        IRCD.run_hook(hook, client, channel, message, prefix)
 
     if oper_override and client.user and client.local:
         override_string = f"*** OperOverride: {client.name} ({client.user.username}@{client.user.realhost}) bypassed modes '{oper_override}' on channel {channel.name} with {sendtype}"
@@ -90,7 +91,7 @@ def send_channel_message(client, channel, message: str, sendtype: str, prefix: s
     client.idle_since = int(time())
 
 
-def send_user_message(client, to_client, message, sendtype):
+def send_user_message(client, to_client, message, sendtype: str):
     if client.local and client.user and 'o' not in client.user.modes:
         client.local.flood_penalty += len(message) * 200
 
@@ -112,7 +113,6 @@ def send_user_message(client, to_client, message, sendtype):
     if to_client.user.away:
         client.sendnumeric(Numeric.RPL_AWAY, to_client.name, to_client.user.away)
 
-    # Private message.
     if to_client.local:
         data_prefix = f":{client.fullmask} {sendtype} {to_client.name} :"
         step = 510 - len(data_prefix)
@@ -146,7 +146,6 @@ def cmd_notice(client, recv):
     message = ' '.join(recv[2:]).rstrip().removeprefix(':')
 
     for target in targets[:MAXTARGETS]:
-        prefix = ''
         if target[0] == '$' and '.' in target and len(target) > 5 \
                 and (not client.local or (client.user and client.has_permission("server:broadcast"))):  # and not client.local:
             if client.local:
@@ -164,12 +163,17 @@ def cmd_notice(client, recv):
             client.mtags = []
             continue
 
-        if target[0] in IRCD.get_member_prefix_str_sorted():
-            prefix = target[0]
-            target = target[1:]
+        pre_check_prefix = ''
+        target_list = list(target)
+        for idx, char in enumerate(target_list[:]):
+            if char in IRCD.NICKCHARS:
+                break
+            if char in IRCD.get_member_prefix_str_sorted():
+                pre_check_prefix += char
+                del target_list[idx]
+        target = ''.join(target_list)
 
         if target[0] not in IRCD.CHANPREFIXES:
-            # Private notice.
             if not (to_client := IRCD.find_user(target)):
                 client.sendnumeric(Numeric.ERR_NOSUCHNICK, target)
                 continue
@@ -184,6 +188,20 @@ def cmd_notice(client, recv):
         else:
             if not (channel := IRCD.find_channel(target)):
                 client.sendnumeric(Numeric.ERR_NOSUCHCHANNEL, target)
+                continue
+
+            membermodes_sorted = channel.get_membermodes_sorted(reverse=False)
+            client_rank = channel.get_sender_rank(client)
+
+            prefix = ''
+            for char in pre_check_prefix:
+                current_prefix_rank = next(mode.rank for mode in membermodes_sorted if mode.prefix == char)
+                if client_rank >= current_prefix_rank or 'o' in client.user.modes:
+                    prefix += char
+                else:
+                    break
+
+            if pre_check_prefix and not prefix:
                 continue
 
             IRCD.new_message(client)
@@ -208,7 +226,6 @@ def cmd_privmsg(client, recv):
         return client.sendnumeric(Numeric.ERR_NOTEXTTOSEND)
 
     for target in targets[:MAXTARGETS]:
-        prefix = ''
         if target[0] == '$' and '.' in target and len(target) > 5 \
                 and (not client.local or (client.user and client.has_permission("server:broadcast"))):  # and not client.local:
             if client.local:
@@ -226,11 +243,17 @@ def cmd_privmsg(client, recv):
             client.mtags = []
             continue
 
-        if target[0] in IRCD.get_member_prefix_str_sorted():
-            prefix = target[0]
-            target = target[1:]
+        pre_check_prefix = ''
+        target_list = list(target)
+        for idx, char in enumerate(target_list[:]):
+            if char in IRCD.NICKCHARS:
+                break
+            if char in IRCD.get_member_prefix_str_sorted():
+                pre_check_prefix += char
+                del target_list[idx]
+        target = ''.join(target_list)
 
-        if target[0] not in IRCD.CHANPREFIXES:
+        if target and target[0] not in IRCD.CHANPREFIXES:
             if not (to_client := IRCD.find_user(target)):
                 client.sendnumeric(Numeric.ERR_NOSUCHNICK, target)
                 continue
@@ -245,6 +268,20 @@ def cmd_privmsg(client, recv):
         else:
             if not (channel := IRCD.find_channel(target)):
                 client.sendnumeric(Numeric.ERR_NOSUCHCHANNEL, target)
+                continue
+
+            membermodes_sorted = channel.get_membermodes_sorted(reverse=False)
+            client_rank = channel.get_sender_rank(client)
+
+            prefix = ''
+            for char in pre_check_prefix:
+                current_prefix_rank = next(mode.rank for mode in membermodes_sorted if mode.prefix == char)
+                if client_rank >= current_prefix_rank or 'o' in client.user.modes:
+                    prefix += char
+                else:
+                    break
+
+            if pre_check_prefix and not prefix:
                 continue
 
             IRCD.new_message(client)
@@ -263,4 +300,5 @@ def init(module):
 
 
 def post_load(module):
-    Isupport.add("STATUSMSG", IRCD.get_member_prefix_str_sorted())
+    Isupport.add("STATUSMSG", ''.join(char for char in IRCD.get_member_prefix_str_sorted() if char not in IRCD.CHANPREFIXES)
+                 )

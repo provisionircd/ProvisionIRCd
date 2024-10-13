@@ -2,8 +2,6 @@
 /away command
 """
 
-from time import time
-
 from handle.core import Isupport, Command, Numeric, Flag, IRCD, Capability, Hook
 
 AWAYLEN = 300
@@ -24,7 +22,6 @@ def cmd_away(client, recv):
 
         if away != client.user.away:
             client.user.away = away
-            client.user.away_since = int(time()) if away else 0
             client.sendnumeric(Numeric.RPL_NOWAWAY if away else Numeric.RPL_UNAWAY)
 
             if len(' '.join(recv[1:])) > AWAYLEN:

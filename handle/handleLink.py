@@ -54,22 +54,15 @@ def sync_channels(newserver):
                 list_entries = ' '.join(list_entries)
 
             sjoin_list = []
-            # sjoin_list_str = ''
-            # if memberlist or list_entries:
-            # sjoin_list_str = " :"
             if memberlist:
-                # sjoin_list_str += memberlist
                 sjoin_list.extend(memberlist.split())
             if list_entries:
-                # sjoin_list_str += ' ' + list_entries
                 sjoin_list.extend(list_entries.split())
 
             for i in range(0, len(sjoin_list), 20):
-                # Print the current slice of 10 entries
                 split_sjoin_list = sjoin_list[i:i + 20]
                 sjoin_modes = f"+{channel.modes}{modeparams} " if first_sjoin else ''
                 data = f"{channel.creationtime} {channel.name} {sjoin_modes}:{' '.join(split_sjoin_list)}"
-                # logging.debug(f"[sync_channels()] Sending SJOIN data: {data}")
                 newserver.send([], f":{IRCD.me.id} SJOIN {data}")
                 first_sjoin = 0
             if channel.topic:
@@ -113,7 +106,7 @@ def start_link_negotiation(newserver):
     for isupport in Isupport.table:
         info.append(isupport.string)
     newserver.send([], f"PROTOCTL EAUTH={IRCD.me.name} SID={IRCD.me.id} {' '.join(info)}")
-    newserver.send([], f"PROTOCTL NOQUIT EAUTH SID CLK SJOIN SJOIN2 UMODE2 VL SJ3 SJSBY NICKIP ESVID NEXTBANS EXTSWHOIS TS={int(time.time())} BOOTED={IRCD.boottime}")
+    newserver.send([], f"PROTOCTL NOQUIT EAUTH SID CLK SJOIN SJOIN2 UMODE2 VL SJ3 SJSBY MTAGS NICKIP ESVID NEXTBANS EXTSWHOIS TS={int(time.time())} BOOTED={IRCD.boottime}")
     newserver.send([], f"PROTOCTL NICKCHARS=utf8 CHANNELCHARS=utf8 BIGLINES")
     newserver.send([], f"SERVER {IRCD.me.name} 1 :P300B-*-{IRCD.me.id} {IRCD.me.info}")
     IRCD.run_hook(Hook.SERVER_LINK_POST_NEGOTATION, newserver)

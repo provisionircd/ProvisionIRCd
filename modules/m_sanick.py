@@ -3,7 +3,6 @@
 """
 
 from handle.core import IRCD, Command, Numeric, Flag
-from handle.logger import logging
 
 
 def cmd_sanick(client, recv):

@@ -6,7 +6,6 @@ import re
 
 from classes.data import OperData
 from handle.core import IRCD, Command, Numeric, Flag, Client, Swhois, Capability, Hook
-from handle.logger import logging
 
 try:
     import bcrypt

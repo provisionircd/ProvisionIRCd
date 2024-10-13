@@ -1,4 +1,3 @@
-import threading
 import time
 import socket
 import importlib
@@ -7,7 +6,7 @@ import OpenSSL.SSL
 
 from handle.core import IRCD
 from handle.functions import logging
-from handle.handle_tls import create_ctx, wrap_socket
+from handle.handle_tls import create_ctx
 import select
 
 

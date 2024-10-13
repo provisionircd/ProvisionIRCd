@@ -150,9 +150,6 @@ def cmd_eline(client, recv):
 def cmd_line(client, recv):
     if recv[0].lower() == "sqline":
         reason = ' '.join(recv[2:]).removeprefix(':')
-        # Server-only command, so 'client'.
-        # :00B SQLINE OperServ :Reserved for services
-        # data = f':{IRCD.me.id} TKL + {tkl.type} {tkl.ident} {tkl.host} {tkl.bantypes} {tkl.set_by} {tkl.expire} {tkl.set_time} :{tkl.reason}'
         Tkl.add(client, flag='Q', ident='*', host=recv[1], bantypes='', set_by=client.name, expire=0, set_time=int(time.time()), reason=reason)
         return
     elif recv[0].lower() == "unsqline":

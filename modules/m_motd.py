@@ -5,7 +5,6 @@
 import os
 
 from handle.core import Numeric, IRCD, Command
-from handle.logger import logging
 
 
 def cmd_motd(client, recv):

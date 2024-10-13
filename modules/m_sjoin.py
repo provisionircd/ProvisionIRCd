@@ -260,7 +260,6 @@ def cmd_sjoin(client, recv: list) -> None:
     if not (channel_object := IRCD.find_channel(channel_name)):
         channel_object = IRCD.create_channel(IRCD.me, channel_name)
 
-    channel_object.set_founder(client=None)
     remote_channel_creation = int(recv[1])
     channel_object.remote_creationtime = remote_channel_creation
     channel_modes = ''

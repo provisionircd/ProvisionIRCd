@@ -5,8 +5,6 @@ Exchange mod data between servers.
 
 from handle.core import IRCD, Command, Flag, MessageTag
 
-from handle.logger import logging
-
 
 class S2sMd(MessageTag):
     name = "s2s-md"

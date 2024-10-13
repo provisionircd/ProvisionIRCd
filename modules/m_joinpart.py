@@ -72,6 +72,7 @@ def cmd_join(client, recv):
         channel.do_join(client.mtags, client)
 
         if client.local:
+            IRCD.run_hook(Hook.PRE_LOCAL_JOIN, client, channel)
             if channel.topic_time != 0:
                 Command.do(client, "TOPIC", channel.name)
 

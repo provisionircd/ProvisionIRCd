@@ -14,8 +14,7 @@ def cmd_names(client, recv):
         return
 
     users = []
-    for member in channel.members:
-        names_client = member.client
+    for names_client in channel.member_by_client:
         if 'i' in names_client.user.modes and (not channel.find_member(names_client) and not client.has_permission("channel:see:names")):
             continue
 

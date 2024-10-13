@@ -3,7 +3,6 @@
 """
 
 from handle.core import IRCD, Command, Isupport, Capability
-from handle.logger import logging
 
 NAMELEN = 50
 

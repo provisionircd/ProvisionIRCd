@@ -59,7 +59,6 @@ def post_accept(conn, client, listen_obj):
 
     """ Set to non-blocking after handshake """
     client.local.socket.setblocking(0)
-    # logging.debug(f"[post_accept()] New client socket set to non-blocking")
     client.local.handshake = 1
 
     if "servers" in listen_obj.options:
@@ -128,7 +127,7 @@ def check_invalid_clients():
 def check_freeze():
     now = int(time())
     since_last_activity = now - IRCD.last_activity
-    if IRCD.last_activity and since_last_activity > 2:
+    if IRCD.last_activity and since_last_activity > 1:
         logging.warning(f"IRCd froze for {since_last_activity} seconds. Check logs above for possible cause.")
     IRCD.last_activity = now
 
@@ -249,6 +248,7 @@ def post_sockread(client, recv):
                 if split_line[i].lower() in ignore:
                     debug_in = 0
                     break
+
         if debug_in:
             logging.debug(f"[IN] {client.name}[{client.ip}] > {line}")
 

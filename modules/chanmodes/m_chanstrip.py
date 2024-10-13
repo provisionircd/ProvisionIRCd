@@ -5,7 +5,7 @@ provides chmode +S (strip colors, bold, underline from messages)
 from handle.core import IRCD, Channelmode, Hook
 
 
-def stripmsg_S(client, channel, msg):
+def stripmsg_S(client, channel, msg, prefix):
     if 'S' in channel.modes:
         for idx, entry in enumerate(msg):
             msg[idx] = IRCD.strip_format(entry)

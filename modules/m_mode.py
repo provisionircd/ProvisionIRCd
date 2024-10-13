@@ -156,7 +156,7 @@ def do_channel_member_mode(client, channel, action, mode, param):
     # logging.debug(f"[member] Client sets mode: {action}{mode} {param} on {channel.name}")
     if not (target_client := IRCD.find_user(param)):
         return client.sendnumeric(Numeric.ERR_NOSUCHNICK, param)
-    if target_client not in channel.clients():
+    if not channel.find_member(target_client):
         return client.sendnumeric(Numeric.ERR_USERNOTINCHANNEL, param, channel.name)
     if action == '+':
         if channel.client_has_membermodes(target_client, mode):

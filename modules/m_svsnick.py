@@ -3,7 +3,6 @@
 """
 
 from handle.core import IRCD, Command, Flag
-from handle.logger import logging
 
 
 def cmd_svsnick(client, recv):

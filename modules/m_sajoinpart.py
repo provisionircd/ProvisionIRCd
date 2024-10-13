@@ -31,10 +31,10 @@ def cmd_sajoinpart(client, recv):
     if channel.name[0] == '&':
         return IRCD.server_notice(client, f"*** You cannot use /{cmd.upper()} on local channels.")
 
-    if cmd == "sapart" and target not in channel.clients():
+    if cmd == "sapart" and not channel.find_member(target):
         return client.sendnumeric(Numeric.ERR_USERNOTINCHANNEL, target.name, channel.name)
 
-    if cmd == "sajoin" and target in channel.clients():
+    if cmd == "sajoin" and channel.find_member(target):
         return client.sendnumeric(Numeric.ERR_USERONCHANNEL, target.name, channel.name)
 
     what = "join" if cmd == "sajoin" else "part"

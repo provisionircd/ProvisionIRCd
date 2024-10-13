@@ -3,7 +3,6 @@ message-tags capability
 """
 
 from handle.core import Isupport, Numeric, IRCD, Flag, Command, Capability
-from handle.logger import logging
 
 HEADER = dict(name="message-tags", version='1')
 

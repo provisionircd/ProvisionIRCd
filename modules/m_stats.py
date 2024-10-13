@@ -105,8 +105,8 @@ def stats_debug(client):
 
     for c in IRCD.get_channels():
         client.sendnumeric(Numeric.RPL_STATSDEBUG, f"{c.name} {c.creationtime} +{c.modes} :: {c.topic}")
-        for m in c.members:
-            client.sendnumeric(Numeric.RPL_STATSDEBUG, f"        {m.client.name} +{c.get_modes_of_client_str(m.client)}")
+        for member_client in c.member_by_client:
+            client.sendnumeric(Numeric.RPL_STATSDEBUG, f"        {member_client.name} +{c.get_modes_of_client_str(member_client)}")
 
     if ulines := IRCD.get_setting("ulines"):
         client.sendnumeric(Numeric.RPL_STATSDEBUG, f"Ulines: {', '.join(ulines)}")

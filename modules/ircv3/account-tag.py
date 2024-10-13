@@ -2,7 +2,6 @@
 account-tag capability
 """
 
-from handle.logger import logging
 from handle.core import Capability, MessageTag, Hook
 
 

@@ -19,4 +19,4 @@ def cmd_pass(client, recv):
 
 
 def init(module):
-    Command.add(module, cmd_pass, "PASS", 2, Flag.CMD_UNKNOWN)
+    Command.add(module, cmd_pass, "PASS", 1, Flag.CMD_UNKNOWN)

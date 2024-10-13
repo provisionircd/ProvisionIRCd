@@ -18,7 +18,7 @@ def cmd_knock(client, recv):
     if not (channel := IRCD.find_channel(recv[1])):
         return client.sendnumeric(Numeric.ERR_NOSUCHCHANNEL, recv[1])
 
-    if client in channel.clients():
+    if channel.find_member(client):
         return client.sendnumeric(Numeric.ERR_CANNOTKNOCK, channel.name, "You are already on that channel")
 
     if 'i' not in channel.modes:

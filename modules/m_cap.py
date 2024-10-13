@@ -3,7 +3,6 @@
 """
 
 from handle.core import Numeric, Flag, IRCD, Command, Capability, Hook
-from handle.logger import logging
 
 
 class Cap_handshake:

@@ -75,7 +75,7 @@ class ConfigBuild:
                 else:
                     IRCD.poller = select.poll()
 
-        # Save last configuration stae.
+        # Save last configuration state.
         # In the event of a rehash, and it fails, we just assign everything back to the previous state.
         last_umodes = Usermode.table
         last_cmodes = Channelmode.table
@@ -448,10 +448,6 @@ class ConfigParser:
                     self.single_line_comment_check = 0
                     if debug:
                         logging.debug(f"Newline found, ending single_line_comment")
-
-            # if char == ':' and not self.in_quoted_string and not self.in_comment:
-            #     ConfigParser.error(f"Colon on line number {ConfigParser.current_line} must be enclosed in quotes.")
-            #     continue
 
             if char == '"':
                 if self.prev_char != '\\':
