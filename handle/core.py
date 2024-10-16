@@ -1448,11 +1448,11 @@ class Channel:
         for mode in [m for m in modes if m not in member.modes]:
             member.modes += mode
             diff = 1
-        if diff:
-            # If there are any members on the channel that are not away of this user,
+        if diff and (client.local or client.uplink.server.synced):
+            # If there are any members on the channel that are not aware of this user,
             # show a join here.
             IRCD.new_message(client)
-            for user in [c for c in self.clients() if not self.client_has_seen(c, member.client)]:
+            for user in [c for c in self.member_by_client if not self.client_has_seen(c, member.client)]:
                 self.show_join_message(client.mtags, user, member.client)
 
     def member_take_modes(self, client: Client, modes: str):
@@ -1637,7 +1637,7 @@ class Channel:
         if self.name[0] != '&' and IRCD.local_servers():
             prefix = self.get_sjoin_prefix_sorted_str(client)
             data = f":{client.uplink.id} SJOIN {self.creationtime} {self.name} :{prefix}{client.id}"
-            IRCD.send_to_servers(client, client.mtags, data)
+            IRCD.send_to_servers(client, mtags, data)
 
         if (client.local and client.registered) or (not client.local and client.uplink.server.synced) and not client.ulined:
             event = "LOCAL_JOIN" if client.local else "REMOTE_JOIN"

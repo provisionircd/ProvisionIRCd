@@ -384,6 +384,7 @@ def handle_connections():
 
                             bytes_read = get_full_recv(client, sock)
                             if bytes_read == -1:
+                                process_client_buffer(client)
                                 client.exit("Read error", sock_error=1)
                                 continue
                             elif bytes_read == 0:
@@ -433,6 +434,7 @@ def handle_connections():
 
                         bytes_read = get_full_recv(client, sock)
                         if bytes_read == -1:
+                            process_client_buffer(client)
                             client.exit("Read error", sock_error=1)
                             continue
                         elif bytes_read == 0:

@@ -121,7 +121,7 @@ def blacklist_check(client):
 
 
 def blacklist_expire():
-    for bl in [bl for bl in list(Blacklist.cache) if bl.duration and int(time() >= bl.duration + bl.set_time)]:
+    for bl in [bl for bl in list(Blacklist.cache) if bl.duration and int(time() > bl.duration + bl.set_time)]:
         Blacklist.cache.remove(bl)
 
 

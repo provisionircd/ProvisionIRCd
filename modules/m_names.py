@@ -25,7 +25,7 @@ def cmd_names(client, recv):
             channel.seen_dict[client].append(names_client)
 
         prefix = channel.get_prefix_sorted_str(names_client)
-        if not client.has_capability("multi-prefix"):
+        if not client.has_capability("multi-prefix") and prefix:
             prefix = prefix[0]
         string = prefix + names_client.name
         if client.has_capability("userhost-in-names"):
@@ -36,7 +36,9 @@ def cmd_names(client, recv):
             users = []
             continue
 
-    client.sendnumeric(Numeric.RPL_NAMEREPLY, channel.name, ' '.join(users))
+    if users:
+        client.sendnumeric(Numeric.RPL_NAMEREPLY, channel.name, ' '.join(users))
+
     client.sendnumeric(Numeric.RPL_ENDOFNAMES, channel.name)
 
 

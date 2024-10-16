@@ -26,13 +26,13 @@ class UseripTag(MessageTag):
 
 
 def add_userhosttag(client):
-    if client.user and client.local:
+    if client.user:
         tag = UserhostTag(value=client.user.realhost)
         client.mtags.append(tag)
 
 
 def add_useriptag(client):
-    if client.user and client.local:
+    if client.user:
         tag = UseripTag(value=client.ip)
         client.mtags.append(tag)
 
