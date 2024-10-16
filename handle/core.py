@@ -318,7 +318,6 @@ class Client:
 
         for channel in list(Channel.table):
             if channel.find_member(self):
-                # logging.debug(f"Removing client {self.name} (uplink={self.uplink.name}) from {channel.name}")
                 channel.remove_client(self)
 
     def server_exit(self, reason):
@@ -368,64 +367,62 @@ class Client:
     def kill(self, reason: str, killed_by=None) -> None:
         if not self.user:
             return logging.error(f"Cannot use kill() on server! Reason given: {reason}")
+
         if self.local:
             self.local.recvbuffer = []
+
         if Flag.CLIENT_KILLED not in self.flags:
             self.flags.append(Flag.CLIENT_KILLED)
-        try:
-            if killed_by:
-                path = killed_by.name
-            else:
-                killed_by = IRCD.me
-                path = IRCD.me.name
-            quitreason = f"Killed by {path} ({reason})"
-            msg = f"*** Received kill msg for {self.name} ({self.user.username}@{self.user.realhost}) Path {path} ({reason})"
-            event = "LOCAL_KILL" if self.local else "GLOBAL_KILL"
-            IRCD.log(self, "info", "kill", event, msg, sync=0)
-            if self.local:
-                if killed_by == IRCD.me:
-                    fullmask = IRCD.me.name
-                else:
-                    fullmask = killed_by.fullmask
-                self.sendnumeric(Numeric.RPL_TEXT, f"[{path}] {reason}")
-                data = f":{fullmask} KILL {self.name} :{reason}"
-                self.send([], data)
 
-            self.exit(quitreason)
-            data = f":{killed_by.id} KILL {self.id} :{reason}"
-            IRCD.send_to_servers(killed_by, mtags=[], data=data)
+        path = (killed_by or IRCD.me).name
+        killed_by = killed_by or IRCD.me
 
-        except Exception as ex:
-            logging.exception(ex)
+        quitreason = f"Killed by {path} ({reason})"
+        msg = f"*** Received kill msg for {self.name} ({self.user.username}@{self.user.realhost}) Path {path} ({reason})"
+        event = "LOCAL_KILL" if self.local else "GLOBAL_KILL"
+        IRCD.log(self, "info", "kill", event, msg, sync=0)
+
+        if self.local:
+            fullmask = killed_by.fullmask if killed_by != IRCD.me else IRCD.me.name
+            self.sendnumeric(Numeric.RPL_TEXT, f"[{path}] {reason}")
+            self.send([], f":{fullmask} KILL {self.name} :{reason}")
+
+        self.exit(quitreason)
+        IRCD.send_to_servers(killed_by, mtags=[], data=f":{killed_by.id} KILL {self.name} :{reason}")
 
     def exit(self, reason: str, sock_error: bool = 0, sockclose: int = 1) -> None:
         if IRCD.current_link_sync == self:
             IRCD.current_link_sync = None
+
         if self not in Client.table:
-            # Already removed.
             self.close_socket()
             return
+
         if self in Client.table:
             Client.table.remove(self)
-        # if self.registered:
-        #     logging.debug(f"Exiting client {self.name}[{self.ip}]. Reason: {reason}")
+
         if self.server:
             self.server_exit(reason)
+
         if self.user and self.registered:
             self.remove_user(reason)
+
         IRCD.global_client_count -= 1
         self.exitted = 1
+
         if self.local:
             """
             Send remaining sendbuffer first.
             """
+
             if self.local.sendbuffer:
                 self.direct_send(self.local.sendbuffer)
                 self.local.sendbuffer = ''
 
             IRCD.local_client_count -= 1
             IRCD.remove_delay_client(self)
-            self.local.recvbuffer = []
+            self.local.recvbuffer.clear()
+
             if reason and self.user and self.local.handshake and not sock_error:
                 mask = self.user.realhost or self.ip
                 self.direct_send(f"ERROR :Closing link: {self.name}[{mask}] {reason}")
@@ -436,6 +433,7 @@ class Client:
         if self.registered:
             hook = Hook.LOCAL_QUIT if self.local else Hook.REMOTE_QUIT
             IRCD.run_hook(hook, self, reason)
+
         gc.collect()
         del self
 
@@ -778,7 +776,6 @@ class Client:
 
                 cmd = recv.split()[0].upper()
 
-                # logging.warning(f"Msg from {self.name}: {recv}")
                 if (self.server and IRCD.current_link_sync and IRCD.current_link_sync != self
                         and cmd != "SQUIT" and self not in IRCD.process_after_eos):
                     IRCD.process_after_eos.append(self)
@@ -889,7 +886,9 @@ class Client:
 
     def direct_send(self, data):
         """ Directly sends data to a socket. """
+
         debug_out = 0
+
         try:
             for line in [line for line in data.split('\n') if line.strip()]:
 
@@ -897,11 +896,11 @@ class Client:
                 self.local.bytes_sent += sent
                 self.local.messages_sent += 1
 
-                commands = ["ping", "pong", "privmsg", "notice", "tagmsg"]
+                ignore_commands = ["ping", "pong", "privmsg", "notice", "tagmsg"]
                 if self.registered:
                     split_line = line.split()
                     for i in range(min(3, len(split_line))):
-                        if split_line[i].lower() in commands:
+                        if split_line[i].lower() in ignore_commands:
                             debug_out = 0
                             break
 
@@ -1006,22 +1005,17 @@ class ChannelMember:
 @dataclass(eq=False)
 class Command:
     table: ClassVar[list] = []
+    module: "Module" = None  # noqa: F821
+    func: Callable = None
     trigger: str = ''
     parameters: int = 0
-    flags: int = None
-    func: Callable = None
-    module: "Module" = None  # noqa: F821
+    flags: tuple = ()
 
     @staticmethod
     def add(module, func: Callable, trigger: str, params: int = 0, *flags: Flag):
         if not flags:
             flags = Flag.CMD_USER,
-        cmd = Command()
-        cmd.module = module
-        cmd.func = func
-        cmd.trigger = trigger
-        cmd.flags = flags
-        cmd.parameters = int(params)
+        cmd = Command(module=module, func=func, trigger=trigger, parameters=params, flags=flags)
         cmd.help = None
         Command.table.append(cmd)
 
@@ -1045,11 +1039,12 @@ class Command:
 
         return 0,
 
-    def check(self, client, recv):
+    def check(self, client, recv) -> tuple:
         result, *args = self.cmd_flags_match(client)
         if result != 0:
             return result, *args
-        # Don't count the actual command as a param.
+
+        """ Don't count the actual command as a param. """
         if (len(recv) - 1) < self.parameters:
             return Numeric.ERR_NEEDMOREPARAMS, self.trigger.upper()
         return 0,
@@ -1117,6 +1112,24 @@ class Usermode:
     desc: str = ''
 
     @staticmethod
+    def add(module, flag: str, is_global: int, unset_on_deoper: int, can_set: callable, desc: str):
+        if exists := next((um for um in Usermode.table if um.flag == flag), 0):
+            logging.error(f"[{module.name}] Attempting to add user mode '{flag}' but it has already been added before by {exists.module.name}")
+            return
+        umode = Usermode(module=module, flag=flag, is_global=is_global, unset_on_deoper=unset_on_deoper, can_set=can_set, desc=desc)
+        Usermode.table.append(umode)
+        Isupport.add("USERMODES", Usermode.umodes_sorted_str(), server_isupport=1)
+
+    @staticmethod
+    def add_generic(flag: str):
+        umode = Usermode()
+        umode.module = None
+        umode.flag = flag
+        umode.can_set = Usermode.allow_none
+        Usermode.table.append(umode)
+        logging.debug(f"Adding generic support for missing user mode: {flag}")
+
+    @staticmethod
     def allow_all(client):
         return 1
 
@@ -1144,30 +1157,6 @@ class Usermode:
                 return "Settable by servers"
             case _:
                 return None
-
-    @staticmethod
-    def add(module, flag: str, is_global: int, unset_on_deoper: int, can_set: callable, desc: str):
-        if exists := next((um for um in Usermode.table if um.flag == flag), 0):
-            logging.error(f"[{module.name}] Attempting to add user mode '{flag}' but it has already been added before by {exists.module.name}")
-            return
-        umode = Usermode()
-        umode.flag = flag
-        umode.is_global = is_global
-        umode.unset_on_deoper = unset_on_deoper
-        umode.can_set = can_set
-        umode.module = module
-        umode.desc = desc
-        Usermode.table.append(umode)
-        Isupport.add("USERMODES", Usermode.umodes_sorted_str(), server_isupport=1)
-
-    @staticmethod
-    def add_generic(flag: str):
-        umode = Usermode()
-        umode.module = None
-        umode.flag = flag
-        umode.can_set = Usermode.allow_none
-        Usermode.table.append(umode)
-        logging.debug(f"Adding generic support for missing user mode: {flag}")
 
 
 @dataclass(eq=False)
@@ -1371,7 +1360,7 @@ class Channel:
                 prefix_rank_map = {obj.prefix: obj.rank for obj in membermodes_sorted}
 
                 specified_rank = min((prefix_rank_map[pfx] for pfx in prefix if pfx in prefix_rank_map), default=0)
-                client_rank = self.get_sender_rank(client)
+                client_rank = self.get_highest_member_rank(client)
 
                 if 'o' not in client.user.modes and client_rank < specified_rank:
                     continue
@@ -1393,8 +1382,14 @@ class Channel:
             modes += cmode.flag
         return modes
 
-    def get_sender_rank(self, client):
+    def get_highest_member_rank(self, client):
         membermodes_sorted = self.get_membermodes_sorted(reverse=False)
+        client_prefixes_str = self.get_prefix_sorted_str(client)
+        client_ranks = [mode.rank for mode in membermodes_sorted if mode.prefix in client_prefixes_str]
+        return max(client_ranks) if client_ranks else 0
+
+    def get_lowest_member_rank(self, client):
+        membermodes_sorted = self.get_membermodes_sorted(reverse=True)
         client_prefixes_str = self.get_prefix_sorted_str(client)
         client_ranks = [mode.rank for mode in membermodes_sorted if mode.prefix in client_prefixes_str]
         return max(client_ranks) if client_ranks else 0
@@ -1448,11 +1443,11 @@ class Channel:
         for mode in [m for m in modes if m not in member.modes]:
             member.modes += mode
             diff = 1
-        if diff:
-            # If there are any members on the channel that are not away of this user,
+        if diff and (client.local or client.uplink.server.synced):
+            # If there are any members on the channel that are not aware of this user,
             # show a join here.
             IRCD.new_message(client)
-            for user in [c for c in self.clients() if not self.client_has_seen(c, member.client)]:
+            for user in [c for c in self.member_by_client if not self.client_has_seen(c, member.client)]:
                 self.show_join_message(client.mtags, user, member.client)
 
     def member_take_modes(self, client: Client, modes: str):
@@ -1565,7 +1560,6 @@ class Channel:
     def remove_client(self, client: Client):
         self.membercount -= 1
         if member := self.find_member(client):
-            # self.members.remove(member)
             self.member_by_client.pop(member.client, None)
         else:
             logging.debug(f"Unable to remove {client.name} (uplink={client.uplink.name}) from channel {self.name}: member not found")
@@ -1574,7 +1568,7 @@ class Channel:
             if client in self.seen_dict[c]:
                 self.seen_dict[c].remove(client)
 
-        if self.membercount == 0 and 'P' not in self.modes:
+        if self.membercount == 0:
             IRCD.destroy_channel(IRCD.me, self)
 
     def do_part(self, client: Client, reason: str = ''):
@@ -1585,7 +1579,7 @@ class Channel:
                 continue
             member_client.send(client.mtags, data)
 
-        if self.name[0] != '&':  # and (client.local or (client.server and client.server.synced)):
+        if self.name[0] != '&':
             data = f":{client.id} PART {self.name}{' :' + reason if reason else ''}"
             IRCD.send_to_servers(client, client.mtags, data)
 
@@ -1628,16 +1622,17 @@ class Channel:
             self.show_join_message(mtags, member_client, client)
 
         if self.membercount == 1 and client.local:
-            if self.name[0] != '+' and 'P' not in self.modes:
+            if self.name[0] != '+':
                 self.member_give_modes(client, 'o')
-            # Ensure that 'modes-on-join' are also set on +channels.
-            if modes_on_join := IRCD.get_setting("modes-on-join"):
-                Command.do(IRCD.me, "MODE", self.name, *modes_on_join.split(), str(self.creationtime))
 
         if self.name[0] != '&' and IRCD.local_servers():
             prefix = self.get_sjoin_prefix_sorted_str(client)
             data = f":{client.uplink.id} SJOIN {self.creationtime} {self.name} :{prefix}{client.id}"
-            IRCD.send_to_servers(client, client.mtags, data)
+            IRCD.send_to_servers(client, mtags, data)
+
+        if self.membercount == 1 and client.local:
+            if modes_on_join := IRCD.get_setting("modes-on-join"):
+                Command.do(IRCD.me, "MODE", self.name, *modes_on_join.split(), str(self.creationtime))
 
         if (client.local and client.registered) or (not client.local and client.uplink.server.synced) and not client.ulined:
             event = "LOCAL_JOIN" if client.local else "REMOTE_JOIN"
@@ -1655,16 +1650,14 @@ class ChannelmodeParam:
 class Swhois:
     priority: int = 0
     line: str = ''
-    remove_on_deoper: int = 0
     tag: str = ''
+    remove_on_deoper: int = 0
 
     @staticmethod
     def add_to_client(client: Client, line: str, tag: str, remove_on_deoper=0):
         if next((sw for sw in client.user.swhois if sw.line == line), 0):
             return
-        swhois = Swhois(line=line)
-        swhois.remove_on_deoper = remove_on_deoper
-        swhois.tag = tag
+        swhois = Swhois(line=line, tag=tag, remove_on_deoper=remove_on_deoper)
         client.user.swhois.append(swhois)
         data = f":{IRCD.me.id} SWHOIS {client.id} + {tag} :{swhois.line}"
         IRCD.send_to_servers(client, [], data)
@@ -2172,8 +2165,8 @@ class IRCD:
         return cloakhost
 
     @staticmethod
-    def get_member_prefix_str_sorted():
-        prefix_sorted = sorted([m for m in Channelmode.table if m.prefix and m.rank and m.type == Channelmode.MEMBER], key=lambda c: c.rank, reverse=True)
+    def get_member_prefix_str_sorted(reverse=True):
+        prefix_sorted = sorted([m for m in Channelmode.table if m.prefix and m.rank and m.type == Channelmode.MEMBER], key=lambda c: c.rank, reverse=reverse)
         return ''.join([m.prefix for m in prefix_sorted])
 
     @staticmethod
@@ -3517,7 +3510,7 @@ class Tkl:
         return self.type in Tkl.global_flags()
 
     @staticmethod
-    def add(client, flag, ident, host, bantypes, set_by, expire, set_time, reason):
+    def add(client, flag, ident, host, bantypes, set_by, expire, set_time, reason, silent=0):
         """
         client:     Source performing the add.
         bantypes:   Only applicable with /eline. Specifies which bantypes to except.
@@ -3537,8 +3530,8 @@ class Tkl:
 
         expire = int(expire)
         if expire != 0:
-            d = datetime.fromtimestamp(expire).strftime('%a %b %d %Y')
-            t = datetime.fromtimestamp(expire).strftime('%H:%M:%S %Z')
+            d = datetime.fromtimestamp(expire).strftime("%a %b %d %Y")
+            t = datetime.fromtimestamp(expire).strftime("%H:%M:%S %Z")
         else:
             d, t = None, None
 
@@ -3555,7 +3548,7 @@ class Tkl:
         if bantypes == '*':
             bantypes = ''
         bt_string = f" [{bantypes}]" if bantypes else ''
-        if (client.user and client.uplink == IRCD.me) or (client.user and client.uplink.server.synced) or client.server.synced:
+        if (client.user and client.uplink == IRCD.me) or (client.user and client.uplink.server.synced) or (client == IRCD.me or client.server.synced) and not silent:
             # if (not update and not exists or (update and IRCD.find_user(set_by.split('!')[0]))) \
             #         and ((client.user and client.uplink == IRCD.me) or client.server.synced):
             msg = f"*** {'Global ' if tkl.is_global else ''}{tkl.name}{bt_string} {'active' if not update else 'updated'} for {tkl.mask} by {set_by} [{reason}] expires on: {expire_string}"

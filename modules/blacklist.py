@@ -32,6 +32,7 @@ class Blacklist:
         if dnsbl in Blacklist.lookups[client]:
             Blacklist.lookups[client].remove(dnsbl)
         if not Blacklist.lookups[client]:
+            # No more blacklist lookups are being done for this client. Remove delay.
             if client.ip in Blacklist.process:
                 Blacklist.process.remove(client.ip)
             IRCD.remove_delay_client(client, "blacklist")
@@ -53,6 +54,9 @@ class Dnsbl:
 
 
 def dnsbl_check_client(client, dnsbl):
+    if Blacklist.find(client.ip):
+        return
+
     lookup = reverse_ip(client.ip) + '.' + dnsbl.dns
     reason = dnsbl.reason.replace("%ip", client.ip)
     try:
@@ -72,18 +76,18 @@ def dnsbl_check_client(client, dnsbl):
             msg = f"*** DNSBL match for IP {client.ip} [nick: {client.name}]: {reason}"
             IRCD.send_snomask(client, 'd', msg)
 
-        if dnsbl.action == "gzline":
-            client.sendnumeric(Numeric.RPL_TEXT, reason)
-            client.exit(reason)
-            Tkl.add(client=IRCD.me,
-                    flag='Z',
-                    ident='*',
-                    host=client.ip,
-                    bantypes='',  # Not applicable, used for /eline.
-                    set_by=IRCD.me.name,
-                    expire=int(time()) + dnsbl.duration,
-                    set_time=int(time()),
-                    reason=reason)
+            if dnsbl.action == "gzline":
+                client.sendnumeric(Numeric.RPL_TEXT, reason)
+                client.exit(reason)
+                Tkl.add(client=IRCD.me,
+                        flag='Z',
+                        ident='*',
+                        host=client.ip,
+                        bantypes='',  # Not applicable, used for /eline.
+                        set_by=IRCD.me.name,
+                        expire=int(time()) + dnsbl.duration,
+                        set_time=int(time()),
+                        reason=reason)
 
     except socket.gaierror:  # [Errno -2] Name or service not known -> no match.
         Blacklist.end_process(client, dnsbl)
@@ -121,7 +125,7 @@ def blacklist_check(client):
 
 
 def blacklist_expire():
-    for bl in [bl for bl in list(Blacklist.cache) if bl.duration and int(time() >= bl.duration + bl.set_time)]:
+    for bl in [bl for bl in list(Blacklist.cache) if bl.duration and int(time() > bl.duration + bl.set_time)]:
         Blacklist.cache.remove(bl)
 
 

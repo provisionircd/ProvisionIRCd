@@ -86,10 +86,13 @@ def get_listmodes_from_memberlist(remote_server, memberlist: list) -> (list, lis
 
 
 def do_normal_join(server_client, channel_object, memberlist: list) -> None:
-    # Join all remote members from memberlist to local channel.
-    for user in [c for c in get_users_from_memberlist(memberlist) if not channel_object.find_member(c)]:
-        # logging.debug(f"[do_normal_join] Joining remote user {user.name} to channel {channel_object.name}")
-        mtags = server_client.recv_mtags if server_client.server.synced else []
+    """ Join all remote members from memberlist to local channel. """
+    for user in [c for c in get_users_from_memberlist(memberlist)]:  # if not channel_object.find_member(c)]:
+        IRCD.new_message(user)
+        mtags = server_client.recv_mtags if server_client.server.synced else user.mtags
+        # Remove msgid tag because it won't be the same across the network.
+        if not server_client.server.synced:
+            mtags = [t for t in mtags if t.name != "msgid"]
         channel_object.do_join(mtags, user)
         user.mtags = []
 
@@ -175,9 +178,11 @@ def set_remote_modes(remote_server, channel_object, remote_modes: str, remote_pa
             for mode in modes:
                 modebuf_give.append(mode)
                 parambuf_give.append(client.name)
-            channel_object.do_join(remote_server.recv_mtags, client)
         else:
             logging.error(f"[set_remote_modes()] Attempted to join {client.name} to {channel_object.name} but it already exists.")
+
+    # Join remote users to channel.
+    do_normal_join(remote_server, channel_object, memberlist)
 
     # Now merge/update listmodes.
     listmodes_modebuf, listmodes_parambuf = get_listmodes_from_memberlist(remote_server, memberlist)
@@ -197,7 +202,7 @@ def remote_wins(remote_server, channel_object, remote_modes: str, remote_params:
     modebuf_remove, parambuf_remove = handle_modes(channel_object, channel_object.modes, remote_params, action='-', common_modes=common_modes)
 
     # Now remove +vhoaq etc.
-    for client in channel_object.clients():
+    for client in channel_object.member_by_client:
         for membermode in channel_object.get_modes_of_client_str(client):
             modebuf_remove.append(membermode)
             parambuf_remove.append(client.name)
@@ -227,9 +232,11 @@ def merge_modes(remote_server, channel_object, remote_modes: str, remote_params:
             for mode in modes:
                 merge_modebuf += mode
                 merge_parambuf.append(client.name)
-            channel_object.do_join(remote_server.recv_mtags, client)
         else:
             logging.error(f"[merge_modes()] Attempted to join {client.name} to {channel_object.name} but it already exists.")
+
+    # Join remote users to channel.
+    do_normal_join(remote_server, channel_object, memberlist)
 
     # Merge/update listmodes.
     listmodes_modebuf, listmodes_parambuf = get_listmodes_from_memberlist(remote_server, memberlist)

@@ -46,16 +46,6 @@ def cmd_kick(client, recv):
     reason = client.name if len(recv) == 3 else ' '.join(recv[3:])
     reason = reason[:KICKLEN].removeprefix(':')
 
-    if not (target_client := IRCD.find_user(recv[2])):
-        return client.sendnumeric(Numeric.ERR_NOSUCHNICK, recv[2])
-
-    if not channel.find_member(target_client):
-        return client.sendnumeric(Numeric.ERR_USERNOTINCHANNEL, target_client.name, channel.name)
-
-    if client == IRCD.me or not client.local:
-        do_kick(client, channel, target_client, reason)
-        return
-
     # List, so that modules can change the value.
     oper_override = [0]
 
@@ -66,20 +56,34 @@ def cmd_kick(client, recv):
         elif not channel.client_has_membermodes(client, "hoaq"):
             oper_override[0] = 1
 
-    if (channel.level(target_client) > channel.level(client) or 'q' in target_client.user.modes) and not client.has_permission("channel:override:kick:protected"):
-        return client.sendnumeric(Numeric.ERR_ATTACKDENY, channel.name, target_client.name)
+    for target in recv[2].split(','):
+        if not (target_client := IRCD.find_user(target)):
+            client.sendnumeric(Numeric.ERR_NOSUCHNICK, target)
+            continue
 
-    elif channel.level(target_client) > channel.level(client) or 'q' in target_client.user.modes:
-        oper_override[0] = 1
+        if not channel.find_member(target_client):
+            client.sendnumeric(Numeric.ERR_USERNOTINCHANNEL, target_client.name, channel.name)
+            continue
 
-    if not client_can_kick_target(client, target_client, channel, reason, oper_override):
-        return
+        if client == IRCD.me or not client.local:
+            do_kick(client, channel, target_client, reason)
+            continue
 
-    do_kick(client, channel, target_client, reason)
+        if (channel.level(target_client) > channel.level(client) or 'q' in target_client.user.modes) and not client.has_permission("channel:override:kick:protected"):
+            client.sendnumeric(Numeric.ERR_ATTACKDENY, channel.name, target_client.name)
+            continue
 
-    if oper_override[0] and client.user and client.local:
-        msg = f"*** OperOverride by {client.name} ({client.user.username}@{client.user.realhost}) with KICK {channel.name} {target_client.name} ({reason})"
-        IRCD.log(client, "info", "oper", "OPER_OVERRIDE", msg, sync=1)
+        elif channel.level(target_client) > channel.level(client) or 'q' in target_client.user.modes:
+            oper_override[0] = 1
+
+        if not client_can_kick_target(client, target_client, channel, reason, oper_override):
+            continue
+
+        do_kick(client, channel, target_client, reason)
+
+        if oper_override[0] and client.user and client.local:
+            msg = f"*** OperOverride by {client.name} ({client.user.username}@{client.user.realhost}) with KICK {channel.name} {target_client.name} ({reason})"
+            IRCD.log(client, "info", "oper", "OPER_OVERRIDE", msg, sync=1)
 
 
 def init(module):

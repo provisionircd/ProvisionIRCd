@@ -5,13 +5,13 @@
 import re
 
 from classes.data import OperData
-from handle.core import IRCD, Command, Numeric, Flag, Client, Swhois, Capability, Hook
+from handle.core import IRCD, Command, Numeric, Flag, Client, Capability, Hook
+from handle.functions import is_match
 
 try:
     import bcrypt
 except ImportError:
     bcrypt = None
-from handle.functions import is_match
 
 
 def restore_host(client):
@@ -53,7 +53,7 @@ def do_oper_up(client, oper):
 
     client.local.flood_penalty = 0
     if oper.swhois.strip():
-        Swhois.add_to_client(client, oper.swhois[:128], tag="oper", remove_on_deoper=1)
+        client.add_swhois(line=oper.swhois[:128], tag="oper", remove_on_deoper=1)
 
     client.add_user_modes(client.user.opermodes)
     if client.user.snomask:
@@ -107,7 +107,7 @@ def cmd_oper(client, recv):
         if oper.password.startswith("$2b$") and len(oper.password) > 58:
             password = recv[2].encode("utf-8")  # Bytes password, plain.
             hashed = oper.password.encode("utf-8")  # Bytes password, hashed.
-            if bcrypt and not bcrypt.checkpw(password, hashed):
+            if bcrypt is not None and not bcrypt.checkpw(password, hashed):
                 oper_fail(client, recv[1], "incorrect password")
                 return
 
@@ -150,7 +150,7 @@ def cmd_oper(client, recv):
 
 def watch_deoper(client, target, current_modes, new_modes, param):
     if 'o' in current_modes and 'o' not in new_modes and target.local:
-        # Only show -o for oper-notify
+        """ Only show -o for oper-notify """
         data = f":{target.name} UMODE -o"
         IRCD.send_to_local_common_chans(client, [], client_cap="oper-notify", data=data)
         restore_host(target)
@@ -186,7 +186,7 @@ def oper_new_connection(client):
 def oper_account_login(client):
     if client.user.account == '*' or client.user.oper or not client.registered or not client.local:
         return
-    for oper in [oper for oper in IRCD.configuration.opers if oper.certfp_mask or oper.account_mask]:
+    for oper in [oper for oper in IRCD.configuration.opers if oper.account_mask]:
         if client.user.account in oper.account_mask:
             msg = f"Account match [{client.user.account}]: IRC Operator status automatically activated. [block: {oper.name}, class: {oper.operclass.name}]"
             IRCD.server_notice(client, msg)

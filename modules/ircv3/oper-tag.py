@@ -22,7 +22,7 @@ class OperTag(MessageTag):
 
 
 def add_opertag(client):
-    if client.user and client.local and client.user.operclass \
+    if client.user and client.user.operclass \
             and 'o' in client.user.modes and 'H' not in client.user.modes:
         tag = OperTag(value=client.user.operclass.name)
         client.mtags.append(tag)

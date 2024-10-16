@@ -77,13 +77,13 @@ def post_accept(conn, client, listen_obj):
         IRCD.current_link_sync = client
     else:
         make_user(client)
-    logging.debug(f"Accepted new socket on {listen_obj.port}: {client.ip} -- fd: {client.local.socket.fileno()}")
     if client.server:
         IRCD.run_hook(Hook.SERVER_LINK_IN, client)
     else:
         # TODO: Check if this causes issues.
         #  It used to be in handle_recv()
         IRCD.run_hook(Hook.NEW_CONNECTION, client)
+    logging.debug(f"Accepted new socket on {listen_obj.port}: {client.ip} -- fd: {client.local.socket.fileno()}")
 
 
 def accept_socket(sock, listen_obj):
@@ -110,8 +110,9 @@ def accept_socket(sock, listen_obj):
 def check_ping_timeouts():
     current_time = int(time())
     for client in IRCD.local_clients():
-        if client.registered and (current_time - client.local.last_msg_received) >= 120:
-            client.exit("Ping timeout", sock_error=1)
+        timeout_seconds = current_time - client.local.last_msg_received
+        if client.registered and timeout_seconds >= 120:
+            client.exit(f"Ping timeout: {timeout_seconds} seconds", sock_error=1)
 
 
 def check_invalid_clients():
@@ -384,7 +385,8 @@ def handle_connections():
 
                             bytes_read = get_full_recv(client, sock)
                             if bytes_read == -1:
-                                client.exit("Read error", sock_error=1)
+                                process_client_buffer(client)
+                                client.exit("Connection closed", sock_error=1)
                                 continue
                             elif bytes_read == 0:
                                 continue
@@ -410,7 +412,12 @@ def handle_connections():
                         if not (client := find_client_from_socket(sock)):
                             close_socket(sock)
                             continue
-                        client.exit("Connection closed", sock_error=1)
+                        process_client_buffer(client)
+                        error_code = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
+                        if error_code != 0:
+                            client.exit("Read error", sock_error=1)
+                        else:
+                            client.exit("Connection closed", sock_error=1)
                         continue
 
             else:
@@ -433,7 +440,8 @@ def handle_connections():
 
                         bytes_read = get_full_recv(client, sock)
                         if bytes_read == -1:
-                            client.exit("Read error", sock_error=1)
+                            process_client_buffer(client)
+                            client.exit("Connection closed", sock_error=1)
                             continue
                         elif bytes_read == 0:
                             continue
@@ -455,7 +463,12 @@ def handle_connections():
                     if not (client := find_client_from_socket(sock)):
                         close_socket(sock)
                         continue
-                    client.exit("Connection closed", sock_error=1)
+                    process_client_buffer(client)
+                    error_code = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
+                    if error_code != 0:
+                        client.exit("Read error", sock_error=1)
+                    else:
+                        client.exit("Connection closed", sock_error=1)
                     continue
 
             send_pings()

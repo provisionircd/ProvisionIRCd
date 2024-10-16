@@ -25,8 +25,6 @@ def cmd_join(client, recv):
     key = None
     override = Flag.CLIENT_USER_SAJOIN in client.flags
     for chan in recv[1].split(',')[:12]:
-
-        IRCD.new_message(client)
         if client.local and int(time()) - client.creationtime > 5:
             client.local.flood_penalty += 10_000
 
@@ -69,6 +67,7 @@ def cmd_join(client, recv):
             if logchan.lower() == channel.name.lower() and 'o' not in client.user.modes:
                 return client.sendnumeric(Numeric.ERR_OPERONLY, channel.name)
 
+        IRCD.new_message(client)
         channel.do_join(client.mtags, client)
 
         if client.local:
@@ -80,6 +79,7 @@ def cmd_join(client, recv):
 
         hook = Hook.LOCAL_JOIN if client.local else Hook.REMOTE_JOIN
         IRCD.run_hook(hook, client, channel)
+
     client.mtags = []
 
 
@@ -88,19 +88,13 @@ def cmd_part(client, recv):
     Syntax: PART <channel> [reason]
     Parts the given channel with optional [reason].
     """
-    IRCD.new_message(client)
-    if len(recv) > 2:
-        reason = ' '.join(recv[2:])
-    else:
-        reason = ''
 
-    reason = reason.rstrip().removeprefix(':')
+    reason = ' '.join(recv[2:]).rstrip().removeprefix(':') if len(recv) > 2 else ''
 
     if (static_part := IRCD.get_setting("static-part")) and not client.has_permission("channel:override:staticpart"):
         reason = static_part
 
     for chan_name in recv[1].split(','):
-        IRCD.new_message(client)
         if client.local and (int(time()) - client.creationtime) > 5:
             client.local.flood_penalty += 10_000
 
@@ -109,20 +103,21 @@ def cmd_part(client, recv):
             client.sendnumeric(Numeric.ERR_NOTONCHANNEL, chan_name)
             continue
 
-        h = Hook.call(Hook.PRE_LOCAL_PART, args=(client, channel, reason))
-        for result, callback in h:
+        hook = Hook.call(Hook.PRE_LOCAL_PART, args=(client, channel, reason))
+        for result, callback in hook:
             if result:
                 reason = result
 
+        IRCD.new_message(client)
         channel.do_part(client, reason)
 
         hook = Hook.LOCAL_PART if client.local else Hook.REMOTE_PART
         IRCD.run_hook(hook, client, channel, reason)
+
     client.mtags = []
 
 
 def init(module):
-    # Other modules also require this information, like /privmsg and /notice
     Command.add(module, cmd_join, "JOIN", 1, Flag.CMD_USER)
     Command.add(module, cmd_part, "PART", 1, Flag.CMD_USER)
     Isupport.add("CHANTYPES", IRCD.CHANPREFIXES)
