@@ -1448,11 +1448,11 @@ class Channel:
         for mode in [m for m in modes if m not in member.modes]:
             member.modes += mode
             diff = 1
-        if diff:
-            # If there are any members on the channel that are not away of this user,
+        if diff and (client.local or client.uplink.server.synced):
+            # If there are any members on the channel that are not aware of this user,
             # show a join here.
             IRCD.new_message(client)
-            for user in [c for c in self.clients() if not self.client_has_seen(c, member.client)]:
+            for user in [c for c in self.member_by_client if not self.client_has_seen(c, member.client)]:
                 self.show_join_message(client.mtags, user, member.client)
 
     def member_take_modes(self, client: Client, modes: str):
@@ -1630,14 +1630,15 @@ class Channel:
         if self.membercount == 1 and client.local:
             if self.name[0] != '+' and 'P' not in self.modes:
                 self.member_give_modes(client, 'o')
-            # Ensure that 'modes-on-join' are also set on +channels.
-            if modes_on_join := IRCD.get_setting("modes-on-join"):
-                Command.do(IRCD.me, "MODE", self.name, *modes_on_join.split(), str(self.creationtime))
 
         if self.name[0] != '&' and IRCD.local_servers():
             prefix = self.get_sjoin_prefix_sorted_str(client)
             data = f":{client.uplink.id} SJOIN {self.creationtime} {self.name} :{prefix}{client.id}"
-            IRCD.send_to_servers(client, client.mtags, data)
+            IRCD.send_to_servers(client, mtags, data)
+
+        if self.membercount == 1 and client.local:
+            if modes_on_join := IRCD.get_setting("modes-on-join"):
+                Command.do(IRCD.me, "MODE", self.name, *modes_on_join.split(), str(self.creationtime))
 
         if (client.local and client.registered) or (not client.local and client.uplink.server.synced) and not client.ulined:
             event = "LOCAL_JOIN" if client.local else "REMOTE_JOIN"
@@ -3517,7 +3518,7 @@ class Tkl:
         return self.type in Tkl.global_flags()
 
     @staticmethod
-    def add(client, flag, ident, host, bantypes, set_by, expire, set_time, reason):
+    def add(client, flag, ident, host, bantypes, set_by, expire, set_time, reason, silent=0):
         """
         client:     Source performing the add.
         bantypes:   Only applicable with /eline. Specifies which bantypes to except.
@@ -3537,8 +3538,8 @@ class Tkl:
 
         expire = int(expire)
         if expire != 0:
-            d = datetime.fromtimestamp(expire).strftime('%a %b %d %Y')
-            t = datetime.fromtimestamp(expire).strftime('%H:%M:%S %Z')
+            d = datetime.fromtimestamp(expire).strftime("%a %b %d %Y")
+            t = datetime.fromtimestamp(expire).strftime("%H:%M:%S %Z")
         else:
             d, t = None, None
 
@@ -3555,7 +3556,7 @@ class Tkl:
         if bantypes == '*':
             bantypes = ''
         bt_string = f" [{bantypes}]" if bantypes else ''
-        if (client.user and client.uplink == IRCD.me) or (client.user and client.uplink.server.synced) or client.server.synced:
+        if (client.user and client.uplink == IRCD.me) or (client.user and client.uplink.server.synced) or (client == IRCD.me or client.server.synced) and not silent:
             # if (not update and not exists or (update and IRCD.find_user(set_by.split('!')[0]))) \
             #         and ((client.user and client.uplink == IRCD.me) or client.server.synced):
             msg = f"*** {'Global ' if tkl.is_global else ''}{tkl.name}{bt_string} {'active' if not update else 'updated'} for {tkl.mask} by {set_by} [{reason}] expires on: {expire_string}"

@@ -77,13 +77,13 @@ def post_accept(conn, client, listen_obj):
         IRCD.current_link_sync = client
     else:
         make_user(client)
-    logging.debug(f"Accepted new socket on {listen_obj.port}: {client.ip} -- fd: {client.local.socket.fileno()}")
     if client.server:
         IRCD.run_hook(Hook.SERVER_LINK_IN, client)
     else:
         # TODO: Check if this causes issues.
         #  It used to be in handle_recv()
         IRCD.run_hook(Hook.NEW_CONNECTION, client)
+    logging.debug(f"Accepted new socket on {listen_obj.port}: {client.ip} -- fd: {client.local.socket.fileno()}")
 
 
 def accept_socket(sock, listen_obj):
@@ -384,6 +384,7 @@ def handle_connections():
 
                             bytes_read = get_full_recv(client, sock)
                             if bytes_read == -1:
+                                process_client_buffer(client)
                                 client.exit("Read error", sock_error=1)
                                 continue
                             elif bytes_read == 0:
@@ -433,6 +434,7 @@ def handle_connections():
 
                         bytes_read = get_full_recv(client, sock)
                         if bytes_read == -1:
+                            process_client_buffer(client)
                             client.exit("Read error", sock_error=1)
                             continue
                         elif bytes_read == 0:

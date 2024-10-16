@@ -25,7 +25,6 @@ def cmd_join(client, recv):
     key = None
     override = Flag.CLIENT_USER_SAJOIN in client.flags
     for chan in recv[1].split(',')[:12]:
-
         IRCD.new_message(client)
         if client.local and int(time()) - client.creationtime > 5:
             client.local.flood_penalty += 10_000
@@ -88,7 +87,7 @@ def cmd_part(client, recv):
     Syntax: PART <channel> [reason]
     Parts the given channel with optional [reason].
     """
-    IRCD.new_message(client)
+
     if len(recv) > 2:
         reason = ' '.join(recv[2:])
     else:
