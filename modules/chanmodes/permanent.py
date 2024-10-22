@@ -2,9 +2,20 @@
 channel mode +P (permanent channel)
 """
 
-from handle.core import IRCD, Channelmode, Hook
+from handle.core import IRCD, Channel, Channelmode, Hook
 
 ChannelData = {}
+
+
+def permanent_channel_destroy(client, channel):
+    if 'P' in channel.modes:
+        IRCD.channel_count += 1
+        Channel.table.append(channel)
+
+
+def permanent_channel_join(client, channel):
+    if 'P' in channel.modes and channel.membercount == 1:
+        channel.member_take_modes(client, 'o')
 
 
 def save_channel(client, channel, *args):
@@ -67,3 +78,5 @@ def init(module):
     Hook.add(Hook.LOCAL_CHANNEL_MODE, save_channel_mode)
     Hook.add(Hook.TOPIC, save_channel)
     Hook.add(Hook.BOOT, restore_channel)
+    Hook.add(Hook.CHANNEL_DESTROY, permanent_channel_destroy)
+    Hook.add(Hook.PRE_LOCAL_JOIN, permanent_channel_join)
