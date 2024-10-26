@@ -27,10 +27,14 @@ def cmd_names(client, recv):
         prefix = channel.get_prefix_sorted_str(names_client)
         if not client.has_capability("multi-prefix") and prefix:
             prefix = prefix[0]
+
         string = prefix + names_client.name
+
         if client.has_capability("userhost-in-names"):
             string += f"!{names_client.user.username}@{names_client.user.cloakhost}"
+
         users.append(string)
+
         if len(users) >= 24:
             client.sendnumeric(Numeric.RPL_NAMEREPLY, channel.name, ' '.join(users))
             users = []

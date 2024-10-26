@@ -36,8 +36,9 @@ def create_ctx(cert, key, name=None):
         tlsctx.use_certificate_chain_file(cert)
         tlsctx.set_verify(SSL.VERIFY_PEER, callback=ssl_verify_callback)
 
-        if not IRCD.default_tlsctx:
-            IRCD.default_tlsctx = tlsctx
+        IRCD.default_tls["ctx"] = tlsctx
+        IRCD.default_tls["keyfile"] = key
+        IRCD.default_tls["certfile"] = cert
         return tlsctx
     except Exception as ex:
         logging.exception(ex)

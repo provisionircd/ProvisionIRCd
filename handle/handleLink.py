@@ -14,7 +14,9 @@ from handle.logger import logging
 def sync_channels(newserver):
     if newserver.exitted:
         return
+
     logging.debug(f"Syncing channels to {newserver.name}")
+
     try:
         for channel in [c for c in IRCD.get_channels() if c.name[0] != '&']:
             first_sjoin = 1
@@ -32,6 +34,7 @@ def sync_channels(newserver):
                     prefix += cmode.sjoin_prefix
                 member = prefix + client.id
                 memberlist.append(member)
+
             if memberlist:
                 memberlist = ' '.join(memberlist)
 
@@ -50,12 +53,15 @@ def sync_channels(newserver):
                         string += sjoin_prefix + entry.mask
 
                     list_entries.append(string)
+
             if list_entries:
                 list_entries = ' '.join(list_entries)
 
             sjoin_list = []
+
             if memberlist:
                 sjoin_list.extend(memberlist.split())
+
             if list_entries:
                 sjoin_list.extend(list_entries.split())
 
@@ -65,6 +71,7 @@ def sync_channels(newserver):
                 data = f"{channel.creationtime} {channel.name} {sjoin_modes}:{' '.join(split_sjoin_list)}"
                 newserver.send([], f":{IRCD.me.id} SJOIN {data}")
                 first_sjoin = 0
+
             if channel.topic:
                 data = f":{IRCD.me.id} TOPIC {channel.name} {channel.topic_author} {channel.topic_time} :{channel.topic}"
                 newserver.send([], data)
@@ -78,6 +85,7 @@ def sync_channels(newserver):
 def broadcast_network_to_new_server(newserver):
     if newserver.exitted:
         return
+
     logging.debug(f"Broadcasting all our servers to {newserver.name}")
     for server in [s for s in IRCD.global_servers() if s != newserver and s.name and s.id]:  # and s.server.synced]:
         logging.debug(f"Syncing server {server.name} to {newserver.name}")
@@ -88,6 +96,7 @@ def broadcast_network_to_new_server(newserver):
 def broadcast_new_server_to_network(newserver):
     if newserver.exitted:
         return
+
     logging.debug(f"Broadcasting new server ({newserver.name}) to the rest of the network")
     for server in [c for c in IRCD.local_servers() if c.direction != newserver]:  # and c.server.synced]:
         logging.debug(f"Syncing new server {newserver.name} to {server.name}")
@@ -100,8 +109,10 @@ def start_link_negotiation(newserver):
         # Server exitted abruptly.
         newserver.exit("Server exitted abruptly")
         return
+
     logging.debug(f"Starting link negotiation to: {newserver.name}")
     newserver.send([], f"PASS :{link.password}")
+
     info = []
     for isupport in Isupport.table:
         info.append(isupport.string)
@@ -115,6 +126,7 @@ def start_link_negotiation(newserver):
 def sync_users(newserver):
     if newserver.exitted:
         return
+
     logging.debug(f"Syncing all global registered users to {newserver.name}")
     for client in [c for c in IRCD.global_registered_users() if c.direction != newserver and c.registered]:
         # logging.debug(f"Syncing user {client.name} (UID: {client.id}) (uplink={client.uplink.name}, direction={client.direction.name}) to {newserver.name}")
@@ -124,8 +136,10 @@ def sync_users(newserver):
 def sync_data(newserver):
     if newserver.exitted:
         return
+
     if Client.table:
         sync_users(newserver)
+
     if Channel.table:
         sync_channels(newserver)
 
@@ -156,6 +170,7 @@ def start_outgoing_link(link, tls=0, auto_connect=0):
     client = None
     host = link.outgoing["host"]
     port = int(link.outgoing["port"])
+
     try:
         if not host.replace('.', '').isdigit():
             host = socket.gethostbyname(host)
@@ -169,13 +184,16 @@ def start_outgoing_link(link, tls=0, auto_connect=0):
         client.name = link.name
         client.ip = host
         client.port = port
-        if tls and IRCD.default_tlsctx:
-            client.local.tls = IRCD.default_tlsctx
-            client.local.socket = OpenSSL.SSL.Connection(IRCD.default_tlsctx, socket=client.local.socket)
+
+        if tls and IRCD.default_tls["ctx"]:
+            client.local.tls = IRCD.default_tls["ctx"]
+            client.local.socket = OpenSSL.SSL.Connection(IRCD.default_tls["ctx"], socket=client.local.socket)
             logging.debug(f"Outgoing socket wrapped in TLS")
+
         if IRCD.use_poll:
             IRCD.poller.register(client.local.socket, select.POLLIN | select.POLLPRI | select.POLLHUP | select.POLLERR)
         IRCD.run_hook(Hook.SERVER_LINK_OUT, client)
+
         try:
             client.local.socket.connect((host, port))
             try:

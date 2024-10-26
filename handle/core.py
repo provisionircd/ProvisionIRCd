@@ -12,7 +12,8 @@ import random
 import string
 import time
 import socket
-import OpenSSL
+import select
+
 from enum import Enum
 from random import randrange
 from sys import version
@@ -22,8 +23,7 @@ from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from typing import ClassVar, Callable
 
-import select
-from _socket import gethostbyaddr
+import OpenSSL
 
 from handle.functions import is_match, IPtoBase64
 from handle.logger import logging, IRCDLogger
@@ -91,6 +91,7 @@ class Client:
     last_command: str = ''
     lag: int = 0
     exitted: int = 0
+    websocket: int = 0
 
     @property
     def registered(self):
@@ -107,6 +108,10 @@ class Client:
     def is_service(self):
         services = IRCD.get_setting("services")
         return services.lower() in [self.uplink.name.lower(), self.name.lower()]
+
+    @property
+    def is_local_user(self):
+        return 1 if self.user and self.local else 0
 
     @property
     def channels(self):
@@ -195,7 +200,7 @@ class Client:
         return all(mode in user_modes_set for mode in modes)
 
     def sendnumeric(self, replycode, *args):
-        if not self.user and not self.local or not hasattr(IRCD, "me"):
+        if not self.is_local_user:
             return
         reply_num, reply_string = replycode
         reply_num = str(reply_num).rjust(3, '0')
@@ -313,6 +318,7 @@ class Client:
 
         if not self.uplink.server.squit:
             IRCD.new_message(self)
+
         data = f":{self.name}!{self.user.username}@{self.user.cloakhost} QUIT :{reason}"
         IRCD.send_to_local_common_chans(self, self.mtags, client_cap=None, data=data)
 
@@ -385,10 +391,10 @@ class Client:
         if self.local:
             fullmask = killed_by.fullmask if killed_by != IRCD.me else IRCD.me.name
             self.sendnumeric(Numeric.RPL_TEXT, f"[{path}] {reason}")
-            self.send([], f":{fullmask} KILL {self.name} :{reason}")
+            self.send([], f":{fullmask} KILL {self.id} :{reason}")
 
         self.exit(quitreason)
-        IRCD.send_to_servers(killed_by, mtags=[], data=f":{killed_by.id} KILL {self.name} :{reason}")
+        IRCD.send_to_servers(killed_by, mtags=[], data=f":{killed_by.id} KILL {self.id} :{reason}")
 
     def exit(self, reason: str, sock_error: bool = 0, sockclose: int = 1) -> None:
         if IRCD.current_link_sync == self:
@@ -438,14 +444,20 @@ class Client:
         del self
 
     def close_socket(self):
-        if not self.local:
+        if self.websocket and IRCD.websocketbridge:
+            IRCD.websocketbridge.exit_client(self)
             return
+
+        if not self.local or not self.local.socket:
+            return
+
         if IRCD.use_poll and self.local.socket.fileno() > -1:
             try:
                 IRCD.poller.unregister(self.local.socket)
             except KeyError:
                 # Most likely already unregistered @ POLLNVAL event.
                 pass
+
         if isinstance(self.local.socket, OpenSSL.SSL.Connection):
             try:
                 self.local.socket.shutdown()
@@ -498,14 +510,10 @@ class Client:
         return int(time()) - self.creationtime
 
     def flood_safe_on(self):
-        flag = Flag.CLIENT_USER_FLOOD_SAFE
-        if flag not in self.flags:
-            self.flags.append(flag)
+        self.add_flag(Flag.CLIENT_USER_FLOOD_SAFE)
 
     def flood_safe_off(self):
-        flag = Flag.CLIENT_USER_FLOOD_SAFE
-        if flag in self.flags:
-            self.flags.remove(flag)
+        self.del_flag(Flag.CLIENT_USER_FLOOD_SAFE)
 
     def is_flood_safe(self):
         return Flag.CLIENT_USER_FLOOD_SAFE in self.flags
@@ -527,8 +535,8 @@ class Client:
             sendq = self.class_.sendq if self.class_ else 65536
             recvq = self.class_.recvq if self.class_ else 65536
 
-            real_buffer_str = '\r\n'.join([e[1] for e in self.local.backbuffer])
-            real_sendq_str = '\r\n'.join([e[1] for e in self.local.sendq_buffer])
+            real_buffer_str = "\r\n".join([e[1] for e in self.local.backbuffer])
+            real_sendq_str = "\r\n".join([e[1] for e in self.local.sendq_buffer])
 
             buffer_len_recv = len(real_buffer_str)
             buffer_len_send = len(real_sendq_str)
@@ -583,7 +591,7 @@ class Client:
                 cache = 1
             try:
                 if not realhost:
-                    realhost = gethostbyaddr(self.ip)[0]
+                    realhost = socket.gethostbyaddr(self.ip)[0]
                     IRCD.hostcache[self.ip] = int(time()), realhost
                 if realhost == "localhost" and not ipaddress.IPv4Address(self.ip).is_private:
                     # https://ipinfo.io/AS7552/27.71.152.0/21
@@ -850,6 +858,7 @@ class Client:
                         self.mtags = []
                         self.flood_safe_off()
                     continue
+
         except Exception as ex:
             logging.exception(ex)
 
@@ -858,7 +867,8 @@ class Client:
             logging.error(f"Wrong data type @ send(): {data}")
             return
 
-        if self.exitted or self not in Client.table or not self.local or not self.local.socket or self.local.socket.fileno() < 0:
+        if self.exitted or self not in Client.table or not self.local \
+                or (not self.websocket and not (self.local.socket or self.local.socket.fileno() < 0)):
             return
 
         data = data.strip()
@@ -872,10 +882,11 @@ class Client:
         if mtags := MessageTag.filter_tags(destination=self, mtags=mtags):
             data = f"@" + ';'.join([t.string for t in mtags]) + ' ' + data
 
-        if IRCD.use_poll:
+        if IRCD.use_poll and not self.websocket:
             IRCD.poller.modify(self.local.socket, select.POLLOUT)
 
-        self.local.sendbuffer += data + "\r\n"
+        if not self.websocket:
+            self.local.sendbuffer += data + "\r\n"
 
         if self.user and 'o' not in self.user.modes:
             """ Keep the backbuffer entry duration based on the incoming data length. """
@@ -884,6 +895,10 @@ class Client:
             self.local.sendq_buffer.append([sendq_buffer_time, data])
             self.check_flood()
 
+        if self.websocket and IRCD.websocketbridge:
+            IRCD.websocketbridge.send_to_client(self, data)
+            return
+
     def direct_send(self, data):
         """ Directly sends data to a socket. """
 
@@ -891,6 +906,9 @@ class Client:
 
         try:
             for line in [line for line in data.split('\n') if line.strip()]:
+                if self.websocket and IRCD.websocketbridge:
+                    IRCD.websocketbridge.send_to_client(self, line)
+                    continue
 
                 sent = self.local.socket.send(bytes(line + "\r\n", "utf-8"))
                 self.local.bytes_sent += sent
@@ -988,6 +1006,10 @@ class Server:
     def local(self):
         if self == IRCD.me:
             return 1
+        return 0
+
+    @property
+    def is_local_user(self):
         return 0
 
     @property
@@ -1100,6 +1122,38 @@ class Command:
         except Exception as ex:
             logging.exception(ex)
 
+    @staticmethod
+    def require_authentication(func):
+        def wrapper(client, recv):
+            if client.is_local_user and client.user.account == '*':
+                cmd = recv[0].upper()
+                return client.sendnumeric(Numeric.ERR_CANNOTDOCOMMAND, cmd, "You are not authenticated")
+            return func(client, recv)
+
+        return wrapper
+
+    @staticmethod
+    def require_oper(func):
+        def wrapper(client, recv):
+            if client.is_local_user and 'o' not in client.user.modes:
+                return client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
+            return func(client, recv)
+
+        return wrapper
+
+    @staticmethod
+    def paramcount(paramcount):
+        def decorator(func):
+            def wrapper(client, recv):
+                if client.is_local_user and (len(recv) - 1) < paramcount:
+                    cmd = recv[0].upper()
+                    return client.sendnumeric(Numeric.ERR_NEEDMOREPARAMS, cmd)
+                return func(client, recv)
+
+            return wrapper
+
+        return decorator
+
 
 @dataclass(eq=False)
 class Usermode:
@@ -1122,10 +1176,7 @@ class Usermode:
 
     @staticmethod
     def add_generic(flag: str):
-        umode = Usermode()
-        umode.module = None
-        umode.flag = flag
-        umode.can_set = Usermode.allow_none
+        umode = Usermode(module=None, flag=flag, can_set=Usermode.allow_none)
         Usermode.table.append(umode)
         logging.debug(f"Adding generic support for missing user mode: {flag}")
 
@@ -1186,7 +1237,7 @@ class Channelmode:
     @staticmethod
     def add(module, cmode):
         if exists := next((cm for cm in Channelmode.table if cm.flag == cmode.flag), 0):
-            logging.error(f"[{module.name}] Attempting to add user mode '{cmode.flag}' but it has already been added before by {exists.module.name}")
+            logging.error(f"[{module.name}] Attempting to add channel mode '{cmode.flag}' but it has already been added before by {exists.module.name}")
             return
         cmode.module = module
         Channelmode.table.append(cmode)
@@ -1201,10 +1252,7 @@ class Channelmode:
 
     @staticmethod
     def add_generic(flag: str, cat=4):
-        cmode = Channelmode()
-        cmode.module = None
-        cmode.flag = flag
-        cmode.is_ok = Channelmode.allow_none
+        cmode = Channelmode(module=None, flag=flag, is_ok=Channelmode.allow_none)
         if cat in [2, 3]:
             cmode.paramcount = 1
             cmode.conv_param = lambda x: x
@@ -1266,20 +1314,17 @@ class Channelmode:
 @dataclass(eq=False)
 class Snomask:
     table: ClassVar[list] = []
+    module: "Module" = None  # noqa: F821
     flag: str = ''
     is_global: int = 0
-    module: "Module" = None  # noqa: F821
+    desc: str = ''
 
     @staticmethod
     def add(module, flag: str, is_global: int = 0, desc=''):
         if next((s for s in Snomask.table if s.flag == flag), 0):
             logging.error(f"Attempting to add duplicate snomask: {flag}")
             return
-        snomask = Snomask()
-        snomask.module = module
-        snomask.flag = flag
-        snomask.is_global = is_global
-        snomask.desc = desc
+        snomask = Snomask(module=module, flag=flag, is_global=is_global, desc=desc)
         Snomask.table.append(snomask)
 
 
@@ -1356,7 +1401,7 @@ class Channel:
                 continue
 
             if prefix_check:
-                membermodes_sorted = self.get_membermodes_sorted(reverse=False)
+                membermodes_sorted = self.get_membermodes_sorted()
                 prefix_rank_map = {obj.prefix: obj.rank for obj in membermodes_sorted}
 
                 specified_rank = min((prefix_rank_map[pfx] for pfx in prefix if pfx in prefix_rank_map), default=0)
@@ -1373,17 +1418,17 @@ class Channel:
         return self.member_by_client.get(client, 0)
 
     @staticmethod
-    def get_membermodes_sorted(reverse=True) -> list:
+    def get_membermodes_sorted(reverse=False) -> list:
         return sorted([cmode for cmode in Channelmode.table if cmode.type == cmode.MEMBER and cmode.prefix and cmode.rank], key=lambda c: c.rank, reverse=reverse)
 
     def get_modes_of_client_str(self, client: Client) -> str:
         modes = ''
-        for cmode in [cmode for cmode in Channel.get_membermodes_sorted() if self.client_has_membermodes(client, cmode.flag)]:
+        for cmode in [cmode for cmode in self.get_membermodes_sorted() if self.client_has_membermodes(client, cmode.flag)]:
             modes += cmode.flag
         return modes
 
     def get_highest_member_rank(self, client):
-        membermodes_sorted = self.get_membermodes_sorted(reverse=False)
+        membermodes_sorted = self.get_membermodes_sorted()
         client_prefixes_str = self.get_prefix_sorted_str(client)
         client_ranks = [mode.rank for mode in membermodes_sorted if mode.prefix in client_prefixes_str]
         return max(client_ranks) if client_ranks else 0
@@ -1396,13 +1441,13 @@ class Channel:
 
     def get_prefix_sorted_str(self, client):
         prefix = ''
-        for cmode in [cmode for cmode in Channel.get_membermodes_sorted() if self.client_has_membermodes(client, cmode.flag)]:
+        for cmode in [cmode for cmode in self.get_membermodes_sorted(reverse=True) if self.client_has_membermodes(client, cmode.flag)]:
             prefix += cmode.prefix
         return prefix
 
     def get_sjoin_prefix_sorted_str(self, client):
         prefix = ''
-        for cmode in [cmode for cmode in Channel.get_membermodes_sorted() if self.client_has_membermodes(client, cmode.flag)]:
+        for cmode in [cmode for cmode in self.get_membermodes_sorted() if self.client_has_membermodes(client, cmode.flag)]:
             prefix += cmode.sjoin_prefix
         return prefix
 
@@ -1770,7 +1815,7 @@ class IRCD:
     rehashing: int = 0
     rootdir: str = ''
     confdir: str = ''
-    default_tlsctx = None
+    default_tls = {"ctx": None, "keyfile": None, "certfile": None}
     current_link_sync: Client = None
     process_after_eos: ClassVar[list] = []
     send_after_eos: ClassVar[dict] = {}
@@ -1784,6 +1829,7 @@ class IRCD:
     poller = None
     last_activity: int = 0
     uid_iter = None
+    websocketbridge = None
 
     NICKLEN: int = 0
     ascii_letters_digits = ''.join([string.ascii_lowercase,
@@ -2489,10 +2535,7 @@ class Isupport:
         if (isupport := Isupport.get(name)) and value:
             isupport.value = value
             return
-        isupport = Isupport()
-        isupport.name = name
-        isupport.value = value
-        Isupport.server = server_isupport
+        isupport = Isupport(name=name, value=value, server=server_isupport)
         Isupport.table.append(isupport)
 
     @staticmethod
@@ -2817,11 +2860,8 @@ class Capability:
     @staticmethod
     def add(capname, value=None):
         if not Capability.find_cap(capname):
-            cap = Capability()
-            cap.name = capname
-            cap.value = value
+            cap = Capability(name=capname, value=value)
             Capability.table.append(cap)
-            # logging.info(f"Added new capability: {cap.string}")
             for client in [c for c in IRCD.local_users() if c.has_capability("cap-notify")]:
                 client.send([], f":{IRCD.me.name} CAP {client.name} NEW :{cap.string}")
 
@@ -2841,21 +2881,21 @@ class Capability:
         return f"<Capability '{self.string}'>"
 
 
+@dataclass
 class Stat:
-    table = []
-    letter = ''
-    func = None
+    table: ClassVar[list] = []
+
+    module: "Module" = None  # noqa: F821
+    func: Callable = None
+    letter: str = ''
+    desc: str = ''
 
     @staticmethod
     def add(module, func, letter, desc):
         if Stat.get(letter):
             logging.error(f"Attempting to add duplicate STAT: {letter}")
             return
-        stat = Stat()
-        stat.module = module
-        stat.func = func
-        stat.letter = letter
-        stat.desc = desc
+        stat = Stat(module=module, func=func, letter=letter, desc=desc)
         Stat.table.append(stat)
 
     @staticmethod
@@ -3324,17 +3364,8 @@ class Hook:
         if (callback, priority) not in Hook.hooks[hook_type]:
             Hook.hooks[hook_type].append((callback, priority))
 
-    @staticmethod
-    def remove(callback):
-        """ Not in use anymore. /rehash --reload-mods now clears all hooks. """
-        for hook in Hook.hooks:
-            Hook.hooks[hook] = [(cb, prio) for cb, prio in Hook.hooks[hook] if cb != callback]
-            if any(cb == callback for cb, _ in Hook.hooks[hook]):
-                logging.debug(f"Unhooked: {hook} -> {callback}")
-
 
 class Batch:
-    """ All active batches. """
     pool = []
 
     def __init__(self, started_by, batch_type=None, additional_data=''):
@@ -3447,6 +3478,7 @@ class Tkl:
                                     Raw is generally only used for Q:lines and extended server bans
                                     so that it doesn't show it as *@[...].
         """
+
         tkl_flag = TklFlag(flag, name, what, host_format, is_global, allow_eline, is_extended)
         Tkl.flags.append(tkl_flag)
 
@@ -3554,6 +3586,7 @@ class Tkl:
             msg = f"*** {'Global ' if tkl.is_global else ''}{tkl.name}{bt_string} {'active' if not update else 'updated'} for {tkl.mask} by {set_by} [{reason}] expires on: {expire_string}"
             sync = not tkl.is_global
             IRCD.log(client, "info", "tkl", "TKL_ADD", msg, sync=sync)
+
         if tkl.is_global:
             if flag == 'E':
                 local_bantypes = ''
@@ -3570,8 +3603,10 @@ class Tkl:
         """
         client:    Source performing the remove.
         """
+
         if flag not in Tkl.valid_flags():
             return
+
         for tkl in list(Tkl.table):
             if tkl.type == flag and (tkl.ident, tkl.host) == (ident, host):
                 Tkl.table.remove(tkl)
@@ -3615,10 +3650,8 @@ class Tkl:
         If a match is found, the tkl object will be returned.
         Otherwise, None is returned.
         """
-        if not client.user:
-            return
 
-        if client.has_permission("immune:server-ban"):
+        if not client.user or client.has_permission("immune:server-ban"):
             return
 
         for tkl in [tkl for tkl in Tkl.table if tkl.type in tkltype]:
@@ -3647,6 +3680,7 @@ class Tkl:
                         if tkl.host == '0':
                             return tkl
                 continue
+
             if tkl.type in "GkZzs":
                 ident = '*' if not client.user.username else client.user.username
                 test_cases = [f"{ident.lower()}@{client.ip}", f"{ident.lower()}@{client.ip}"]

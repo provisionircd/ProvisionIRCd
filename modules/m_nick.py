@@ -126,6 +126,7 @@ def cmd_nick_remote(client, recv):
 def create_user_from_uid(client, info: list):
     if len(info) < 13:
         return Error.USER_UID_NOT_ENOUGH_PARAMS
+
     signon = info[3]
     if not signon.isdigit():
         return Error.USER_UID_SIGNON_NO_DIGIT
@@ -176,29 +177,23 @@ def set_s2s_md(server, client):
             client.user.operclass = Operclass(name=md_value, permissions=[])
 
 
+def nick_collision(client, nick, remote_time):
+    for c in (c for c in IRCD.local_users() if c.name.lower() == nick.lower()):
+        if int(remote_time) <= int(c.creationtime) or client.ulined:
+            c.kill("Nick Collision")
+        else:
+            return 1
+    return 0
+
+
 def cmd_uid(client, recv):
     # logging.debug(f"UID from {client.name}: {recv}")
     nick = recv[1]
     signon = recv[3]
-    nick_col = 0
-    for c in [c for c in IRCD.local_users() if c.name.lower() == nick.lower()]:
-        logging.warning(f"[nick_collision] User {c.name} already found on the server")
-        localTS = int(c.creationtime)
-        remoteTS = int(recv[3])
-        if remoteTS <= localTS or client.ulined:
-            logging.warning(f"Local user {c.name} disconnected from local server.")
-            c.kill("Nick Collision")
-            """ Remote wins. """
-            nick_col = 1
-        else:
-            """ Local wins. """
-            nick_col = 2
 
-    if nick_col == 2:
-        """ Local won, not processing this UID. Remote will kill its local client. """
+    if nick_collision(client, nick, int(recv[3])):
         return
 
-    # Add new user.
     if (new_client := create_user_from_uid(client, recv)) and isinstance(new_client, Client):
         if client.recv_mtags:
             set_s2s_md(client, new_client)
@@ -207,6 +202,7 @@ def cmd_uid(client, recv):
             IRCD.maxgusers = IRCD.global_user_count
         new_client.sync(cause="cmd_uid()")
         IRCD.run_hook(Hook.REMOTE_CONNECT, new_client)
+
     else:
         match new_client:
             case Error.USER_UID_NOT_ENOUGH_PARAMS:

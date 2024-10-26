@@ -14,31 +14,36 @@ def validate_limit(client, channel, action, mode, param, CHK_TYPE):
     if CHK_TYPE == Channelmode.CHK_PARAM:
         if param.startswith('-'):
             param = param[1:]
+
         if not param.isdigit():
             return 0
         return 1
 
     if (action == '+' and param.isdigit()) or (action == '-'):
         return 1
+
     return 0
 
 
 def conv_param_limit(param):
     param = int(param)
+
     if param > 9999:
         param = 9999
+
     if param < 0:
         param = 1
+
     return param
 
 
 def sjoin_check_limit(ourlimit, theirlimit):
     if ourlimit == theirlimit:
-        # Same.
         return 0
 
     if ourlimit > theirlimit:
         return 1
+
     return -1
 
 
@@ -49,6 +54,7 @@ def limit_can_join(client, channel, key):
     if limit_param := channel.get_param('l'):
         if channel.membercount >= int(limit_param):
             return Numeric.ERR_CHANNELISFULL
+
     return 0
 
 

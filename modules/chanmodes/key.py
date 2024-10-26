@@ -17,14 +17,17 @@ def key_is_ok(client, channel, action, mode, param, CHK_TYPE):
                 client.sendnumeric(Numeric.ERR_INVALIDMODEPARAM, channel.name, 'k', '*', f"Key contains invalid character: {char}")
                 return 0
         return 1
+
     return 0
 
 
 def can_join_key(client, channel, key):
     if client.has_permission("channel:override:join:key"):
         return 0
+
     if 'k' in channel.modes and key != channel.get_param('k'):
         return Numeric.ERR_BADCHANNELKEY
+
     return 0
 
 
@@ -41,6 +44,7 @@ def sjoin_check_key(ourkey, theirkey):
 
     if our_score > their_score:
         return 1
+
     elif our_score < their_score:
         return -1
 

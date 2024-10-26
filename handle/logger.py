@@ -20,11 +20,7 @@ class EnhancedRotatingFileHandler(logging.handlers.TimedRotatingFileHandler):
     def shouldRollover(self, record):
         """
         Determine if rollover should occur.
-
-        Basically, see if the supplied record would cause the file to exceed
-        the size limit we have.
-
-        we are also comparing times
+        Basically, see if the supplied record would cause the file to exceed the size limit we have.
         """
 
         if self.stream is None:
@@ -104,7 +100,6 @@ class EnhancedRotatingFileHandler(logging.handlers.TimedRotatingFileHandler):
 
             if self.backupExpire and (time.time() - os.path.getmtime(fn)) > self.backupExpire:
                 os.remove(fn)
-                continue
 
         oldest = sorted(files, key=os.path.getmtime)
         for fn in oldest[:-self.backupCount]:
