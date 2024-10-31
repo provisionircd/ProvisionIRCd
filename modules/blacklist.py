@@ -2,106 +2,93 @@
 Support for blacklist checks. Configure in dnsbl.conf
 """
 
-import logging
+import socket
+from time import time
+import ipaddress
+import asyncio
+
+from dataclasses import dataclass, field
 
 from handle.core import IRCD, Hook, Numeric, Snomask, Tkl
 from handle.functions import reverse_ip, valid_expire
 from handle.validate_conf import conf_error
-import socket
-from time import time
-import ipaddress
+from handle.logger import logging
+
+logging.getLogger("asyncio").setLevel(logging.WARNING)
 
 
+@dataclass
 class Blacklist:
     cache = []
     process = []
-    lookups = {}
 
-    ip: str = ''
-    reason: str = ''
+    def __init__(self, name: str = '', ip: str = '', reason: str = '', set_time: int = 0, duration: int = 0):
+        self.name = name
+        self.ip = ip
+        self.reason = reason
+        self.set_time = set_time
+        self.duration = duration
 
     @staticmethod
     def find(ip):
         return next((b for b in Blacklist.cache if b.ip == ip), 0)
 
-    @staticmethod
-    def end_process(client, dnsbl):
-        if client not in Blacklist.lookups:
-            """ Removed early by QUIT hook """
-            return
-        if dnsbl in Blacklist.lookups[client]:
-            Blacklist.lookups[client].remove(dnsbl)
-        if not Blacklist.lookups[client]:
-            # No more blacklist lookups are being done for this client. Remove delay.
-            if client.ip in Blacklist.process:
-                Blacklist.process.remove(client.ip)
-            IRCD.remove_delay_client(client, "blacklist")
 
-
+@dataclass
 class Dnsbl:
     table = []
 
-    def __init__(self, dns, action, reason):
-        self.dns = dns
-        self.action = action
-        self.duration = 0
-        self.reason = reason
-        self.reply = []
+    name: str = ''
+    dns: str = ''
+    action: str = ''
+    reason: str = ''
+    duration: int = 0
+    reply: list = field(default_factory=list)
+
+    def __post_init__(self):
         Dnsbl.table.append(self)
 
     def __repr__(self):
         return f"<Dnsbl '{self.dns}'>"
 
 
-def dnsbl_check_client(client, dnsbl):
+async def dnsbl_check_client(client, dnsbl):
     if Blacklist.find(client.ip):
         return
 
-    lookup = reverse_ip(client.ip) + '.' + dnsbl.dns
+    lookup = f"{reverse_ip(client.ip)}.{dnsbl.dns}"
     reason = dnsbl.reason.replace("%ip", client.ip)
+
     try:
-        result = socket.gethostbyname(lookup)
-        Blacklist.end_process(client, dnsbl)
+        result = await asyncio.wait_for(asyncio.get_event_loop().run_in_executor(None, socket.gethostbyname, lookup), timeout=5)
         reply = result.split('.')[3]
+
         if dnsbl.reply and reply not in dnsbl.reply:
             return
-        if not Blacklist.find(client.ip):
-            entry = Blacklist()
-            entry.name = dnsbl.name
-            entry.ip = client.ip
-            entry.reason = reason
-            entry.set_time = int(time())
-            entry.duration = int(dnsbl.duration)
-            Blacklist.cache.append(entry)
-            msg = f"*** DNSBL match for IP {client.ip} [nick: {client.name}]: {reason}"
-            IRCD.send_snomask(client, 'd', msg)
 
-            if dnsbl.action == "gzline":
-                client.sendnumeric(Numeric.RPL_TEXT, reason)
-                client.exit(reason)
-                Tkl.add(client=IRCD.me,
-                        flag='Z',
-                        ident='*',
-                        host=client.ip,
-                        bantypes='',  # Not applicable, used for /eline.
-                        set_by=IRCD.me.name,
-                        expire=int(time()) + dnsbl.duration,
-                        set_time=int(time()),
-                        reason=reason)
+        entry = Blacklist(name=dnsbl.name, ip=client.ip, reason=reason, set_time=int(time()), duration=int(dnsbl.duration))
+        Blacklist.cache.append(entry)
 
-    except socket.gaierror:  # [Errno -2] Name or service not known -> no match.
-        Blacklist.end_process(client, dnsbl)
+        msg = f"*** DNSBL match for IP {client.ip} [nick: {client.name}]: {reason}"
+        IRCD.send_snomask(client, 'd', msg)
+
+        if dnsbl.action == "gzline":
+            client.sendnumeric(Numeric.RPL_TEXT, reason)
+            client.exit(reason)
+            Tkl.add(
+                client=IRCD.me, flag='Z', ident='*', host=client.ip, bantypes='', set_by=IRCD.me.name,
+                expire=int(time()) + dnsbl.duration, set_time=int(time()), reason=reason
+            )
+
+    except (asyncio.TimeoutError, socket.gaierror):
+        pass
+
     except Exception as ex:
-        logging.exception(ex)
-        Blacklist.end_process(client, dnsbl)
+        logging.exception(f"Exception during DNSBL check for {client.ip} on {dnsbl.dns}: {ex}")
 
 
-def blacklist_check(client):
-    if not client.user:
-        return
-    if IRCD.is_except_client("dnsbl", client):
-        return
-    if not ipaddress.ip_address(client.ip).is_global:
+async def blacklist_check(client):
+    if IRCD.is_except_client("dnsbl", client) or not ipaddress.ip_address(client.ip).is_global:
         return
 
     if blacklist := Blacklist.find(client.ip):
@@ -110,18 +97,13 @@ def blacklist_check(client):
             c.exit(blacklist.reason)
         return Hook.DENY
 
-    if client not in Blacklist.lookups:
-        Blacklist.lookups[client] = []
-
     if client.ip not in Blacklist.process:
+        Blacklist.process.append(client.ip)
         client.sendnumeric(Numeric.RPL_TEXT, "* Please wait while your connection is being checked against DNSBL.")
         IRCD.delay_client(client, 1, "blacklist")
-        Blacklist.process.append(client.ip)
-        for dnsbl in Dnsbl.table:
-            if client not in Blacklist.lookups:
-                Blacklist.lookups[client] = []
-            Blacklist.lookups[client].append(dnsbl)
-            IRCD.run_parallel_function(target=dnsbl_check_client, args=(client, dnsbl))
+        tasks = [dnsbl_check_client(client, dnsbl) for dnsbl in Dnsbl.table]
+        await asyncio.gather(*tasks)
+        IRCD.remove_delay_client(client)
 
 
 def blacklist_expire():
@@ -129,15 +111,17 @@ def blacklist_expire():
         Blacklist.cache.remove(bl)
 
 
-def blacklist_cleanup(client, *args):
-    if client in Blacklist.lookups:
-        del Blacklist.lookups[client]
+def start_blacklist_check(client):
+    try:
+        loop = asyncio.get_running_loop()
+        task = loop.create_task(blacklist_check(client))
+    except RuntimeError:
+        """ No event loop running. Create one. """
+        asyncio.run(blacklist_check(client))
 
 
 def init(module):
-    Hook.add(Hook.NEW_CONNECTION, blacklist_check, priority=999)
-    Hook.add(Hook.LOCAL_QUIT, blacklist_cleanup)
-    Hook.add(Hook.LOCAL_CONNECT, blacklist_cleanup)
+    Hook.add(Hook.NEW_CONNECTION, start_blacklist_check, priority=999)
     Hook.add(Hook.LOOP, blacklist_expire)
     Snomask.add(module, 'd', 1, "View DNSBL hits")
 
@@ -185,7 +169,4 @@ def post_load(module):
                 dnsbl_reply.append(reply_value)
 
         if dnsbl_dns and dnsbl_action and dnsbl_duration:
-            dns = Dnsbl(dns=dnsbl_dns, action=dnsbl_action, reason=dnsbl_reason)
-            dns.reply = dnsbl_reply
-            dns.duration = dnsbl_duration
-            dns.name = dnsbl_name
+            Dnsbl(dns=dnsbl_dns, action=dnsbl_action, reason=dnsbl_reason, reply=dnsbl_reply, duration=dnsbl_duration)
