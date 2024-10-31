@@ -132,6 +132,7 @@ def send_modelines(server, channel_object, modebuf: list, parambuf: list, action
 def handle_modes(channel_object, remote_modes: str, remote_params: list, action: str, common_modes=None) -> tuple:
     if common_modes is None:
         common_modes = {}
+
     modebuf = []
     parambuf = []
     paramcount = 0
@@ -139,27 +140,47 @@ def handle_modes(channel_object, remote_modes: str, remote_params: list, action:
     for mode in remote_modes:
         if not (cmode := IRCD.get_channelmode_by_flag(mode)):
             continue
+
         if action == '-' and mode in common_modes and mode not in IRCD.get_parammodes_str():
             continue
+
         if mode in IRCD.get_parammodes_str() and len(remote_params) > paramcount:
+            """
+            Handling the param modes like +k and +l, etc.
+            """
+
             param, ourparam = remote_params[paramcount], channel_object.get_param(mode)
             paramcount += 1
-            if param == ourparam:
+
+            if mode in channel_object.modes and param == ourparam:
                 continue
-            modebuf.append(mode)
+
             if action == '+':
+                if mode not in channel_object.modes:
+                    channel_object.modes += mode
                 if (ourparam and cmode.sjoin_check(ourparam, param) == -1) or not ourparam:
+                    modebuf.append(mode)
                     parambuf.append(param)
                     channel_object.add_param(mode, param)
+
             elif action == '-':
-                channel_object.del_param(mode)
+                channel_object.modes = channel_object.modes.replace(mode, '')
+                modebuf.append(mode)
                 parambuf.append(ourparam)
-        elif action == '+' and mode not in channel_object.modes:
-            channel_object.modes += mode
-            modebuf.append(mode)
-        elif action == '-' and mode in channel_object.modes:
-            channel_object.modes = channel_object.modes.replace(mode, '')
-            modebuf.append(mode)
+                channel_object.del_param(mode)
+
+        else:
+            """
+            Now we handle the normal non-param modes, like +n and +t, etc.
+            """
+
+            if action == '+' and mode not in channel_object.modes:
+                channel_object.modes += mode
+                modebuf.append(mode)
+
+            elif action == '-' and mode in channel_object.modes:
+                channel_object.modes = channel_object.modes.replace(mode, '')
+                modebuf.append(mode)
 
     return modebuf, parambuf
 
@@ -225,6 +246,7 @@ def remote_wins(remote_server, channel_object, remote_modes: str, remote_params:
 
 def merge_modes(remote_server, channel_object, remote_modes: str, remote_params: list, memberlist: list) -> None:
     merge_modebuf, merge_parambuf = handle_modes(channel_object, remote_modes, remote_params, action='+')
+
     # +vhoaq etc.
     for client, modes in get_usermodes_from_memberlist(remote_server, memberlist):
         if channel_object.create_member(client):
@@ -268,7 +290,10 @@ def cmd_sjoin(client, recv: list) -> None:
         channel_object = IRCD.create_channel(IRCD.me, channel_name)
 
     remote_channel_creation = int(recv[1])
-    channel_object.remote_creationtime = remote_channel_creation
+
+    if not channel_object.remote_creationtime:
+        channel_object.remote_creationtime = remote_channel_creation
+
     channel_modes = ''
     channel_modes_params = []
     memberlist = []
