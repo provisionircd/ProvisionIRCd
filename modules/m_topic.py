@@ -2,7 +2,7 @@
 /topic command
 """
 
-import time
+from time import time
 
 from handle.core import Isupport, IRCD, Command, Numeric, Hook
 from handle.logger import logging
@@ -17,8 +17,6 @@ def send_topic(client, channel):
     if channel.name[0] != '&':
         data = f":{client.id} TOPIC {channel.name} {channel.topic_author} {channel.topic_time} :{channel.topic}"
         IRCD.send_to_servers(client, mtags=client.mtags, data=data)
-
-    client.mtags = []
 
 
 def local_topic_win(client, local_topic, remote_topic):
@@ -54,7 +52,24 @@ def cmd_topic(client, recv):
         if channel.topic and same_ts and int(recv[3]) == channel.topic_time and local_win:
             return
 
-        if (not client.uplink.server.synced and remote_chan_older) or (same_ts and (recv_topic_older or not local_win)) or client.uplink.server.synced:
+        """
+        If a remote channel is older, then that topic will always win.
+        If the timestamps are equal, the winner will be determined
+        by the outcome of local_topic_win().
+        """
+
+        update_topic = 0
+        if not channel.topic:
+            update_topic = 1
+        elif channel.topic != topic_text and channel.topic_time != int(recv[3]):
+            if client.uplink.server.synced:
+                update_topic = 1
+            elif remote_chan_older:
+                update_topic = 1
+            elif same_ts and recv_topic_older and not local_win:
+                update_topic = 1
+
+        if update_topic:
             channel.topic = topic_text
             channel.topic_author, channel.topic_time = recv[2], int(recv[3])
             send_topic(client, channel)
@@ -84,7 +99,6 @@ def cmd_topic(client, recv):
         oper_override = 1
 
     if channel.topic == text:
-        # Topic is the same. Do nothing.
         return
 
     h = Hook.call(Hook.PRE_LOCAL_TOPIC, args=(client, channel, text))
@@ -94,12 +108,12 @@ def cmd_topic(client, recv):
 
     channel.topic = text
     channel.topic_author = client.fullmask if text else None
-    channel.topic_time = int(time.time()) if text else 0
+    channel.topic_time = int(time()) if text else 0
     send_topic(client, channel)
 
     if oper_override and client.user and client.local:
         override_string = f"*** OperOverride by {client.name} ({client.user.username}@{client.user.realhost}) with TOPIC {channel.name} \'{channel.topic}\'"
-        IRCD.log(client, "info", "oper", "OPER_OVERRIDE", override_string, sync=1)
+        IRCD.log(client, "info", "oper", "OPER_OVERRIDE", override_string)
 
     IRCD.run_hook(Hook.TOPIC, client, channel, channel.topic)
 
