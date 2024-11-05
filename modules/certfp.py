@@ -28,7 +28,7 @@ def extract_client_san(cert):
 
 
 def get_certfp(client):
-    if not client.local.tls:
+    if not client.local.tls or client.get_md_value("certfp"):
         return
     cert = client.local.socket.get_peer_certificate()
     if not cert:
@@ -53,5 +53,6 @@ def init(module):
     """ Grab certificate first (if any) so that we can work with it. """
     Hook.add(Hook.NEW_CONNECTION, get_certfp, priority=9999)
     Hook.add(Hook.SERVER_LINK_OUT_CONNECTED, get_certfp, priority=9999)
+    Hook.add(Hook.LOCAL_CONNECT, get_certfp, priority=9999)
     Hook.add(Hook.LOCAL_CONNECT, certfp_connect)
     Hook.add(Hook.WHOIS, certfp_whois)

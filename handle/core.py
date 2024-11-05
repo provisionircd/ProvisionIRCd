@@ -12,12 +12,14 @@ import random
 import string
 import time
 import socket
+from concurrent.futures import ThreadPoolExecutor
+
 import select
 
 from enum import Enum
 from random import randrange
 from sys import version
-from threading import Thread, Timer
+from threading import Thread, Timer, Event
 from time import time
 from datetime import datetime, timezone
 from dataclasses import dataclass, field
@@ -85,8 +87,8 @@ class Client:
     # MessageTag objects this client has generated.
     mtags: list = field(default_factory=list)
     recv_mtags: list = field(default_factory=list)
-    idle_since: int = int(time())
-    creationtime: int = int(time())
+    idle_since: int = 0
+    creationtime: int = 0
     last_ping_sent: int = 0
     last_command: str = ''
     lag: int = 0
@@ -417,10 +419,6 @@ class Client:
         self.exitted = 1
 
         if self.local:
-            """
-            Send remaining sendbuffer first.
-            """
-
             if self.local.sendbuffer:
                 self.direct_send(self.local.sendbuffer)
                 self.local.sendbuffer = ''
@@ -810,10 +808,10 @@ class Client:
                         if not IRCD.find_client(find_source) and self.server.authed:
                             logging.warning(f"Unknown server message from {find_source}: {recv}")
                             continue
-                        recv = recv.split(' ', maxsplit=1)[1]
                         source_client = IRCD.find_client(find_source) or self
                         if not self.server.authed:
                             source_client = IRCD.find_user(find_source) or self
+                    recv = recv.split(' ', maxsplit=1)[1]
 
                 # source_client = self
                 # find_source = recv.split()[0][1:]
@@ -886,7 +884,10 @@ class Client:
             IRCD.poller.modify(self.local.socket, select.POLLOUT)
 
         if not self.websocket:
-            self.local.sendbuffer += data + "\r\n"
+            if self.local.handshake:
+                self.local.sendbuffer += data + "\r\n"
+            else:
+                self.direct_send(data)
 
         if self.user and 'o' not in self.user.modes:
             """ Keep the backbuffer entry duration based on the incoming data length. """
@@ -1830,6 +1831,7 @@ class IRCD:
     last_activity: int = 0
     uid_iter = None
     websocketbridge = None
+    executor = ThreadPoolExecutor()
 
     NICKLEN: int = 0
     ascii_letters_digits = ''.join([string.ascii_lowercase,
@@ -2115,11 +2117,17 @@ class IRCD:
         return int(any(is_match(mask, target) for target in targets))
 
     @staticmethod
-    def run_parallel_function(target, args=(), delay=0.0):
-        """ Run a threaded function once with optional delay. Does not return anything. """
+    def run_parallel_function_original(target, args=(), kwargs=None, delay=0.0):
+        """
+        Run a threaded function once with optional delay.
+        Does not return anything.
+        """
+
+        if kwargs is None:
+            kwargs = {}
 
         def start_thread():
-            t = Thread(target=target, args=args)
+            t = Thread(target=target, args=args, kwargs=kwargs)
             t.daemon = 1
             t.start()
 
@@ -2127,6 +2135,22 @@ class IRCD:
             Timer(delay, start_thread).start()
         else:
             start_thread()
+
+    @staticmethod
+    def run_parallel_function(target, args=(), kwargs=None, delay=0.0):
+        """
+        Run a threaded function once with optional delay.
+        Does not return anything.
+        """
+
+        kwargs = kwargs or {}
+
+        def delayed_target():
+            if delay > 0:
+                Event().wait(delay)
+            target(*args, **kwargs)
+
+        IRCD.executor.submit(delayed_target)
 
     @staticmethod
     def get_first_available_uid(client):
@@ -2769,6 +2793,7 @@ class Numeric:
     RPL_WATCHLIST = 606, ":{}"
     RPL_ENDOFWATCHLIST = 607, ":End of WATCH {}"
     RPL_OTHERUMODEIS = 665, "{} {}"
+    RPL_STARTTLS = 670, ":{}"
     RPL_WHOISSECURE = 671, "{} :is using a secure connection"
 
     RPL_TARGUMODEG = 716, "{} :has usermode +g"
@@ -2836,6 +2861,7 @@ class Numeric:
     ERR_OPERONLY = 520, "{} :Cannot join channel (IRCOps only)"
     ERR_CANTSENDTOUSER = 531, "{} :{}"
 
+    ERR_STARTTLS = 691, ":STARTTLS failed: {}"
     ERR_INVALIDMODEPARAM = 696, "{} {} {} :{}"
 
     ERR_SASLFAIL = 904, ":SASL authentication failed"

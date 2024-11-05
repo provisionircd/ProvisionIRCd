@@ -31,6 +31,7 @@ def create_ctx(cert, key, name=None):
                 exit()
 
         tlsctx = SSL.Context(method=SSL.TLS_METHOD)
+        tlsctx.set_options(SSL.OP_NO_SSLv2 | SSL.OP_NO_SSLv3 | SSL.OP_NO_TLSv1 | SSL.OP_NO_TLSv1_1)
         tlsctx.use_privatekey_file(key)
         tlsctx.use_certificate_file(cert)
         tlsctx.use_certificate_chain_file(cert)

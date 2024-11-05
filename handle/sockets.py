@@ -1,13 +1,12 @@
 import socket
 from time import time
-
 import select
 from OpenSSL import SSL
 
 from handle.client import (find_client_from_socket,
                            make_client, make_server, make_user,
                            find_listen_obj_from_socket)
-from handle.core import Client, IRCD, Hook
+from handle.core import IRCD, Client, Hook, Numeric
 from handle.functions import logging, fixup_ip6
 from modules.m_connect import connect_to
 
@@ -30,32 +29,41 @@ def close_socket(sock):
             pass
 
 
+def wrap_socket(client, starttls=0):
+    while client.local.sendbuffer:
+        continue
+    tlsctx = client.local.listen.tlsctx or IRCD.default_tls["ctx"]
+    tls_sock = SSL.Connection(tlsctx, client.local.conn)
+    tls_sock.set_accept_state()
+
+    try:
+        tls_sock.setblocking(1)
+        tls_sock.do_handshake()
+    except Exception as ex:
+        client.local.handshake = 1
+        client.local.socket.setblocking(0)
+        msg = "This port is for TLS connections only" if not starttls else f"STARTTLS failed: {str(ex) or 'unknown error'}"
+
+        if starttls:
+            logging.exception(ex)
+            client.sendnumeric(Numeric.ERR_STARTTLS, "STARTTLS failed.")
+        client.direct_send(f"ERROR :{msg}")
+        client.exit(msg)
+        return 0
+
+    client.local.socket = tls_sock
+    client.local.tls = tlsctx
+    client.local.socket.setblocking(0)
+    client.local.handshake = 1
+    return 1
+
+
 def post_accept(conn, client, listen_obj):
     if IRCD.use_poll:
         IRCD.poller.register(conn, select.POLLIN | select.POLLPRI | select.POLLHUP | select.POLLERR | select.EPOLLRDNORM | select.EPOLLRDHUP)
-    if listen_obj.tls:
-        try:
-            client.local.socket = SSL.Connection(listen_obj.tlsctx, conn)
-            client.local.socket.set_accept_state()
-            client.local.socket.do_handshake()
 
-        except:
-            msg = "This port is for TLS connections only"
-            data = f"ERROR :Closing link: {msg}"
-            try:
-                conn.sendall(bytes(data + "\r\n", "utf-8"))
-            except:
-                pass
-            try:
-                conn.shutdown(socket.SHUT_WR)
-            except OSError:
-                pass
-            client.exit(msg, sockclose=0)
-            # Fallback.
-            IRCD.run_parallel_function(close_socket, args=(conn,), delay=0.1)
-            return
-
-        client.local.tls = listen_obj.tlsctx
+    if listen_obj.tls and not wrap_socket(client):
+        return client.exit("TLS handshake failed")
 
     """ Set to non-blocking after handshake """
     client.local.socket.setblocking(0)
@@ -94,11 +102,11 @@ def accept_socket(sock, listen_obj):
         conn, addr = sock.accept()
     except OSError as ex:
         return logging.exception(ex)
+
     client = make_client(direction=None, uplink=IRCD.me)
     client.local.socket = conn
+    client.local.conn = conn
     client.local.listen = listen_obj
-    client.last_ping_sent = time() * 1000
-    client.local.last_msg_received = int(time())
     client.local.incoming = 1
     client.ip, client.port = addr
     if client.ip[:7] == "::ffff:":
@@ -163,7 +171,7 @@ def check_reg_timeouts():
     reg_timeout = int(IRCD.get_setting("regtimeout"))
     current_time = int(time())
     for client in IRCD.unregistered_clients():
-        if current_time - client.local.creationtime >= reg_timeout:
+        if current_time - client.creationtime >= reg_timeout:
             client.exit("Registration timed out")
 
 
@@ -348,7 +356,7 @@ def handle_connections():
             write_clients = [client.local.socket for client in available_clients if client.local.handshake and client.local.sendbuffer]
 
             if IRCD.use_poll:
-                fdVsEvent = IRCD.poller.poll(500)
+                fdVsEvent = IRCD.poller.poll(250)
                 for fd, Event in fdVsEvent:
                     # https://stackoverflow.com/a/42612778
                     # logging.debug(f"New event on fd {fd}: {Event}")
@@ -423,9 +431,19 @@ def handle_connections():
             else:
                 try:
                     clean_invalid_sockets(listen_sockets, read_clients, write_clients)
-                    read, write, error = select.select(listen_sockets + read_clients, write_clients, listen_sockets + read_clients, 0.5)
+                    read, write, error = select.select(listen_sockets + read_clients, write_clients, listen_sockets + read_clients, 0.25)
                 except ValueError:
                     continue
+
+                for sock in write:
+                    if not (client := find_client_from_socket(sock)):
+                        close_socket(sock)
+                        continue
+
+                    sendbuffer = client.local.sendbuffer
+                    if client.direct_send(sendbuffer):
+                        client.local.sendbuffer = ''
+
                 for sock in read:
                     if sock in listen_sockets:
                         if not (listen_obj := find_listen_obj_from_socket(sock)):
@@ -449,15 +467,6 @@ def handle_connections():
                             process_client_buffer(client)
 
                     continue
-
-                for sock in write:
-                    if not (client := find_client_from_socket(sock)):
-                        close_socket(sock)
-                        continue
-
-                    sendbuffer = client.local.sendbuffer
-                    if client.direct_send(sendbuffer):
-                        client.local.sendbuffer = ''
 
                 for sock in error:
                     if not (client := find_client_from_socket(sock)):

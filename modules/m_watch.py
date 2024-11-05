@@ -87,15 +87,15 @@ def cmd_watch(client, recv):
 def watch_user_loggedon(client):
     if client not in Watch.watchlist:
         Watch.watchlist[client] = []
-    watch_notify = [c for c in IRCD.global_users() if c in Watch.watchlist and client.name.lower() in [x.lower() for x in Watch.watchlist[c]] and not c.has_capability("monitor")]
+    watch_notify = [c for c in IRCD.global_users() if c in Watch.watchlist and client.name.lower() in [x.lower() for x in Watch.watchlist[c]]]
     for user in watch_notify:
         user.sendnumeric(Numeric.RPL_LOGON, client.name, client.user.username, client.user.cloakhost, client.creationtime)
 
 
 def watch_nickchange(client, nick):
     watch_notify_offline = [c for c in IRCD.global_users() if
-                            c in Watch.watchlist and client.name.lower() in [x.lower() for x in Watch.watchlist[c]] and not c.has_capability("monitor")]
-    watch_notify_online = [c for c in IRCD.global_users() if c in Watch.watchlist and nick.lower() in [x.lower() for x in Watch.watchlist[c]] and not c.has_capability("monitor")]
+                            c in Watch.watchlist and client.name.lower() in [x.lower() for x in Watch.watchlist[c]]]
+    watch_notify_online = [c for c in IRCD.global_users() if c in Watch.watchlist and nick.lower() in [x.lower() for x in Watch.watchlist[c]]]
     for watch_user in watch_notify_offline:
         watch_user.sendnumeric(Numeric.RPL_LOGOFF, client.name, client.user.username, client.user.cloakhost, client.creationtime)
     for watch_user in watch_notify_online:
@@ -104,7 +104,7 @@ def watch_nickchange(client, nick):
 
 def watch_quit(client, reason):
     watch_notify_offline = [c for c in IRCD.global_users() if
-                            c in Watch.watchlist and client.name.lower() in [x.lower() for x in Watch.watchlist[c]] and not c.has_capability("monitor")]
+                            c in Watch.watchlist and client.name.lower() in [x.lower() for x in Watch.watchlist[c]]]
     for user in watch_notify_offline:
         user.sendnumeric(Numeric.RPL_LOGOFF, client.name, client.user.username, client.user.cloakhost, client.creationtime)
     if client in Watch.watchlist:

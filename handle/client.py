@@ -37,13 +37,15 @@ def make_client(direction, uplink) -> Client | None:
     client = Client()
     client.direction = direction if direction else uplink
     client.uplink = uplink
+    client.creationtime = int(time())
     IRCD.global_client_count += 1
     if not direction:
         # Local client.
         IRCD.local_client_count += 1
         client.local = LocalClient()
-        # Creationtime must be set here for reg timeout checks.
-        client.local.creationtime = int(time())
+        client.last_ping_sent = time() * 1000
+        client.local.last_msg_received = int(time())
+
     Client.table.append(client)
     return client
 
@@ -67,7 +69,7 @@ def make_user(client: Client):
         client.assign_host()
         client.local.nospoof = ''.join(random.choice(string.digits + string.ascii_uppercase) for _ in range(8))
         client.send([], f"PING :{client.local.nospoof}")
-        IRCD.run_parallel_function(cookie_helper, args=(client,), delay=0.55)
+        IRCD.run_parallel_function(cookie_helper, args=(client,), delay=0.30)
 
     return client
 
