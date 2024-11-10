@@ -20,7 +20,7 @@ def create_ctx(cert, key, name=None):
             logging.error(f"Unable to find certificate file: {cert}")
             missing = 1
         if not os.path.isfile(key):
-            logging.error(f"Unable to find certificate file: {key}")
+            logging.error(f"Unable to find key file: {key}")
             missing = 1
 
         if missing:

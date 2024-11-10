@@ -3,7 +3,7 @@ import os
 import re
 import socket
 
-from classes.conf_entries import ConnectClass, Allow, Listen, Spamfilter, Operclass, Oper, Link, Alias, Module, Except, Ban
+from classes.conf_entries import ConnectClass, Allow, Listen, Spamfilter, Operclass, Oper, Link, Alias, Module, Except, Ban, Require, Mask
 from handle.functions import logging, valid_expire
 from handle.core import IRCD
 
@@ -45,7 +45,7 @@ def conf_error(errmsg, block=None, item=None, filename=None, linenumber=0, warni
 
 
 def load_module(package):
-    package = 'modules.' + package.replace('/', '.')
+    package = "modules." + package.replace('/', '.')
     if not IRCD.configuration.get_module_by_package(package):
         Module(name=package, module=None)
 
@@ -234,25 +234,20 @@ def config_test_settings(block):
     def check_settings_cloak_key():
         check = "cloak-key"
         if item := block.get_item(check):
-            value = block.get_single_value(check)
-            if not value.strip():
-                return conf_error(f"Missing `{check}` value. Cloak-key must be at least 64 characters long, "
-                                  f"and contain at least 1 lowercase, 1 uppercase, and 1 number.", block, item)
+            value = block.get_single_value(check).strip()
+            error_msg = f"Cloak-key must be at least 64 characters long, and contain at least 1 lowercase, 1 uppercase, and 1 number"
+            if not value:
+                return conf_error(f"Missing `{check}` value. {error_msg}.", block, item)
             if len(value) < 64:
-                return conf_error(f"Invalid `{check}` value. Cloak-key must be at least 64 characters long, "
-                                  "and contain at least 1 lowercase, 1 uppercase, and 1 number: cloak-key too short", block, item)
+                return conf_error(f"Invalid `{check}` value. {error_msg}: cloak-key too short", block, item)
             if not re.search(r'[a-z]', value):
-                return conf_error(f"Invalid `{check}` value. Cloak-key must be at least 64 characters long, "
-                                  "and contain at least 1 lowercase, 1 uppercase, and 1 number: missing lowercase characters", block, item)
+                return conf_error(f"Invalid `{check}` value. {error_msg}: missing lowercase characters", block, item)
             if not re.search(r'[A-Z]', value):
-                return conf_error(f"Invalid `{check}` value. Cloak-key must be at least 64 characters long, "
-                                  "and contain at least 1 lowercase, 1 uppercase, and 1 number: missing uppercase characters", block, item)
+                return conf_error(f"Invalid `{check}` value. {error_msg}: missing uppercase characters", block, item)
             if not re.search(r'[0-9]', value):
-                return conf_error(f"Invalid `{check}` value. Cloak-key must be at least 64 characters long, "
-                                  "and contain at least 1 lowercase, 1 uppercase, and 1 number: missing numbers", block, item)
+                return conf_error(f"Invalid `{check}` value. {error_msg}: missing numbers", block, item)
             if not bool(re.match(r'^[a-zA-Z0-9]+$', value)):
-                return conf_error(f"Invalid `{check}` value. Cloak-key must be at least 64 characters long, "
-                                  "and contain at least 1 lowercase, 1 uppercase, and 1 number: special characters are not allowed", block, item)
+                return conf_error(f"Invalid `{check}` value. {error_msg}: special characters are not allowed", block, item)
 
             IRCD.set_setting(check, value)
 
@@ -313,14 +308,16 @@ def config_test_allow(block):
         if not block.get_path(item):
             conf_error(f"Block '{block.name}' is missing item '{item}'", block)
 
-    mask, _class, maxperip = block.get_single_value("mask"), block.get_single_value("class"), block.get_single_value("maxperip")
+    mask = Mask(block)
+
+    _class, maxperip = block.get_single_value("class"), block.get_single_value("maxperip")
     if mask and _class and maxperip:
         allow = Allow(mask=mask, class_obj=_class, maxperip=maxperip)
         if password := block.get_single_value("password"):
             allow.password = password
         if options := block.get_items("options"):
             for option in options:
-                opt = option.get_single_value('options')
+                opt = option.get_single_value("options")
                 allow.options.append(opt)
 
 
@@ -339,7 +336,7 @@ def config_test_listen(block):
                     return 1, f"Could not bind to port '{port}': Permission denied."
                 if ex.errno in [98, 48, 10048]:
                     # Already in use.
-                    return 1, f"Port '{port}' is already open on this machine"
+                    return 1, f"Port '{port}' is already in use on this machine"
                 return 1, 0
             except Exception as ex:
                 close_port_check(s)
@@ -385,7 +382,7 @@ def config_test_listen(block):
         if cert_item := block.get_item(check):
             cert = block.get_single_value(check)
             if not os.path.isfile(cert):
-                if IRCD.rehashing:
+                if IRCD.rehashing or cert != "tls/server.cert.pem":
                     conf_error(f"Cannot find certificate file `{cert}`", item=cert_item)
             else:
                 listen.cert = cert
@@ -394,7 +391,7 @@ def config_test_listen(block):
         if key_item := block.get_item(check):
             key = block.get_single_value(check)
             if not os.path.isfile(key):
-                if IRCD.rehashing:
+                if IRCD.rehashing or key != "tls/server.key.pem":
                     conf_error(f"Cannot find key file `{key}`", item=key_item)
             else:
                 listen.key = key
@@ -409,7 +406,6 @@ def config_test_spamfilter(block):
     spamfilter_targets = []
     spamfilter_duration = None
 
-    # Checking required items.
     required = ["match-type", "match", "target", "reason"]
     for item in required:
         if not block.get_path(item):
@@ -417,8 +413,8 @@ def config_test_spamfilter(block):
 
     spamfilter_reason = block.get_single_value("reason")
     spamfilter_match = block.get_single_value("match")
-    # Checking match-type
     spamfilter_match_type, item = block.get_single_value("match-type"), block.get_item("match-type")
+
     valid_types = ["simple", "regex"]
     if spamfilter_match_type not in valid_types:
         conf_error(f"Invalid match-type in '{block.name}': {spamfilter_match_type}. Must be one of the following: {', '.join(valid_types)}", block, item)
@@ -502,110 +498,75 @@ def config_test_operclass(block):
 
 def config_test_oper(block):
     if not (oper_name := block.value):
-        return conf_error(f"oper is missing a name", block=block)
+        return conf_error(f"Oper block is missing a name", block=block)
     if next((o for o in IRCD.configuration.opers if o.name == oper_name), 0):
         return conf_error(f"Duplicate oper name found: {oper_name}", block=block)
+
     required = ["class", "operclass", "mask"]
-    ok = 1
-    for item in required:
-        if not block.get_path(item):
-            conf_error(f"Block '{block.name} {block.value}' is missing item '{item}'", block)
-            ok = 0
-    if ok:
-        connectclass = block.get_single_value("class")
-        operclass = block.get_single_value("operclass")
-        password = block.get_single_value("password")
+    missing_items = [item for item in required if not block.get_item(item)]
+    if missing_items:
+        return conf_error(f"Block '{block.name} {block.value}' is missing item: {', '.join(missing_items)}", block)
 
-        mask = []
-        for oper_mask_item in block.get_items("mask"):
-            path = oper_mask_item.path
-            mask_what = path[2]
-            mask_value = None
-            if len(path[2:]) > 1:
-                mask_value = path[3]
-            full_mask = oper_mask_item.path[2:]
-            if full_mask in mask:
-                continue
+    connectclass = block.get_single_value("class")
+    operclass = block.get_single_value("operclass")
+    password = block.get_single_value("password")
+    oper_mask = Mask(block)
 
-            if mask_what in Oper.mask_types and not mask_value:
-                errmsg = f"Missing value for oper {{ {oper_name} }} mask:{mask_what}"
-                conf_error(errmsg, item=oper_mask_item)
-                continue
+    for oper_mask_item in block.get_items("mask"):
+        path = oper_mask_item.path
+        mask_what = path[2]
+        mask_value = None
+        if len(path[2:]) > 1:
+            mask_value = path[3]
+        full_mask = oper_mask_item.path[2:]
+        if mask_value and mask_what not in oper_mask.types:
+            errmsg = f"Unrecognized mask type in except {block.name} {{ }} mask:{mask_what}. Valid: {', '.join(oper_mask.types)}"
+            conf_error(errmsg, item=oper_mask_item)
+            continue
 
-            if mask_value and mask_what not in Oper.mask_types:
-                errmsg = f"Unrecognized mask type in {{ {oper_name} }} mask:{mask_what}"
-                conf_error(errmsg, item=oper_mask_item)
-                continue
+        if mask_what in oper_mask.types and not mask_value:
+            errmsg = f"Missing value for oper {{ {oper_name} }} mask:{mask_what}"
+            conf_error(errmsg, item=oper_mask_item)
+            continue
 
-            if mask_what == "certfp":
-                pattern = r"[A-Fa-f0-9]{64}$"
-                if not re.match(pattern, mask_value):
-                    errmsg = f"Invalid certfp: {mask_value} -- must be in format: [A-Fa-f0-9]{64}"
-                    conf_error(errmsg, item=oper_mask_item)
+        if mask_what == "certfp":
+            for conf_oper in IRCD.configuration.opers:
+                if mask_value in conf_oper.certfp:
+                    conf_error(f"The cert fingerprint you provided for oper block '{oper_name}' is already in use by oper block '{conf_oper.name}'", item=oper_mask_item)
                     continue
 
-                """ Fingerprint is valid, check for duplicates. """
-                for conf_oper in IRCD.configuration.opers:
-                    if mask_value in conf_oper.certfp:
-                        conf_error(f"The cert fingerprint you provided for oper block '{oper_name}' is already in use by oper block '{conf_oper.name}'", item=oper_mask_item)
-                        continue
-
-            if mask_what == "account":
-                if mask_value[0].isdigit():
-                    errmsg = f"Invalid account name: {mask_value} -- cannot start with number"
-                    conf_error(errmsg, item=oper_mask_item)
-                    continue
-                invalid = []
-                for c in mask_value:
-                    if c.lower() not in IRCD.NICKCHARS:
-                        if c not in invalid:
-                            invalid.append(c)
-                if invalid:
-                    errmsg = f"Invalid account name: {mask_value} -- invalid characters: {','.join(invalid)}"
-                    conf_error(errmsg, item=oper_mask_item)
+            for conf_oper in IRCD.configuration.opers:
+                if mask_value in conf_oper.account_mask:
+                    conf_error(f"The account mask you provided for oper block '{oper_name}' is already in use by oper block '{conf_oper.name}'", item=oper_mask_item)
                     continue
 
-                """ Account is valid, check for duplicates. """
-                for conf_oper in IRCD.configuration.opers:
-                    if mask_value in conf_oper.account_mask:
-                        conf_error(f"The account mask you provided for oper block '{oper_name}' is already in use by oper block '{conf_oper.name}'", item=oper_mask_item)
-                        continue
-
-            if mask_what == "ip":
-                try:
-                    ipaddress.ip_address(mask_value)
-                except ValueError:
-                    conf_error(f"Invalid IP address '{mask_value}'", item=oper_mask_item)
-                    continue
-
-            mask.append(full_mask)
-
-        oper = Oper(oper_name, connectclass, operclass, password, mask)
-
-        oper.modes = block.get_single_value("modes")
-        oper.snomasks = block.get_single_value("snomasks")
-        oper.operhost = block.get_single_value("operhost")
-        oper.swhois = block.get_single_value("swhois")
+    oper = Oper(oper_name, connectclass, operclass, password, oper_mask)
+    oper.modes = block.get_single_value("modes")
+    oper.snomasks = block.get_single_value("snomasks")
+    oper.operhost = block.get_single_value("operhost")
+    oper.swhois = block.get_single_value("swhois")
 
 
 def config_test_link(block):
     if not (link_name := block.value):
-        conf_error(f"link is missing a name", block)
-        return
-    required = ["class"]
-    ok = 1
-    for item in required:
-        if not block.get_path(link_name + ':' + item):
-            conf_error(f"Block '{block.name} {block.value}' is missing item '{item}'", block)
-            ok = 0
-    if not (outgoing_items := block.get_items("outgoing")) and not (block.get_items("incoming")):
-        conf_error(f"Link block '{block.value}' is missing missing required 'outgoing' or 'incoming' settings", block)
-        ok = 0
+        return conf_error(f"Link block is missing a name", block)
+
     """ Check duplicate link names """
     for link in IRCD.configuration.links:
         if link.name.lower() == link_name.lower():
-            conf_error(f"Link block '{block.value}' already exists.")
-            ok = 0
+            return conf_error(f"Link block '{block.value}' already exists.")
+
+    ok = 1
+
+    required = ["class"]
+    missing_items = [item for item in required if not block.get_item(item)]
+    if missing_items:
+        conf_error(f"Block '{block.name} {block.value}' is missing item: {', '.join(missing_items)}", block)
+        ok = 0
+
+    if not (outgoing_items := block.get_items("outgoing")) and not (block.get_items("incoming")):
+        conf_error(f"Link block '{block.value}' is missing missing required 'outgoing' or 'incoming' settings", block)
+        ok = 0
 
     if ok:
         link = Link(link_name, password=None, connectclass=block.get_single_value("class"))
@@ -667,6 +628,23 @@ def config_test_link(block):
         link.auth = auth
 
 
+def config_test_require(block):
+    if not (require_what := block.value):
+        return conf_error(f"link is missing a name", block)
+    if require_what not in ["authentication"]:
+        return conf_error(f"Unknown require type: {require_what}", block)
+
+    required = ["mask", "reason"]
+    ok = 1
+    for item in required:
+        if not block.get_path(require_what + ':' + item):
+            conf_error(f"Block '{block.name} {block.value}' is missing item '{item}'", block)
+            ok = 0
+    if ok:
+        require_mask = Mask(block)
+        Require(require_what, mask=require_mask, reason=block.get_single_value("reason"))
+
+
 def config_test_alias(block):
     if not (alias_name := block.value):
         conf_error(f"alias is missing a name", block)
@@ -693,23 +671,29 @@ def config_test_alias(block):
 
 def config_test_except(block):
     if not (except_name := block.value):
-        conf_error(f"Except block is missing a name. Example: except tkl {{ ... }}", block)
-        return
-    required = ["mask"]
+        return conf_error(f"Except block is missing a name. Example: except tkl {{ ... }}", block)
+
     ok = 1
-    for item in required:
-        if not block.get_path(item):
-            conf_error(f"Block '{block.name} {block.value}' is missing item '{item}'", block)
-            ok = 0
+    required = ["mask"]
+    missing_items = [item for item in required if not block.get_item(item)]
+    if missing_items:
+        conf_error(f"Block '{block.name} {block.value}' is missing item: {', '.join(missing_items)}", block)
+        ok = 0
+
+    # # Conf says ban types are optional.
+    # if except_name == "ban" and not block.get_items("type"):
+    #     conf_error(f"Block '{block.name} {block.value}' is missing required exception types.", block)
+    #     ok = 0
+
     if ok:
-        mask = []
+        except_mask = Mask(block)
         types = []
 
         for type_item in block.get_items("type"):
             path = type_item.path
             type_what = path[2]
-            if type_what not in ["kline", "gline", "zline", "gzline", "shun", "spamfilter", "dnsbl", "throttle"]:
-                conf_error(f"Invalid ban:type: {type_what}", item=type_item)
+            if type_what not in ["kline", "gline", "zline", "gzline", "shun", "spamfilter", "dnsbl", "throttle", "require"]:
+                conf_error(f"Invalid except:type: {type_what}", item=type_item)
                 continue
             types.append(type_what)
 
@@ -720,67 +704,20 @@ def config_test_except(block):
             if len(path[2:]) > 1:
                 mask_value = path[3]
             full_mask = mask_item.path[2:]
-            if not full_mask or full_mask in mask or not mask_what:
+            if not full_mask or not mask_what:
                 continue
 
-            if mask_what in Oper.mask_types and not mask_value:
+            if mask_value and mask_what not in except_mask.types:
+                errmsg = f"Unrecognized mask type in except {block.name} {{ }} mask:{mask_what}. Valid: {', '.join(except_mask.types)}"
+                conf_error(errmsg, item=mask_item)
+                continue
+
+            if mask_what in except_mask.types and not mask_value:
                 errmsg = f"Missing value for except {block.name} {{ }} mask:{mask_what}"
                 conf_error(errmsg, item=mask_item)
                 continue
 
-            if mask_value and mask_what not in Except.mask_types:
-                errmsg = f"Unrecognized mask type in except {block.name} {{ }} mask:{mask_what}"
-                conf_error(errmsg, item=mask_item)
-                continue
-
-            if mask_what == "certfp":
-                pattern = r"[A-Fa-f0-9]{64}$"
-                if not re.match(pattern, mask_value):
-                    errmsg = f"Invalid certfp: {mask_value} -- must be in format: [A-Fa-f0-9]{64}"
-                    conf_error(errmsg, item=mask_item)
-                    continue
-
-            elif mask_what == "account":
-                if mask_value[0].isdigit():
-                    errmsg = f"Invalid account name: {mask_value} -- cannot start with number"
-                    conf_error(errmsg, item=mask_item)
-                    continue
-
-                if mask_value != '*':
-                    invalid = []
-                    for c in mask_value:
-                        if c.lower() not in IRCD.NICKCHARS:
-                            if c not in invalid:
-                                invalid.append(c)
-                    if invalid:
-                        errmsg = f"Invalid account name: {mask_value} -- invalid characters: {','.join(invalid)}"
-                        conf_error(errmsg, item=mask_item)
-                        continue
-
-            elif mask_what == "ip":
-                valid_check = mask_value.replace('*', '0')
-                try:
-                    ipaddress.ip_address(valid_check)
-                except ValueError:
-                    conf_error(f"Invalid IP address '{mask_value}'", item=mask_item)
-                    continue
-
-            else:
-                normal_mask = full_mask[0]
-                if except_name != "spamfilter":
-                    """ Normal mask ident@host or IP """
-                    if not re.match(r"^[\w*.]+@[\w*.]+$", normal_mask):
-                        valid_check = normal_mask.replace('*', '0')
-                        try:
-                            ipaddress.ip_address(valid_check)
-                        except ValueError:
-                            conf_error(f"Invalid except mask '{normal_mask}'. Must be either a ident@host or IP", item=mask_item)
-                            continue
-
-            mask.append(full_mask)
-
-        e = Except(name=except_name, mask=mask)
-        e.types = types
+        e = Except(name=except_name, mask=except_mask, types=types)
         if comment := block.get_single_value("comment"):
             e.comment = comment
 
@@ -800,24 +737,14 @@ def config_test_ulines(block):
 
 def config_test_bans(block):
     if not (ban_type := block.value):
-        conf_error(f"Ban block is missing a name. Example: except nick {{ ... }}", block)
+        conf_error(f"Ban block is missing a name. Example: ban nick {{ ... }}", block)
         return
-    required = ["mask", "reason"]
-    ok = 1
-    for item in required:
-        if not block.get_path(item):
-            conf_error(f"Block '{block.name} {block.value}' is missing item '{item}'", block)
-            ok = 0
-    if ok:
-        mask = []
-        reason = ''
 
-        for mask_item in block.get_items("mask"):
-            path = mask_item.path
-            reason = block.get_single_value("reason")
-            mask_value = None
-            if len(path[2:]) > 1:
-                mask_value = path[3]
-            full_mask = mask_item.path[2:]
-            mask.extend(set(full_mask))
-        ban = Ban(ban_type=ban_type, mask=mask, reason=reason)
+    required = ["mask", "reason"]
+    missing_items = [item for item in required if not block.get_item(item)]
+    if missing_items:
+        return conf_error(f"Block '{block.name} {block.value}' is missing item: {', '.join(missing_items)}", block)
+
+    bans_mask = Mask(block)
+    reason = block.get_single_value("reason")
+    ban = Ban(ban_type=ban_type, mask=bans_mask, reason=reason)

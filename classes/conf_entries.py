@@ -1,3 +1,6 @@
+import ipaddress
+import re
+import sys
 import time
 import socket
 import importlib
@@ -5,9 +8,140 @@ import importlib
 import OpenSSL.SSL
 
 from handle.core import IRCD
-from handle.functions import logging
+from handle.functions import logging, is_match
 from handle.handle_tls import create_ctx
 import select
+
+
+class Mask:
+    def __init__(self, block=None):
+        self.mask = []
+        self.ip = []
+        self.account = []
+        self.certfp = []
+        self.country = []
+        self.realname = []
+        self.nick = []
+        self.tls: int = 0
+        self.identified: int = 0
+        self.webirc: int = 0
+        self.websockets: int = 0
+        if block:
+            self.parse_masks(block)
+
+    @property
+    def types(self):
+        return list(self.__dict__.keys())
+
+    def parse_masks(self, block):
+        mask_items = block.get_items("mask")
+        for i in mask_items:
+            mask_item = i.get_path("mask")[0]
+            mask_value = None
+            match mask_item:
+                case "country" | "account" | "certfp" | "realname" | "nick" | "ip":
+                    attribute = getattr(self, mask_item)
+                    if len(i.path) > 3:
+                        mask_value = i.path[3]
+                    if mask_value and mask_value not in attribute:
+                        attribute.append(mask_value)
+                case "tls" | "identified" | "webirc" | "websockets":
+                    mask_value = i.path[3]
+                    attribute = getattr(self, mask_item)
+                    attribute = mask_value == "yes"
+                case _:
+                    mask_value = mask_item
+                    if mask_value not in self.mask:
+                        self.mask.append(mask_value)
+
+            self.check_values(block=block, item=i, mask_what=mask_item, mask_value=mask_value)
+
+    def check_values(self, block, item, mask_what=None, mask_value=None, normal_mask=0):
+        from handle.validate_conf import conf_error
+        match mask_what:
+            case "certfp":
+                pattern = r"[A-Fa-f0-9]{64}$"
+                if not re.match(pattern, mask_value):
+                    errmsg = f"Invalid certfp: {mask_value} -- must be in format: [A-Fa-f0-9]{64}"
+                    conf_error(errmsg, item=item)
+                    return
+            case "account":
+                if mask_value[0].isdigit():
+                    errmsg = f"Invalid account name: {mask_value} -- cannot start with number"
+                    conf_error(errmsg, item=item)
+                    return
+                invalid = []
+                for c in mask_value:
+                    if c.lower() not in IRCD.NICKCHARS:
+                        if c not in invalid:
+                            invalid.append(c)
+                if invalid:
+                    errmsg = f"Invalid account name: {mask_value} -- invalid characters: {','.join(invalid)}"
+                    conf_error(errmsg, item=item)
+                    return
+            case "ip":
+                valid_check = mask_value.replace('*', '0')
+                try:
+                    ipaddress.ip_address(valid_check)
+                except ValueError:
+                    conf_error(f"Invalid IP address '{mask_value}'", item=item)
+                    return
+            case "country" | "realname":
+                return
+            case "tls" | "identified" | "webirc" | "websockets":
+                if mask_value not in ["yes", "no"]:
+                    conf_error(f"Unknown mask value for {mask_what}: {mask_value}. Should either be 'yes' or 'no'.", item=item)
+                    return
+            case _:
+                block_key = f"{block.name}:{block.value}"
+                if block_key == "ban:nick":
+                    if mask_value[0].isdigit():
+                        errmsg = f"Invalid {block_key} mask: {mask_value} -- cannot start with number"
+                        conf_error(errmsg, item=item)
+                        return
+                    invalid = []
+                    for c in mask_value:
+                        if c != '*' and c.lower() not in IRCD.NICKCHARS:
+                            if c not in invalid:
+                                invalid.append(c)
+                    if invalid:
+                        errmsg = f"Invalid {block_key} mask: {mask_value} -- invalid characters: {','.join(invalid)}"
+                        conf_error(errmsg, item=item)
+                        return
+                    return
+                if block_key not in {"except:spamfilter"}:
+                    """ Normal mask ident@host or IP """
+                    if not re.match(r"^[\w*.]+@[\w*.]+$", mask_what):
+                        valid_check = mask_what.replace('*', '0')
+                        try:
+                            ipaddress.ip_address(valid_check)
+                        except ValueError:
+                            conf_error(f"Invalid {block_key} mask '{mask_what}'. Must be either a ident@host or IP", item=item)
+                            return
+
+    def is_match(self, client):
+        ident = client.user.username or '*'
+        usermask = f"{ident}@{client.user.realhost}"
+        ipmask = f"{ident}@{client.ip}"
+
+        checks = [
+            (self.mask, lambda mask: is_match(mask, usermask) or is_match(mask, ipmask) or is_match(mask, client.ip)),
+            (self.ip, lambda ip: is_match(ip, client.ip)),
+            (self.account, lambda account: account == client.user.account),
+            (self.certfp, lambda certfp: certfp == client.get_md_value("certfp")),
+            (self.country, lambda country: country == client.get_md_value("country")),
+            (self.realname and client.info, lambda realname: is_match(realname, client.info)),
+            (self.nick and client.name != '*', lambda nick: is_match(nick, client.name)),
+            (self.tls, lambda _: client.local and not client.local.tls),
+            (self.identified, lambda _: client.user.account != '*'),
+            (self.webirc, lambda _: client.webirc),
+            (self.websockets, lambda _: client.websocket)
+        ]
+
+        return any(conditions and any(test(item) for item in conditions) for conditions, test in checks)
+
+    def __repr__(self):
+        return f"<Mask '{self.mask}'>"
 
 
 class ConnectClass:
@@ -23,7 +157,7 @@ class ConnectClass:
 
 
 class Allow:
-    def __init__(self, mask, class_obj, maxperip):
+    def __init__(self, mask: Mask, class_obj, maxperip):
         self.mask = mask
         self.class_obj = class_obj
         self.maxperip = int(maxperip)
@@ -60,7 +194,11 @@ class Listen:
 
             if not self.listening:
                 ip = '' if self.ip == '*' else self.ip
-                self.sock.bind((ip, int(self.port)))
+                try:
+                    self.sock.bind((ip, int(self.port)))
+                except PermissionError as ex:
+                    logging.exception(ex)
+                    sys.exit()
                 self.sock.listen(10)
                 self.listening = 1
                 IRCD.configuration.our_ports.append(int(self.port))
@@ -148,8 +286,6 @@ class Operclass:
         if self.parent:
             parent_permissions = [o.permissions for o in IRCD.configuration.operclasses if o.name == self.parent]
             permissions.extend(p for p in parent_permissions if p not in permissions)
-            # for perm_list in [p for p in parent_permissions if p not in permissions]:
-            #     permissions.append(perm_list)
 
         for perm_list in permissions:
             path = check_path.split(':')
@@ -170,9 +306,7 @@ class Operclass:
 
 
 class Oper:
-    mask_types = ["certfp", "account", "ip"]
-
-    def __init__(self, name, connectclass, operclass, password, mask):
+    def __init__(self, name, connectclass, operclass, password, mask: Mask):
         self.name = name
         self.connectclass = connectclass
         self.operclass = operclass
@@ -186,31 +320,6 @@ class Oper:
         self.requiredmodes = ''
         self.swhois = None
         IRCD.configuration.opers.append(self)
-        for mask in self.mask:
-            if mask[0] in Oper.mask_types:
-                continue
-            self.host.append(mask[0])
-
-    @property
-    def certfp_mask(self):
-        certfp_mask = []
-        for mask in [m for m in self.mask if m[0] == "certfp"]:
-            certfp_mask.append(mask[1])
-        return certfp_mask
-
-    @property
-    def account_mask(self):
-        account_mask = []
-        for mask in [m for m in self.mask if m[0] == "account"]:
-            account_mask.append(mask[1])
-        return account_mask
-
-    @property
-    def ip_mask(self):
-        ip_mask = []
-        for mask in [m for m in self.mask if m[0] == "ip"]:
-            ip_mask.append(mask[1])
-        return ip_mask
 
     def __repr__(self):
         return f"<Oper '{self.name}:{self.operclass}'>"
@@ -237,6 +346,17 @@ class Link:
         return f"<Link '{self.name}'>"
 
 
+class Require:
+    def __init__(self, what, mask: Mask, reason):
+        self.what = what
+        self.mask = mask
+        self.reason = reason
+        IRCD.configuration.requires.append(self)
+
+    def __repr__(self):
+        return f"<Require '{self.what}' {self.mask} -> {self.reason}>"
+
+
 class Alias:
     def __init__(self, name, _type):
         self.name = name
@@ -252,44 +372,23 @@ class Alias:
 
 
 class Except:
-    mask_types = ["certfp", "account", "ip"]
-
-    def __init__(self, name, mask, comment='*'):
+    def __init__(self, name, mask: Mask, comment='*', types=None):
+        if types is None:
+            types = []
         self.name = name
         self.mask = mask
         self.comment = comment
         self.set_time = 0
         self.expire = 0
-        self.types = []
+        self.types = types
         IRCD.configuration.excepts.append(self)
-
-    @property
-    def certfp_mask(self):
-        certfp_mask = []
-        for mask in [m for m in self.mask if m[0] == "certfp"]:
-            certfp_mask.append(mask[1])
-        return certfp_mask
-
-    @property
-    def account_mask(self):
-        account_mask = []
-        for mask in [m for m in self.mask if m[0] == "account"]:
-            account_mask.append(mask[1])
-        return account_mask
-
-    @property
-    def ip_mask(self):
-        ip_mask = []
-        for mask in [m for m in self.mask if m[0] == "ip"]:
-            ip_mask.append(mask[1])
-        return ip_mask
 
     def __repr__(self):
         return f"<Except '{self.name} -> {self.mask}'>"
 
 
 class Ban:
-    def __init__(self, ban_type, mask, reason):
+    def __init__(self, ban_type, mask: Mask, reason):
         self.type = ban_type
         self.mask = mask
         self.reason = reason

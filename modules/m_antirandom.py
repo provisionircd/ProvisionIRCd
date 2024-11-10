@@ -502,7 +502,7 @@ def antirandom_check(client):
             IRCD.send_snomask(client, 's', f"*** Aleatory ident match for {client.name}[{client.ip}]")
             return Hook.DENY
 
-    return Hook.ALLOW
+    return Hook.CONTINUE
 
 
 def init(module):

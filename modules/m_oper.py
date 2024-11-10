@@ -5,7 +5,6 @@
 import re
 
 from handle.core import IRCD, Command, Numeric, Flag, Client, Capability, Hook
-from handle.functions import is_match
 
 try:
     import bcrypt
@@ -39,6 +38,29 @@ class OperData:
         if client not in OperData.clients or "class" not in OperData.clients[client]:
             return None
         return OperData.clients[client]["class"]
+
+
+def oper_check_certfp(client):
+    if client.user.oper:
+        return
+    fingerprint = client.get_md_value("certfp")
+    for oper in [oper for oper in IRCD.configuration.opers if oper.mask.is_match(client)]:
+        if fingerprint and fingerprint in oper.mask.certfp:
+            msg = f"TLS fingerprint match: IRC Operator status automatically activated. [block: {oper.name}, class: {oper.operclass.name}]"
+            IRCD.server_notice(client, msg)
+            do_oper_up(client, oper)
+            break
+
+
+def oper_check_account(client):
+    if client.user.oper or client.user.account == '*':
+        return
+    for oper in [oper for oper in IRCD.configuration.opers if oper.mask.is_match(client)]:
+        if client.user.account in oper.mask.account:
+            msg = f"Account match [{client.user.account}]: IRC Operator status automatically activated. [block: {oper.name}, class: {oper.operclass.name}]"
+            IRCD.server_notice(client, msg)
+            do_oper_up(client, oper)
+            break
 
 
 def restore_host(client):
@@ -82,22 +104,21 @@ def do_oper_up(client, oper):
     if oper.swhois.strip():
         client.add_swhois(line=oper.swhois[:128], tag="oper", remove_on_deoper=1)
 
-    client.add_user_modes(client.user.opermodes)
-    if client.user.snomask:
-        client.sendnumeric(Numeric.RPL_SNOMASK, client.user.snomask)
-    client.sendnumeric(Numeric.RPL_YOUREOPER)
-
     if oper.operhost and '@' not in oper.operhost and '!' not in oper.operhost:
         OperData.save_host(client)
         operhost = oper.operhost.removeprefix('.').removesuffix('.')
         if operhost.strip():
             if client.setinfo(operhost, t="host"):
                 data = f":{client.id} SETHOST :{client.user.cloakhost}"
-                # logging.debug(f"Syncing SETHOST to servers: {data}")
                 IRCD.send_to_servers(client, [], data)
 
-    msg = f"*** {client.name} ({client.user.username}@{client.user.realhost}) [block: {client.user.operlogin}, operclass: {client.user.operclass.name}] is now an IRC Operator (+{client.user.opermodes})"
+    client.add_user_modes(client.user.opermodes)
+    msg = f"*** {client.name} ({client.user.username}@{client.user.realhost}) [block: {client.user.operlogin}, operclass: {client.user.operclass.name}] is now an IRC Operator"
     IRCD.log(client, "info", "oper", "OPER_UP", msg)
+
+    if client.user.snomask:
+        client.sendnumeric(Numeric.RPL_SNOMASK, client.user.snomask)
+    client.sendnumeric(Numeric.RPL_YOUREOPER)
 
     client.add_md("operlogin", client.user.operlogin)
     client.add_md("operclass", client.user.operclass.name)
@@ -111,7 +132,6 @@ def do_oper_up(client, oper):
             Command.do(client, "TOPIC", oper_channel_obj.name)
         Command.do(client, "NAMES", oper_channel_obj.name)
 
-    # Oper-notify.
     data = f":{client.name} UMODE +o"
     IRCD.send_to_local_common_chans(client, [], "oper-notify", data)
 
@@ -124,7 +144,7 @@ def oper_fail(client, opername, reason):
 
 
 def cmd_oper(client, recv):
-    if client.user.operlogin:
+    if client.user.oper:
         return
     if not (oper := IRCD.configuration.get_oper(recv[1])):
         oper_fail(client, recv[1], "username not found")
@@ -147,29 +167,13 @@ def cmd_oper(client, recv):
             oper_fail(client, recv[1], "mode requirement not met")
             return
 
-    selfhost = client.fullrealhost.split('!')[1]
-    mask_match = 0
-    for host in oper.host:
-        if is_match(host, selfhost):
-            mask_match = 1
-            break
-
-    if (fp := client.get_md_value("certfp")) and fp in oper.certfp_mask:
-        mask_match = 1
-
-    if (account := client.user.account) != '*' and account in oper.account_mask:
-        mask_match = 1
-
-    if client.ip in oper.ip_mask:
-        mask_match = 1
-
-    if not mask_match:
+    if not oper.mask.is_match(client):
         oper_fail(client, recv[1], "mask does not match")
         return
 
     total_classes = [c for c in Client.table if c.user and c.local and c.class_ == oper.connectclass]
     if len(total_classes) >= int(IRCD.configuration.get_class(oper.connectclass).max):
-        oper_fail(client, recv[1], "associated oper class has reached its max instances")
+        oper_fail(client, recv[1], "associated oper class has reached its maximum instances")
         return
 
     do_oper_up(client, oper)
@@ -195,30 +199,8 @@ def watch_deoper(client, target, current_modes, new_modes, param):
 def oper_new_connection(client):
     if client.user.oper:
         return
-    fingerprint = client.get_md_value("certfp")
-    for oper in [oper for oper in IRCD.configuration.opers if oper.certfp_mask or oper.account_mask]:
-        if fingerprint and fingerprint in oper.certfp_mask:
-            msg = f"TLS fingerprint match: IRC Operator status automatically activated. [block: {oper.name}, class: {oper.operclass.name}]"
-            IRCD.server_notice(client, msg)
-            do_oper_up(client, oper)
-            break
-
-        if client.user.account != '*' and client.user.account in oper.account_mask:
-            msg = f"Account match [{client.user.account}]: IRC Operator status automatically activated. [block: {oper.name}, class: {oper.operclass.name}]"
-            IRCD.server_notice(client, msg)
-            do_oper_up(client, oper)
-            break
-
-
-def oper_account_login(client):
-    if client.user.account == '*' or client.user.oper or not client.registered or not client.local:
-        return
-    for oper in [oper for oper in IRCD.configuration.opers if oper.account_mask]:
-        if client.user.account in oper.account_mask:
-            msg = f"Account match [{client.user.account}]: IRC Operator status automatically activated. [block: {oper.name}, class: {oper.operclass.name}]"
-            IRCD.server_notice(client, msg)
-            do_oper_up(client, oper)
-            break
+    oper_check_certfp(client)
+    oper_check_account(client)
 
 
 def oper_join(client, channel):
@@ -232,6 +214,13 @@ def operdata_clean(client, reason):
         del OperData.clients[client]
 
 
+def oper_services_synced(server):
+    if not server.is_service:
+        return
+    for client in IRCD.local_users():
+        oper_check_account(client)
+
+
 def init(module):
     Command.add(module, cmd_oper, "OPER", 1, Flag.CMD_USER)
     Capability.add("oper-notify")
@@ -239,4 +228,4 @@ def init(module):
     Hook.add(Hook.LOCAL_CONNECT, oper_new_connection)
     Hook.add(Hook.LOCAL_JOIN, oper_join)
     Hook.add(Hook.LOCAL_QUIT, operdata_clean)
-    Hook.add(Hook.ACCOUNT_LOGIN, oper_account_login)
+    Hook.add(Hook.SERVER_SYNCED, oper_services_synced)

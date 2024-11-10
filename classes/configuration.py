@@ -3,7 +3,7 @@ import sys
 import select
 
 from handle.logger import logging, IRCDLogger
-from handle.core import Channelmode, Usermode, IRCD, Command, Configuration, Extban, Isupport, Snomask, Stat, Hook, MessageTag
+from handle.core import IRCD, Server, Channelmode, Usermode, Command, Configuration, Extban, Isupport, Snomask, Stat, Hook, MessageTag
 from handle.validate_conf import (
     ConfErrors,
     ConfWarnings,
@@ -21,7 +21,8 @@ from handle.validate_conf import (
     config_test_alias,
     config_test_except,
     config_test_ulines,
-    config_test_bans
+    config_test_bans,
+    config_test_require
 )
 
 config_commands = {
@@ -38,7 +39,8 @@ config_commands = {
     "alias": config_test_alias,
     "except": config_test_except,
     "ulines": config_test_ulines,
-    "ban": config_test_bans
+    "ban": config_test_bans,
+    "require": config_test_require
 
 }
 
@@ -48,8 +50,8 @@ dir_path = os.path.dirname(path)
 os.chdir(dir_path)
 
 IRCD.rootdir = dir_path
-IRCD.confdir = dir_path + '/conf/'
-IRCD.modules_dir = dir_path + '/modules/'
+IRCD.confdir = dir_path + "/conf/"
+IRCD.modules_dir = dir_path + "/modules/"
 
 # Enable this to display configuration parse debug output.
 debug = 0
@@ -68,12 +70,14 @@ class ConfigBuild:
 
     def is_ok(self, rehash=0, rehash_client=None, reloadmods=0):
         if not rehash:
-            if IRCD.use_poll:
+            IRCD.me = Server()
+            IRCD.logger.view_logging_info()
+            if IRCD.use_poll and not hasattr(select, "poll"):
                 if sys.platform.startswith("win32"):
                     logging.warning("Windows does not support select.poll(), using select.select() instead.")
-                    IRCD.use_poll = 0
                 else:
-                    IRCD.poller = select.poll()
+                    logging.warning("This system does not support select.poll(), using select.select() instead.")
+                IRCD.use_poll = 0
 
         # Save last configuration state.
         # In the event of a rehash, and it fails, we just assign everything back to the previous state.
@@ -315,7 +319,7 @@ class ConfigBlockEntry:
         return result
 
     def __str__(self):
-        return f"<ConfigBlockItem 'Block: {self.block.name}', File: '{self.filename}', Line: '{self.linenumber}', Path: '{self.path}'>"
+        return f"<ConfigBlockEntry 'Block: {self.block.name}', File: '{self.filename}', Line: '{self.linenumber}', Path: '{self.path}'>"
 
 
 class ConfigParser:

@@ -78,9 +78,6 @@ def log(client, level: str, rootevent: str, event: str, message: str, sync: int 
         log_to_remote(log_entry)
 
 
-IRCD.log = log
-
-
 def cmd_slog(client, recv):
     # :source SLOG <level> <rootevent> <event> :message
     # :001 SLOG warn link EVENT :This is a warning

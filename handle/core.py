@@ -12,6 +12,7 @@ import random
 import string
 import time
 import socket
+import sys
 from concurrent.futures import ThreadPoolExecutor
 
 import select
@@ -29,6 +30,7 @@ import OpenSSL
 
 from handle.functions import is_match, IPtoBase64
 from handle.logger import logging, IRCDLogger
+import handle
 
 gc.enable()
 
@@ -80,7 +82,7 @@ class Client:
     flags: list = field(default_factory=list)
     name: str = '*'
     info: str = ''  # GECOS/realname
-    ip: str = None
+    ip: str = ''
     port: int = 0
     hopcount: int = 0
     moddata: list = field(default_factory=list)
@@ -93,6 +95,7 @@ class Client:
     last_command: str = ''
     lag: int = 0
     exitted: int = 0
+    webirc: int = 0
     websocket: int = 0
 
     @property
@@ -572,7 +575,7 @@ class Client:
                     self.exit("Excess Flood")
 
     def assign_host(self):
-        if not self.user:
+        if not self.user or self.user.realhost:
             return
 
         if ban := IRCD.is_ban_client("user", self):
@@ -635,7 +638,7 @@ class Client:
         clientmask_host = f"{self.user.username}@{self.user.realhost}"
 
         for allow in IRCD.configuration.allow:
-            if is_match(allow.mask, clientmask_host) or is_match(allow.mask, clientmask_ip):
+            if allow.mask.is_match(self):
                 allow_class = allow
                 if allow.password and self.local.authpass != allow.password:
                     if "reject-on-auth-fail" in allow.options:
@@ -697,6 +700,9 @@ class Client:
                 logging.debug(f"Connection process denied for user {self.name} by module: {hook_obj}")
                 self.exit("Connection closed by server")
                 return
+            if result == Hook.ALLOW:
+                """ A module explicitly allowed it. Not processing other modules. """
+                break
 
         if self.exitted:
             return
@@ -1354,7 +1360,7 @@ class Channel:
     seen_dict: dict = field(default_factory=dict)
 
     def init_lists(self):
-        for mode in [m.flag for m in Channelmode.table if m.type == Channelmode.LISTMODE]:
+        for mode in IRCD.get_list_modes_str():
             self.List[mode] = []
 
     def can_join(self, client: Client, key: str):
@@ -1746,6 +1752,7 @@ class Configuration:
         self.connectclass = []
         self.links = []
         self.aliases = []
+        self.requires = []
 
         self.conf_file = ''
 
@@ -1796,7 +1803,6 @@ class Configuration:
         return next((listen for listen in IRCD.configuration.listen if int(listen.port) == int(port)), 0)
 
 
-@dataclass(eq=False)
 class IRCD:
     me: "Client" = None
     configuration: Configuration = Configuration()  # Final configuration class.
@@ -1832,7 +1838,8 @@ class IRCD:
     uid_iter = None
     websocketbridge = None
     executor = ThreadPoolExecutor()
-
+    command_socket = None
+    logger = IRCDLogger
     NICKLEN: int = 0
     ascii_letters_digits = ''.join([string.ascii_lowercase,
                                     string.digits,
@@ -1853,21 +1860,29 @@ class IRCD:
         IRCD.me.server = IRCD.me
         IRCD.me.direction = IRCD.me
         IRCD.me.uplink = IRCD.me
+
         if not fork:
             IRCD.forked = 0
+
         IRCD.running = 1
         IRCD.boottime = int(time())
+
         v = version.split('\\n')[0].strip()
         IRCD.hostinfo = f"Python {v}"
+
         Isupport.add("NETWORK", IRCD.me.info.replace(' ', '-'))
+
         if fork and os.name == "posix":
             pid = os.fork()
             if pid:
                 logging.info(f"PID [{pid}] forking to the background")
                 IRCDLogger.fork()
-                exit()
+                sys.exit()
 
         IRCD.run_hook(Hook.BOOT)
+        from handle.log import log
+        IRCD.log = log
+        handle.sockets.handle_connections()
 
     @staticmethod
     def log(client, level: str, rootevent: str, event: str, message: str, sync: int = 1):
@@ -1887,7 +1902,7 @@ class IRCD:
         """
         :param what:        What to check for. Examples are: gline, shun, dnsbl.
                             If what == 'ban', it will collectively check for all of the following:
-                            kline, gline, zline, gzline, shun, spamfilter, dnsbl
+                            kline, gline, zline, gzline, shun, spamfilter, dnsbl, throttle, require
         :type what:         str
         """
 
@@ -1924,26 +1939,11 @@ class IRCD:
                     return 1
 
         for e in IRCD.configuration.excepts:
-            if e.name == what:
-                if (fp := client.get_md_value("certfp")) and fp in e.certfp_mask:
-                    return 1
+            if e.name == "ban" and what in e.types and e.mask.is_match(client):
+                return 1
 
-                if client.user.account != '*':
-                    for account in e.account_mask:
-                        if account == '*' and client.user.account != '*':
-                            return 1
-                        if is_match(account, client.user.account):
-                            return 1
-
-                for ip in e.ip_mask:
-                    if is_match(client.ip, ip):
-                        return 1
-
-                for e_mask in e.mask:
-                    ident = client.user.username or '*'
-                    for mask in [f"{ident}@{client.user.realhost}", f"{ident}@{client.ip}", client.ip]:
-                        if len(e_mask) == 1 and is_match(e_mask[0], mask):
-                            return 1
+            if e.name == what and e.mask.is_match(client):
+                return 1
         return 0
 
     @staticmethod
@@ -1960,16 +1960,12 @@ class IRCD:
             if ban.type == what:
                 match what:
                     case "nick":
-                        # data = new nick
-                        for mask in ban.mask:
+                        for mask in ban.mask.mask:
                             if is_match(mask.lower(), data.lower()):
                                 return ban
-                    case "user":
-                        for mask in ban.mask:
-                            ident = '*' or client.user.username
-                            usermask = f"{ident}@{client.user.realhost}"
-                            if is_match(usermask.lower(), mask.lower()) or is_match(client.ip, mask.lower()):
-                                return ban
+                    case _:
+                        if ban.mask.is_match(client):
+                            return ban
         return 0
 
     @staticmethod
@@ -2086,10 +2082,11 @@ class IRCD:
             if '=' in tag:
                 name, value = tag.split('=')
             if tag_obj := MessageTag.find_tag(name):
-                if tag_obj.local and (self.server or not self.local):
-                    logging.warning(f"Received local tag {tag_obj} from server {self.name} -- skipping")
+                if (tag_obj.local and (self.server or not self.local)) or (tag_obj.value_required and not value):
                     continue
                 new_tag = tag_obj(value=value)
+                if not new_tag.value_is_ok(value):
+                    continue
                 # Keep original name, such as originating server name in oper-tag.
                 new_tag.name = name
                 mtags.append(new_tag)
@@ -2258,6 +2255,10 @@ class IRCD:
         return next((m for m in IRCD.configuration.modules if m.header.get("name") == name), 0)
 
     @staticmethod
+    def find_command(trigger: str) -> Command:
+        return next((c for c in Command.table if c.trigger.lower() == trigger.lower()), None)
+
+    @staticmethod
     def get_usermode_by_flag(flag: str):
         return next((umode for umode in Usermode.table if umode.flag == flag), 0)
 
@@ -2268,6 +2269,10 @@ class IRCD:
     @staticmethod
     def get_list_modes_str() -> str:
         return ''.join([cmode.flag for cmode in Channelmode.table if cmode.type == Channelmode.LISTMODE])
+
+    @staticmethod
+    def get_member_modes_str() -> str:
+        return ''.join([cmode.flag for cmode in Channelmode.table if cmode.type == Channelmode.MEMBER])
 
     @staticmethod
     def get_umodes_str():
@@ -2456,7 +2461,8 @@ class IRCD:
         if not client.local and client.recv_mtags:
             """ Remote clients mtags are already stored -- don't overwrite """
             return
-        client.mtags.clear()
+
+        client.mtags = client.recv_mtags
         IRCD.run_hook(Hook.NEW_MESSAGE, client)
         # Filter duplicate tags from self.sender.mtags, keeping only first.
         filtered_tags = []
@@ -2487,13 +2493,14 @@ class IRCD:
 
             if IRCD.current_link_sync == to_client:
                 """ Destination server is not done syncing. """
-                logging.warning(f"[send_to_servers()] Trying to sync data to server {to_client.name} but we're still syncing. Sending after we receive their EOS.")
-                logging.warning(f"This data is: {data.rstrip()}")
+                # logging.warning(f"[send_to_servers()] Trying to sync data to server {to_client.name} but we're still syncing. Sending after we receive their EOS.")
+                # logging.warning(f"This data is: {data.rstrip()}")
                 if to_client not in IRCD.send_after_eos:
                     IRCD.send_after_eos[to_client] = []
                 delayed_data = (mtags, data)
                 IRCD.send_after_eos[to_client].append(delayed_data)
                 return
+
             to_client.send(mtags, data)
 
     @staticmethod
@@ -2536,7 +2543,7 @@ class IRCD:
             IRCD.send_to_servers(client, [], out_data)
 
     @staticmethod
-    def server_notice(client: Client, data: str):  # server: Client):
+    def server_notice(client: Client, data: str):
         if client.server or not client.local:
             return
         data = f":{client.uplink.name} NOTICE {client.name} :{data}"
@@ -2593,6 +2600,7 @@ class MessageTag:
 
     name: str = ''
     value: str = ''
+    value_required: int = 0
     local: int = 0
 
     def is_visible_to(self, to_client):
@@ -2606,6 +2614,9 @@ class MessageTag:
         Do nothing by default.
         """
         pass
+
+    def value_is_ok(self, value):
+        return 1
 
     @property
     def string(self):
@@ -2629,20 +2640,18 @@ class MessageTag:
 
     @staticmethod
     def filter_tags(mtags, destination):
-        # Don't copy.
-        end_tags = []
-        for tag in mtags:
-            end_tags.append(tag)
+        return_tags = list(mtags)
 
-        for tag in list(mtags):
-            if not tag.is_visible_to(destination):
-                end_tags.remove(tag)
-                continue
-            if filtered_tag := tag.filter_value(destination):
-                end_tags.remove(tag)
-                end_tags.append(filtered_tag)
+        for index, tag in enumerate(mtags):
+            if not tag.is_visible_to(destination) or (tag.value_required and not tag.value):
+                return_tags[index] = None
+            else:
+                if filtered_tag := tag.filter_value(destination):
+                    return_tags[index] = filtered_tag
 
-        return end_tags
+        return_tags = [tag for tag in return_tags if tag]
+
+        return return_tags
 
 
 @dataclass(eq=False)
@@ -2659,7 +2668,6 @@ class ModDataInfo:
     sync: int = 0
 
 
-@dataclass(eq=False)
 class ModData:
     @staticmethod
     def get_from_client(client: Client, name: str):
@@ -2941,37 +2949,22 @@ class Extban:
 
     @staticmethod
     def add(extban):
-        if not hasattr(extban, "flag"):
-            error = f"Could not add extban: 'flag' missing"
-            logging.error(error)
-            exit()
-        if not hasattr(extban, "name"):
-            error = f"Could not add extban: 'name' missing"
-            logging.error(error)
-            exit()
-        exists = next((e for e in Extban.table if e.flag == extban.flag), 0)
-        if exists:
-            logging.error(f"Could not add extban: flag '{extban.flag}' already exists: {exists}")
-            exit()
+        missing_attrs = [attr for attr in ("flag", "name") if not hasattr(extban, attr)]
+        if missing_attrs:
+            for attr in missing_attrs:
+                logging.error(f"Could not add extban: '{attr}' missing")
+            sys.exit()
 
-        if not hasattr(extban, "paramcount"):
-            logging.error(f"Paramcount missing in extban '{extban.flag}'")
-            exit()
+        if any(e.flag == extban.flag for e in Extban.table):
+            logging.error(f"Could not add extban: flag '{extban.flag}' already exists")
+            sys.exit()
 
-        if not hasattr(extban, "is_ok"):
-            logging.error(f"No is_ok() method for extban: {extban}")
-            exit()
-
-        if not hasattr(extban, "is_match"):
-            extban.is_match = lambda a, b, c: 0
-
-        for eb in list(Extban.table):
-            if eb.flag == extban.flag:
-                Extban.table.remove(eb)
+        extban.is_ok = getattr(extban, "is_ok", lambda client, channel, action, mode, param: 1)
+        extban.is_match = getattr(extban, "is_match", lambda a, b, c: 0)
 
         Extban.table.append(extban)
         extban_flags = ''.join([e.flag for e in Extban.table])
-        Isupport.add("EXTBAN", Extban.symbol + ',' + extban_flags)
+        Isupport.add("EXTBAN", f"{Extban.symbol},{extban_flags}")
 
     @staticmethod
     def is_extban(client, channel, action, mode, param):
@@ -3001,43 +2994,38 @@ class Extban:
         """
         Converts extban flags or names to their counterparts.
 
-        +b ~t:1:~a:Sirius       ->  +b ~timed:1:~account:Sirius
-
-        This does not work:
-        +b ~t:1:~T:block:xd     ->  ~b ~timed:1:~text:block:xd
+        +b ~t:1:~a:AccountName       ->  +b ~timed:1:~account:AccountName
         """
 
         if not param.startswith(Extban.symbol):
-            # Return normal param.
             return param
 
-        param_split = param.split(':')
         converted = []
-        for item in param_split:
-            if not item:
-                continue
+        for item in [i for i in param.split(':') if i]:
             if item[0] == Extban.symbol:
-                if main_ext := Extban.find(item):
-                    converted.append(Extban.symbol + main_ext.flag if not convert_to_name else Extban.symbol + main_ext.name)
-                else:
-                    # Invalid extban, returning raw param.
+                if not (main_ext := Extban.find(item)):
                     return param
+                converted.append(Extban.symbol + main_ext.flag if not convert_to_name else Extban.symbol + main_ext.name)
             else:
                 converted.append(item)
 
-        converted_str = ':'.join(converted)
-        return converted_str
+        return ':'.join(converted)
 
 
 class Hook:
+    # Deny the call. Stop processing other modules.
     DENY = hook()
+
+    # Allow the call. Stop processing other modules.
     ALLOW = hook()
+
+    # Do nothing. Keep processing other modules.
     CONTINUE = hook()
 
     # Called after the IRCd has successfully booted up.
     BOOT = hook()
 
-    # This is called every 1 second, or as soon as new data is being handled.
+    # This is called every 100 milliseconds, or as soon as new data is being handled.
     LOOP = hook()
 
     # Called when a packet is being read or sent.
@@ -3063,6 +3051,10 @@ class Hook:
 
     # This is when the connection has been accepted, but still needs to go through verification phase
     # against configuration and internal block lists.
+    # When denying a connection this way, you are responsible for providing feedback to the client.
+    #
+    # Arguments:        Client
+    # Return:           Hook.DENY or Hook.ALLOW
     PRE_CONNECT = hook()
 
     # This is further down the connection process, when all internal checks have been passed.
@@ -3485,8 +3477,8 @@ class Tkl:
         "~S:": "~certfp:",
     }
 
-    def __init__(self, _type, ident, host, bantypes, expire, set_by, set_time, reason):
-        # Type = flag
+    def __init__(self, client, _type, ident, host, bantypes, expire, set_by, set_time, reason):
+        self.client = client
         self.type = _type
         self.ident = ident
         self.host = host
@@ -3576,51 +3568,36 @@ class Tkl:
 
         if flag not in Tkl.valid_flags():
             return logging.warning(f"Attempted to add non-existing TKL {flag} from {client.name}")
+
         mask = Tkl.get_mask(flag, ident, host)
         update, exists = 0, 0
         if tkl := Tkl.exists(flag, mask):
             exists = 1
             if int(expire) != int(tkl.expire) or tkl.reason != reason:
-                update = 1
-                tkl.expire = expire
-                tkl.reason = reason
-                tkl.bantypes = bantypes
+                update, tkl.expire, tkl.reason, tkl.bantypes = 1, expire, reason, bantypes
 
         expire = int(expire)
-        if expire != 0:
-            d = datetime.fromtimestamp(expire).strftime("%a %b %d %Y")
-            t = datetime.fromtimestamp(expire).strftime("%H:%M:%S %Z")
-        else:
-            d, t = None, None
-
-        expire_string = f"{'never' if expire == 0 else d + ' ' + t}"
+        expire_string = f"{'never' if expire == 0 else datetime.fromtimestamp(expire).strftime('%a %b %d %Y %H:%M:%S %Z')}"
 
         if not tkl:
-            tkl = Tkl(flag, ident, host, bantypes, expire, set_by, int(time()), reason)
+            tkl = Tkl(client, flag, ident, host, bantypes, expire, set_by, set_time, reason)
             Tkl.table.append(tkl)
             matches = Tkl.find_matches(tkl)
             if flag in "kGzZ":
                 for c in matches:
                     tkl.do_ban(c)
 
-        if bantypes == '*':
-            bantypes = ''
+        bantypes = '' if bantypes == '*' else bantypes
         bt_string = f" [{bantypes}]" if bantypes else ''
-        if (client.user and client.uplink == IRCD.me) or (client.user and client.uplink.server.synced) or (client == IRCD.me or client.server.synced) and not silent:
-            # if (not update and not exists or (update and IRCD.find_user(set_by.split('!')[0]))) \
-            #         and ((client.user and client.uplink == IRCD.me) or client.server.synced):
-            msg = f"*** {'Global ' if tkl.is_global else ''}{tkl.name}{bt_string} {'active' if not update else 'updated'} for {tkl.mask} by {set_by} [{reason}] expires on: {expire_string}"
-            sync = not tkl.is_global
-            IRCD.log(client, "info", "tkl", "TKL_ADD", msg, sync=sync)
+
+        if (client.user and (client.uplink == IRCD.me or client.uplink.server.synced)) or \
+                (client == IRCD.me or client.server.synced) and not silent:
+            msg = f"*** {'Global ' if tkl.is_global else ''}{tkl.name}{bt_string} {'active' if not update and not exists else 'updated'} for {tkl.mask} by {set_by} [{reason}] expires on: {expire_string}"
+            IRCD.log(client, "info", "tkl", "TKL_ADD", msg, sync=not tkl.is_global)
 
         if tkl.is_global:
             if flag == 'E':
-                local_bantypes = ''
-                for bt in [bt for bt in bantypes if bt in Tkl.global_flags()]:
-                    local_bantypes += bt
-                bantypes = local_bantypes + ' '
-            if (client == IRCD.me or client.local) and expire > 0:
-                expire += 1
+                bantypes = ''.join(bt for bt in bantypes if bt in Tkl.global_flags()) + ' '
             data = f":{client.id} TKL + {flag} {ident} {host} {set_by} {expire} {set_time} {bantypes}:{reason}"
             IRCD.send_to_servers(client, [], data)
 
@@ -3636,13 +3613,10 @@ class Tkl:
         for tkl in list(Tkl.table):
             if tkl.type == flag and (tkl.ident, tkl.host) == (ident, host):
                 Tkl.table.remove(tkl)
-                expire = 0
-                if tkl.expire and int(time()) >= (tkl.expire - 1):
-                    expire = 1
 
                 if client == IRCD.me or client.registered:
                     date = f"{datetime.fromtimestamp(float(tkl.set_time)).strftime('%a %b %d %Y')} {datetime.fromtimestamp(float(tkl.set_time)).strftime('%H:%M:%S')}"
-                    msg = f"*** {'Expiring ' if expire else ''}{'Global ' if tkl.is_global else ''}{tkl.name} {tkl.mask} removed by {client.fullrealhost} (set by {tkl.set_by} on {date}) [{tkl.reason}]"
+                    msg = f"*** {'Expiring ' if tkl.expire else ''}{'Global ' if tkl.is_global else ''}{tkl.name} {tkl.mask} removed by {client.fullrealhost} (set by {tkl.set_by} on {date}) [{tkl.reason}]"
                     sync = not tkl.is_global
                     IRCD.log(client, "info", "tkl", "TKL_DEL", msg, sync=sync)
 

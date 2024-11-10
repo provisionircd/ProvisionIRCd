@@ -373,7 +373,7 @@ def check_bans(client):
     if client.user and (tkl := Tkl.is_match(client, "Gg")):
         tkl.do_ban(client)
         return Hook.DENY
-    return Hook.ALLOW
+    return Hook.CONTINUE
 
 
 def init(module):

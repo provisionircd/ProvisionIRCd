@@ -28,15 +28,21 @@ def account_whois(client, whois_client, lines):
 
 
 def account_check_connection(client):
+    if IRCD.is_except_client("require", client) or not IRCD.find_command("SASL") or not IRCD.find_command("AUTHENTICATE"):
+        return Hook.CONTINUE
     for require in [r for r in IRCD.configuration.requires if r.what == "authentication"]:
         if require.mask.is_match(client) and client.user.account == '*':
-            msg = "You need to be logged into an account to connect to this server."
+            msg = f"You need to be logged into an account to connect to this server"
+            if require.reason and require.reason.strip():
+                msg += f": {require.reason}"
+            else:
+                msg += '.'
             if client.has_capability("standard-replies"):
                 client.send([], f"FAIL * ACCOUNT_REQUIRED :{msg}")
             else:
                 IRCD.server_notice(client, msg)
             return Hook.DENY
-    return Hook.ALLOW
+    return Hook.CONTINUE
 
 
 def init(module):
