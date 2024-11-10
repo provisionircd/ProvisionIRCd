@@ -33,7 +33,6 @@ def account_is_match(client, channel, mask):
 class AccountBan:
     name = "account"
     flag = 'a'
-    paramcount = 1
 
     # Checks if the param is valid, in which case it returns it.
     is_ok = account_is_valid

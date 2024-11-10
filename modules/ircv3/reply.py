@@ -8,6 +8,7 @@ from handle.core import MessageTag
 
 class ReplyTag(MessageTag):
     name = "+draft/reply"
+    value_required = 1
 
     def __init__(self, value):
         super().__init__(name=ReplyTag.name, value=value)

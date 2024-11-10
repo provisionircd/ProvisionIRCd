@@ -24,8 +24,6 @@ def cmd_eos(client, recv):
     #     server_client.add_flag(Flag.CLIENT_REGISTERED)
     #     IRCD.run_hook(Hook.SERVER_SYNCED, server_client)
 
-    IRCD.run_hook(Hook.SERVER_SYNCED, client)
-
     """ We can now process other servers' recv buffer """
     IRCD.do_delayed_process()
 
@@ -33,7 +31,7 @@ def cmd_eos(client, recv):
     if client in IRCD.send_after_eos:
         logging.debug(f"Now sending previously held back server data to {client.name}")
         for mtags, data in IRCD.send_after_eos[client]:
-            logging.debug(f"Delayed data: {data.rstrip()}")
+            # logging.debug(f"Delayed data: {data.rstrip()}")
             IRCD.send_to_one_server(client, mtags, data)
         del IRCD.send_after_eos[client]
 
@@ -41,6 +39,8 @@ def cmd_eos(client, recv):
         started_by = client if client.local else client.uplink
         if batch.started_by in [started_by, started_by.direction] and batch.batch_type == "netjoin":
             batch.end()
+
+    IRCD.run_hook(Hook.SERVER_SYNCED, client)
 
 
 def init(module):

@@ -11,9 +11,6 @@ class OperTag(MessageTag):
     def __init__(self, value):
         super().__init__(name=f"{IRCD.me.name}/{OperTag.name}", value=value)
 
-    def is_visible_to(self, to_client):
-        return super().is_visible_to(to_client)
-
     def filter_value(self, target) -> MessageTag:
         if target.user and 'o' not in target.user.modes:
             tag = OperTag(value=None)

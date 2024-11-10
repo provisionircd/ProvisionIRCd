@@ -55,7 +55,6 @@ def check_text_block(client, channel, msg: list, prefix: str):
 class Textban:
     name = "text"
     flag = 'T'
-    paramcount = 1
     is_ok = blockmsg_is_valid
 
 

@@ -12,9 +12,12 @@ from handle.core import Command, Numeric, IRCD, Flag, Stat, Hook, Tkl
 
 
 def remove_expired_tkl():
-    expired = [t for t in Tkl.table if int(t.expire) and int(time.time()) >= int(t.expire)]
-    for tkl in expired:
-        Tkl.remove(IRCD.me, tkl.type, tkl.ident, tkl.host)
+    for tkl in [t for t in Tkl.table if t.expire]:
+        expire = int(tkl.expire)
+        if not tkl.client.local or (tkl.client.server and tkl.client != IRCD.me):
+            expire += 1
+        if int(time.time()) >= expire:
+            Tkl.remove(IRCD.me, tkl.type, tkl.ident, tkl.host)
 
 
 def tkl_to_json():
@@ -52,7 +55,6 @@ def make_real_mask(data):
 def cmd_tkl(client, recv):
     if len(recv) < 5 or (recv[1] == '+' and len(recv) < 9):
         return
-
     try:
         flag = recv[2]
         ident = recv[3]

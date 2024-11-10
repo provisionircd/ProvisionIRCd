@@ -13,15 +13,19 @@ def cmd_rehash(client, recv):
     """
     Reloads the configuration files.
     """
-    if not client.has_permission("server:rehash"):
+    if client.user and not client.has_permission("server:rehash"):
         return client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
     if IRCD.rehashing:
         return
 
     IRCD.rehashing = 1
     IRCD.current_link_sync = None
-    client.local.flood_penalty += 500_000
-    msg = f"*** {client.name} ({client.user.username}@{client.user.realhost}) is rehashing the server configuration file..."
+    if client.is_local_user:
+        client.local.flood_penalty += 500_000
+    if client.user:
+        msg = f"*** {client.name} ({client.user.username}@{client.user.realhost}) is rehashing the server configuration file..."
+    else:
+        msg = f"*** Rehashing configuration file from the command line..."
     IRCD.log(client, "info", "config", "CONFIG_REHASH", msg)
 
     reloadmods = 0
@@ -40,6 +44,7 @@ def cmd_rehash(client, recv):
         msg = "*** Configuration failed to reload."
 
     IRCD.log(client, "info", "config", "CONFIG_REHASH", msg)
+
     gc.collect()
     IRCD.rehashing = 0
 

@@ -29,18 +29,13 @@ def broadcast_nickchange(client, newnick):
 
 
 class Nick:
-    """
-    Changes your nickname. Users you share a channel with will be notified of this change.
-    Syntax: /NICK <newnick>
-    """
-
     flood = {}
 
 
 def expired_nickflood():
     for user in Nick.flood:
         for nickchg in [nickchg for nickchg in dict(Nick.flood[user])
-                        if int(time.time()) - int(nickchg) > int(IRCD.get_setting('nickflood').split(':')[1])]:
+                        if int(time.time()) - int(nickchg) >= int(IRCD.get_setting("nickflood").split(':')[1])]:
             del Nick.flood[user][nickchg]
             continue
 
@@ -65,13 +60,12 @@ def cmd_nick_local(client, recv):
             return client.sendnumeric(Numeric.ERR_ERRONEUSNICKNAME, newnick, c)
 
     if not client.has_permission("immune:nick-flood") and Flag.CLIENT_USER_SANICK not in client.flags:
-        if client in Nick.flood and len(Nick.flood[client]) >= int(IRCD.get_setting("nickflood").split(':')[0]):
+        if client in Nick.flood and len(Nick.flood[client]) > int(IRCD.get_setting("nickflood").split(':')[0]):
             client.local.flood_penalty += 25_000
             return client.sendnumeric(Numeric.ERR_NICKTOOFAST, newnick)
 
     in_use = IRCD.find_user(newnick)
     if in_use and newnick == client.name:
-        # Exact nick.
         return
 
     if in_use and newnick.lower() != client.name.lower():
@@ -104,6 +98,12 @@ def cmd_nick_local(client, recv):
 
 
 def cmd_nick(client, recv):
+    """
+    Changes your nickname.
+    Users you share a channel with will be notified of this change.
+    Syntax: NICK <newnick>
+    """
+
     if client.server:
         client.exit("This port is for servers only")
         return
@@ -145,19 +145,19 @@ def create_user_from_uid(client, info: list):
     new_client.user.account = info[7]
     new_client.user.modes = info[8].replace('+', '')
     cloakhost = info[10]
+
     ip = info[11]
     new_client.ip = ip
-    if ip != '*' and not ip.replace('.', '').isdigit() and ip is not None:
+    if ip != '*' and not ip.replace('.', '').isdigit():
         new_client.ip = Base64toIP(ip)
     else:
-        new_client.ip = ip
+        new_client.ip = ip if ip != '*' else client.ip
+
     new_client.info = ' '.join(info[12:]).removeprefix(':')
     if cloakhost == '*':
         new_client.user.cloakhost = new_client.user.realhost
     else:
         new_client.user.cloakhost = cloakhost
-    if new_client.ip == '*':
-        new_client.ip = client.ip
 
     new_client.add_flag(Flag.CLIENT_REGISTERED)
     # logging.debug(f"New remote user {new_client.name}. Uplink: {new_client.uplink.name}, direction: {new_client.direction.name}")

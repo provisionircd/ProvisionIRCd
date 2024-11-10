@@ -158,8 +158,9 @@ def sync_data(newserver):
 
 def deny_direct_link(client, error: int, *args):
     message = Error.send(error, *args)
-    data = f":{IRCD.me.id} ERROR :Link with {IRCD.me.name} denied: {message}"
-    client.direct_send(data)
+    if IRCD.me.name != '*':
+        data = f":{IRCD.me.id} ERROR :Link with {IRCD.me.name} denied: {message}"
+        client.direct_send(data)
     IRCD.log(IRCD.me, "error", "link", "LINK_DENIED", f"Link with {client.name} denied: {message}")
     logging.debug(f"[deny_direct_link] {client.name}: {message}")
     client.exit(message)

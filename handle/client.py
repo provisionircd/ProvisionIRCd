@@ -17,11 +17,7 @@ try:
     )
     READ_WRITE = READ_ONLY | select.POLLOUT
 except AttributeError:
-    if sys.platform.startswith("win32"):
-        logging.warning("Windows does not support select.poll(), using select.select() instead.")
-    else:
-        logging.warning("This system does not support select.poll(), using select.select() instead.")
-    IRCD.use_poll = 0
+    pass
 
 
 def make_client(direction, uplink) -> Client | None:
@@ -69,7 +65,7 @@ def make_user(client: Client):
         client.assign_host()
         client.local.nospoof = ''.join(random.choice(string.digits + string.ascii_uppercase) for _ in range(8))
         client.send([], f"PING :{client.local.nospoof}")
-        IRCD.run_parallel_function(cookie_helper, args=(client,), delay=0.30)
+        IRCD.run_parallel_function(cookie_helper, args=(client,), delay=0.55)
 
     return client
 

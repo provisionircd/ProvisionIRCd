@@ -26,7 +26,6 @@ def operclass_is_match(client, channel, mask):
 class OperclassExtban:
     name = "operclass"
     flag = 'O'
-    paramcount = 1
 
     # Checks if the param is valid, in which case it returns it.
     is_ok = operclass_is_valid

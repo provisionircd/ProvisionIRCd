@@ -87,7 +87,6 @@ def timedban_is_match(client, channel, mask):
 class TimedBans:
     name = "timed"
     flag = 't'
-    paramcount = 1
     is_ok = timedban_is_valid
     is_match = timedban_is_match
 

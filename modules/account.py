@@ -27,7 +27,20 @@ def account_whois(client, whois_client, lines):
         lines.append(line)
 
 
+def account_check_connection(client):
+    for require in [r for r in IRCD.configuration.requires if r.what == "authentication"]:
+        if require.mask.is_match(client) and client.user.account == '*':
+            msg = "You need to be logged into an account to connect to this server."
+            if client.has_capability("standard-replies"):
+                client.send([], f"FAIL * ACCOUNT_REQUIRED :{msg}")
+            else:
+                IRCD.server_notice(client, msg)
+            return Hook.DENY
+    return Hook.ALLOW
+
+
 def init(module):
+    Hook.add(Hook.PRE_CONNECT, account_check_connection)
     Hook.add(Hook.ACCOUNT_LOGIN, account_changed)
     Hook.add(Hook.WHOIS, account_whois)
     Hook.add(Hook.LOCAL_NICKCHANGE, account_nickchange)

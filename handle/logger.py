@@ -220,4 +220,3 @@ IRCDLogger.stream_handler = stream_handler
 
 IRCDLogger.loghandlers.extend(handlers)
 logging.basicConfig(level=logging.DEBUG, handlers=IRCDLogger.loghandlers)
-IRCDLogger.view_logging_info()

@@ -1,4 +1,7 @@
+import ipaddress
+import logging
 import socket
+from sys import argv
 from time import time
 import select
 from OpenSSL import SSL
@@ -6,7 +9,7 @@ from OpenSSL import SSL
 from handle.client import (find_client_from_socket,
                            make_client, make_server, make_user,
                            find_listen_obj_from_socket)
-from handle.core import IRCD, Client, Hook, Numeric
+from handle.core import IRCD, Client, Hook, Numeric, Command
 from handle.functions import logging, fixup_ip6
 from modules.m_connect import connect_to
 
@@ -95,12 +98,12 @@ def post_accept(conn, client, listen_obj):
 
 
 def accept_socket(sock, listen_obj):
-    # logging.debug(f"accept_socket() called.")
     if len(IRCD.unregistered_clients()) >= 100:
         return logging.warning(f"SYN flood - not processing current connection.")
     try:
         conn, addr = sock.accept()
     except OSError as ex:
+        close_socket(sock)
         return logging.exception(ex)
 
     client = make_client(direction=None, uplink=IRCD.me)
@@ -109,10 +112,19 @@ def accept_socket(sock, listen_obj):
     client.local.listen = listen_obj
     client.local.incoming = 1
     client.ip, client.port = addr
+    if not listen_obj and not ipaddress.ip_address(client.ip).is_private:
+        client.exit("Connection reset")
+        close_socket(conn)
+        return
     if client.ip[:7] == "::ffff:":
         client.ip = client.ip.replace("::ffff:", '')  # client connected through ipv6 compatible mode -- strip away cruft
     client.ip = fixup_ip6(client.ip)  # make address look safe, e.g. "::1" is invalid but "0::1" is
-    IRCD.run_parallel_function(post_accept, args=(conn, client, listen_obj))
+    if listen_obj:
+        IRCD.run_parallel_function(post_accept, args=(conn, client, listen_obj))
+    else:
+        client.local.handshake = 1
+        client.local.socket.setblocking(0)
+        IRCD.command_socket = conn
 
 
 def check_ping_timeouts():
@@ -218,6 +230,15 @@ def find_sock_from_fd(fd: int):
 
 def process_client_buffer(client):
     buffer = client.local.temp_recvbuffer
+
+    if client.local.socket == IRCD.command_socket:
+        command = buffer
+        logging.debug(f"Received command: {buffer}")
+        if buffer.strip() == "--rehash":
+            Command.do(IRCD.me, "REHASH")
+        close_socket(client.local.socket)
+        return
+
     messages = []
     while 1:
         delimiter_index = buffer.find('\n')
@@ -342,6 +363,26 @@ def get_full_recv(client, sock):
 
 
 def handle_connections():
+    # try:
+    #     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
+    #         client_socket.connect(("127.0.0.1", 65432))
+    #         command = ' '.join(argv[1:])  # Take arguments as command
+    #         print(f"Command: {command}")
+    #         client_socket.sendall(command.encode())
+    #         response = client_socket.recv(1024).decode()
+    #         print(f"Response from server: {response}")
+    #     exit(0)  # Exit after sending the command
+    #
+    # except ConnectionRefusedError:
+    #     # No server is running, proceed to start a new server instance
+    #     pass
+
+    server_socket = None
+    # server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    # server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    # server_socket.bind(('', 65432))
+    # server_socket.listen(10)
+
     while IRCD.running:
         try:
             for client in [c for c in list(Client.table) if c.exitted]:
@@ -351,12 +392,14 @@ def handle_connections():
                 except ValueError:
                     pass
             listen_sockets = [listen.sock for listen in IRCD.configuration.listen if listen.listening]
+            if server_socket:
+                listen_sockets.append(server_socket)
             available_clients = [client for client in IRCD.local_clients() if client.local.socket and client.local.socket.fileno() > 0 and not client.exitted]
             read_clients = [client.local.socket for client in available_clients if client.local.handshake]
             write_clients = [client.local.socket for client in available_clients if client.local.handshake and client.local.sendbuffer]
 
             if IRCD.use_poll:
-                fdVsEvent = IRCD.poller.poll(250)
+                fdVsEvent = IRCD.poller.poll(100)
                 for fd, Event in fdVsEvent:
                     # https://stackoverflow.com/a/42612778
                     # logging.debug(f"New event on fd {fd}: {Event}")
@@ -382,6 +425,7 @@ def handle_connections():
                                 close_socket(sock)
                                 continue
                             accept_socket(sock, listen_obj)
+                            continue
                         else:
                             if not (client := find_client_from_socket(sock)):
                                 logging.debug(f"Attempting to close socket because no client object associated with socket")
@@ -431,8 +475,9 @@ def handle_connections():
             else:
                 try:
                     clean_invalid_sockets(listen_sockets, read_clients, write_clients)
-                    read, write, error = select.select(listen_sockets + read_clients, write_clients, listen_sockets + read_clients, 0.25)
-                except ValueError:
+                    read, write, error = select.select(listen_sockets + read_clients, write_clients, listen_sockets + read_clients, 0.1)
+                except ValueError as ex:
+                    logging.exception(ex)
                     continue
 
                 for sock in write:
@@ -446,11 +491,15 @@ def handle_connections():
 
                 for sock in read:
                     if sock in listen_sockets:
-                        if not (listen_obj := find_listen_obj_from_socket(sock)):
-                            close_socket(sock)
-                            continue
-                        accept_socket(sock, listen_obj)
+                        if sock is not server_socket:
+                            if not (listen_obj := find_listen_obj_from_socket(sock)):
+                                close_socket(sock)
+                                continue
+                            accept_socket(sock, listen_obj)
+                        else:
+                            accept_socket(server_socket, listen_obj=None)
                         continue
+
                     else:
                         if not (client := find_client_from_socket(sock)):
                             close_socket(sock)
