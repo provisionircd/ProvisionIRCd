@@ -13,11 +13,6 @@ from handle.core import IRCD, Client, Hook, Numeric, Command
 from handle.functions import logging, fixup_ip6
 from modules.m_connect import connect_to
 
-try:
-    from modules.m_websockets import websock_tunnel
-except ImportError:
-    websock_tunnel = 0
-
 
 def close_socket(sock):
     for method in [lambda: sock.shutdown(sock.SHUT_RDWR), sock.close]:
@@ -86,14 +81,14 @@ def post_accept(conn, client, listen_obj):
             return
         make_server(client)
         IRCD.current_link_sync = client
+
     else:
         make_user(client)
+
     if client.server:
         IRCD.run_hook(Hook.SERVER_LINK_IN, client)
-    else:
-        # TODO: Check if this causes issues.
-        #  It used to be in handle_recv()
-        IRCD.run_hook(Hook.NEW_CONNECTION, client)
+
+    IRCD.run_hook(Hook.NEW_CONNECTION, client)
     logging.debug(f"Accepted new socket on {listen_obj.port}: {client.ip} -- fd: {client.local.socket.fileno()}")
 
 

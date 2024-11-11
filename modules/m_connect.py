@@ -20,6 +20,7 @@ def connect_to(client, link, auto_connect=0):
             if client and client.user:
                 IRCD.server_notice(client, f"Unable to process outgoing link {out_host}:{out_port} because destination is localhost.")
             return
+
         is_tls = 0
         if "tls" in link.outgoing_options or "ssl" in link.outgoing_options:
             is_tls = 1
@@ -41,15 +42,18 @@ def cmd_connect(client, recv):
 
     Note that <servername> should match a server in your configuration file.
     """
+
     if not client.has_permission("server:connect"):
         return client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
+
     if "HTTP/" in recv:
-        client.exit("Illegal command")
-        return
+        return client.exit("Illegal command")
+
     if IRCD.current_link_sync:
         client.local.flood_penalty += 100_000
         logging.debug(f"Current link sync: {IRCD.current_link_sync}")
         return IRCD.server_notice(client, f"A link sync is already in process, try again in a few seconds.")
+
     name = recv[1].strip()
     if name.lower() == IRCD.me.name.lower():
         return IRCD.server_notice(client, "*** Cannot link to own local server.")

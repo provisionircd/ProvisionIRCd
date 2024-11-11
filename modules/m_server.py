@@ -80,7 +80,7 @@ def auth_incoming_link(client):
                 logging.debug(f"[auth] Incoming link password is a match")
 
             if fingerprint:
-                if client_certfp != fingerprint:
+                if not client_certfp or client_certfp != fingerprint:
                     deny_direct_link(client, Error.SERVER_LINK_NOMATCH_CERTFP)
                     logging.debug(f"Link denied for {client.name}: certificate fingerprint mismatch")
                     logging.debug(f"Required: {fingerprint}")

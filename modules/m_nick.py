@@ -8,7 +8,6 @@ from handle.core import Flag, Numeric, Isupport, Command, IRCD, Client, Hook
 from classes.errors import Error
 from handle.client import make_client, make_user
 from handle.functions import Base64toIP
-from handle.logger import logging
 from classes.conf_entries import ConnectClass, Operclass
 
 NICKLEN = 24
@@ -88,7 +87,7 @@ def cmd_nick_local(client, recv):
         Nick.flood[client][time.time()] = True
         if client.local and Flag.CLIENT_USER_SANICK not in client.flags:
             msg = f"*** {client.name} ({client.user.username}@{client.user.realhost}) has changed their nickname to {newnick}"
-            IRCD.send_snomask(client, 'N', msg)
+            IRCD.log(client, "info", "nick", "LOCAL_NICK_CHANGE", msg, sync=0)
 
         IRCD.new_message(client)
         broadcast_nickchange(client, newnick)
@@ -119,7 +118,7 @@ def cmd_nick_remote(client, recv):
     IRCD.run_hook(Hook.REMOTE_NICKCHANGE, client, newnick)
     broadcast_nickchange(client, newnick)
     msg = f"*** {client.name} ({client.user.username}@{client.user.realhost}) has changed their nickname to {newnick}"
-    IRCD.send_snomask(client, 'N', msg)
+    IRCD.log(client, "info", "nick", "REMOTE_NICK_CHANGE", msg)
     client.name = newnick
 
 

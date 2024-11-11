@@ -35,89 +35,70 @@ class Mask:
 
     def parse_masks(self, block):
         mask_items = block.get_items("mask")
-        for i in mask_items:
-            mask_item = i.get_path("mask")[0]
+        for mask_item in [i for i in mask_items if i.get_path("mask")]:
+            mask_what = mask_item.get_path("mask")[0]
             mask_value = None
-            match mask_item:
+            match mask_what:
                 case "country" | "account" | "certfp" | "realname" | "nick" | "ip":
-                    attribute = getattr(self, mask_item)
-                    if len(i.path) > 3:
-                        mask_value = i.path[3]
+                    attribute = getattr(self, mask_what)
+                    if len(mask_item.path) > 3:
+                        mask_value = mask_item.path[3]
                     if mask_value and mask_value not in attribute:
                         attribute.append(mask_value)
                 case "tls" | "identified" | "webirc" | "websockets":
-                    mask_value = i.path[3]
-                    attribute = getattr(self, mask_item)
+                    mask_value = mask_item.path[3]
+                    attribute = getattr(self, mask_what)
                     attribute = mask_value == "yes"
                 case _:
-                    mask_value = mask_item
+                    mask_value = mask_what
                     if mask_value not in self.mask:
                         self.mask.append(mask_value)
 
-            self.check_values(block=block, item=i, mask_what=mask_item, mask_value=mask_value)
+            if mask_value.strip():
+                self.check_values(block=block, item=mask_item, mask_what=mask_what, mask_value=mask_value)
 
     def check_values(self, block, item, mask_what=None, mask_value=None, normal_mask=0):
         from handle.validate_conf import conf_error
         match mask_what:
+
             case "certfp":
-                pattern = r"[A-Fa-f0-9]{64}$"
-                if not re.match(pattern, mask_value):
-                    errmsg = f"Invalid certfp: {mask_value} -- must be in format: [A-Fa-f0-9]{64}"
-                    conf_error(errmsg, item=item)
-                    return
+                if not re.match(r"[A-Fa-f0-9]{64}$", mask_value):
+                    return conf_error(f"Invalid certfp: {mask_value} -- must be in format: [A-Fa-f0-9]{64}", item=item)
+
             case "account":
                 if mask_value[0].isdigit():
-                    errmsg = f"Invalid account name: {mask_value} -- cannot start with number"
-                    conf_error(errmsg, item=item)
-                    return
-                invalid = []
-                for c in mask_value:
-                    if c.lower() not in IRCD.NICKCHARS:
-                        if c not in invalid:
-                            invalid.append(c)
-                if invalid:
-                    errmsg = f"Invalid account name: {mask_value} -- invalid characters: {','.join(invalid)}"
-                    conf_error(errmsg, item=item)
-                    return
+                    return conf_error(f"Invalid account name: {mask_value} -- cannot start with number", item=item)
+                if invalid := {c for c in mask_value if c.lower() not in IRCD.NICKCHARS}:
+                    return conf_error(f"Invalid account name: {mask_value} -- invalid characters: {''.join(invalid)}", item=item)
+
             case "ip":
-                valid_check = mask_value.replace('*', '0')
                 try:
-                    ipaddress.ip_address(valid_check)
+                    ipaddress.ip_address(mask_value.replace('*', '0'))
                 except ValueError:
-                    conf_error(f"Invalid IP address '{mask_value}'", item=item)
-                    return
+                    return conf_error(f"Invalid IP address '{mask_value}'", item=item)
+
             case "country" | "realname":
                 return
+
             case "tls" | "identified" | "webirc" | "websockets":
                 if mask_value not in ["yes", "no"]:
-                    conf_error(f"Unknown mask value for {mask_what}: {mask_value}. Should either be 'yes' or 'no'.", item=item)
-                    return
+                    return conf_error(f"Unknown mask value for {mask_what}: {mask_value}. Should either be 'yes' or 'no'.", item=item)
+
             case _:
                 block_key = f"{block.name}:{block.value}"
                 if block_key == "ban:nick":
                     if mask_value[0].isdigit():
-                        errmsg = f"Invalid {block_key} mask: {mask_value} -- cannot start with number"
-                        conf_error(errmsg, item=item)
-                        return
-                    invalid = []
-                    for c in mask_value:
-                        if c != '*' and c.lower() not in IRCD.NICKCHARS:
-                            if c not in invalid:
-                                invalid.append(c)
-                    if invalid:
-                        errmsg = f"Invalid {block_key} mask: {mask_value} -- invalid characters: {','.join(invalid)}"
-                        conf_error(errmsg, item=item)
-                        return
-                    return
-                if block_key not in {"except:spamfilter"}:
+                        return conf_error(f"Invalid account name: {mask_value} -- cannot start with number", item=item)
+                    if invalid := {c for c in mask_value if c != '*' and c.lower() not in IRCD.NICKCHARS}:
+                        return conf_error(f"Invalid account name: {mask_value} -- invalid characters: {''.join(invalid)}", item=item)
+
+                elif block_key not in {"except:spamfilter"}:
                     """ Normal mask ident@host or IP """
                     if not re.match(r"^[\w*.]+@[\w*.]+$", mask_what):
-                        valid_check = mask_what.replace('*', '0')
                         try:
-                            ipaddress.ip_address(valid_check)
+                            ipaddress.ip_address(mask_what.replace('*', '0'))
                         except ValueError:
-                            conf_error(f"Invalid {block_key} mask '{mask_what}'. Must be either a ident@host or IP", item=item)
-                            return
+                            return conf_error(f"Invalid {block_key} mask '{mask_what}'. Must be either an ident@host or IP", item=item)
 
     def is_match(self, client):
         ident = client.user.username or '*'
@@ -178,7 +159,10 @@ class Listen:
         self.tls = 0
         self.tlsctx = None
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        else:
+            self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.listening = 0
         self.cert = None
         self.key = None

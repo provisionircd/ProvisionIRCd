@@ -324,11 +324,15 @@ def config_test_allow(block):
 def config_test_listen(block):
     def is_port_in_use(host, port):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+            else:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             try:
                 location = (host, port)
-                s.bind(location)  # Try to bind to the port.
+                s.bind(location)
                 close_port_check(s)
-                return 0, 0  # If the bind succeeds, the port is not in use.
+                return 0, 0
             except OSError as ex:
                 close_port_check(s)
                 if ex.errno in [13, 10013]:
@@ -343,7 +347,6 @@ def config_test_listen(block):
                 return 1, 0
 
     def close_port_check(s):
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             s.shutdown(socket.SHUT_WR)
         except:

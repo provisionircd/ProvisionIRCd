@@ -72,12 +72,15 @@ class ConfigBuild:
         if not rehash:
             IRCD.me = Server()
             IRCD.logger.view_logging_info()
-            if IRCD.use_poll and not hasattr(select, "poll"):
-                if sys.platform.startswith("win32"):
-                    logging.warning("Windows does not support select.poll(), using select.select() instead.")
+            if IRCD.use_poll:
+                if not hasattr(select, "poll"):
+                    if sys.platform.startswith("win32"):
+                        logging.warning("Windows does not support select.poll(), using select.select() instead.")
+                    else:
+                        logging.warning("This system does not support select.poll(), using select.select() instead.")
+                    IRCD.use_poll = 0
                 else:
-                    logging.warning("This system does not support select.poll(), using select.select() instead.")
-                IRCD.use_poll = 0
+                    IRCD.poller = select.poll()
 
         # Save last configuration state.
         # In the event of a rehash, and it fails, we just assign everything back to the previous state.
