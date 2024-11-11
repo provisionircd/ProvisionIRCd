@@ -2009,6 +2009,7 @@ class IRCD:
     @staticmethod
     def read_from_file(file: str) -> str:
         """ Read data from a file and return its contents as a string """
+
         if not os.path.exists(file):
             return ''
 
@@ -2022,6 +2023,7 @@ class IRCD:
         If the process that called this method ends earlier,
         the delay will be removed before <delay>.
         """
+
         if not client.local or not client.user:
             return
         # logging.debug(f"Delaying client {client.name} for {delay} seconds. Label: {label}")
@@ -2079,18 +2081,22 @@ class IRCD:
             name = tag
             if '=' in tag:
                 name, value = tag.split('=')
-            if tag_obj := MessageTag.find_tag(name):
-                if (tag_obj.local and (self.server or not self.local)) or (tag_obj.value_required and not value):
+            if tag_class := MessageTag.find_tag(name):
+                new_tag = tag_class(value=value)
+
+                if self.is_local_user and not tag_class.is_client_tag():
                     continue
-                new_tag = tag_obj(value=value)
-                if not new_tag.value_is_ok(value):
+
+                if tag_class.local and not self.is_local_user:
                     continue
+
+                if not new_tag.value_is_ok(value) or (tag_class.value_required and not value):
+                    continue
+
                 # Keep original name, such as originating server name in oper-tag.
                 new_tag.name = name
                 mtags.append(new_tag)
-            elif name.startswith('+') and not tag_obj:
-                pass
-                # logging.debug(f"Received non-existent client-tag from {self.name}: {tag}")
+
         return mtags
 
     @staticmethod
@@ -2154,6 +2160,7 @@ class IRCD:
         # I would first like to find out why that is.
         # This method finds the first available UID, even if it has been used before.
         """ 456,976 possibilities. """
+
         uid_iter = itertools.product(string.ascii_uppercase, repeat=4)
         for i in uid_iter:
             uid = IRCD.me.id + ''.join(i)
@@ -2191,6 +2198,7 @@ class IRCD:
         host = received hostname, depending on resolve settings.
         Can either be IP or realhost.
         """
+
         if not host:
             host = client.user.realhost
             ip = client.ip
@@ -2600,6 +2608,11 @@ class MessageTag:
     value: str = ''
     value_required: int = 0
     local: int = 0
+    client_tag: int = 0
+
+    @classmethod
+    def is_client_tag(cls):
+        return cls.client_tag or cls.name.startswith('+')
 
     def is_visible_to(self, to_client):
         if (MessageTag.find_tag(self.name).local or self.local) and to_client.server:
@@ -2622,15 +2635,9 @@ class MessageTag:
 
     @staticmethod
     def find_tag(name):
-        if not name:
-            return
         for tag in MessageTag.table:
-            if tag.name == name:
+            if tag.name == name or any(value == tag.name for value in name.split('/')):
                 return tag
-            if '/' in name:
-                for value in name.split('/'):
-                    if value == tag.name:
-                        return tag
 
     @staticmethod
     def add(tag):

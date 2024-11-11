@@ -19,6 +19,7 @@ class Currentcmd:
 class LabelTag(MessageTag):
     name = "label"
     local = 1
+    client_tag = 1
 
     def __init__(self, value):
         super().__init__(name=LabelTag.name, value=value)
