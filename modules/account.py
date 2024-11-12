@@ -38,7 +38,7 @@ def account_check_connection(client):
             else:
                 msg += '.'
             if client.has_capability("standard-replies"):
-                client.send([], f"FAIL * ACCOUNT_REQUIRED :{msg}")
+                client.send([], f"FAIL * ACCOUNT_REQUIRED_TO_CONNECT :{msg}")
             else:
                 IRCD.server_notice(client, msg)
             return Hook.DENY

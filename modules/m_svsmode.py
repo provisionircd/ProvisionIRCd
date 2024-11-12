@@ -19,6 +19,9 @@ def cmd_svsmode(client, recv):
 
         action = ''
         modes = ''
+        param = ''
+        if len(recv) > 3:
+            param = IRCD.strip_format(recv[3])
         oldumodes = target.user.modes
         for m in recv[2]:
             if m in "+-" and m != action:
@@ -53,6 +56,8 @@ def cmd_svsmode(client, recv):
         if recv[0].lower() == "svs2mode" and target.local and target.user.modes != oldumodes and len(modes) > 1:
             data = f":{client.name} MODE {target.name} {modes}"
             target.send([], data)
+
+        IRCD.run_hook(Hook.UMODE_CHANGE, client, target, oldumodes, target.user.modes, param)
 
     else:
         action = ''

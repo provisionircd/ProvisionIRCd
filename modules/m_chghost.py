@@ -13,6 +13,7 @@ def cmd_chghost(client, recv):
 
     if not (target := IRCD.find_user(recv[1])):
         return client.sendnumeric(Numeric.ERR_NOSUCHNICK, recv[1])
+
     host = str(recv[2][:64]).strip().removeprefix(':')
     for c in str(host):
         if c.lower() not in IRCD.HOSTCHARS:
@@ -20,11 +21,14 @@ def cmd_chghost(client, recv):
     host = host.removeprefix('.').removesuffix('.').strip()
     if host == target.user.cloakhost or not host:
         return
+
     target.setinfo(host, t="host")
     if client.user:
+        IRCD.server_notice(client, f"Your cloakhost has now been changed to: {client.user.cloakhost}")
         IRCD.send_snomask(client, 's',
                           f"*** {client.name} ({client.user.username}@{client.user.realhost}) "
                           f"used CHGHOST to change the host of {target.name} to \"{target.user.cloakhost}\"")
+
     data = f":{client.id} CHGHOST {target.id} :{target.user.cloakhost}"
     IRCD.send_to_servers(client, [], data)
 
@@ -37,6 +41,7 @@ def cmd_chgident(client, recv):
 
     if not (target := IRCD.find_user(recv[1])):
         return client.sendnumeric(Numeric.ERR_NOSUCHNICK, recv[1])
+
     ident = str(recv[2][:12]).strip().removeprefix(':')
     for c in str(ident):
         if c.lower() not in IRCD.HOSTCHARS:
@@ -44,8 +49,10 @@ def cmd_chgident(client, recv):
     ident = ident.removeprefix('.').removesuffix('.').strip()
     if ident == target.user.username or not ident:
         return
+
     target.setinfo(ident, t="ident")
     if client.user:
+        IRCD.server_notice(client, f"Your ident has now been changed to: {client.user.username}")
         IRCD.send_snomask(client, 's',
                           f"*** {client.name} ({client.user.username}@{client.user.realhost}) "
                           f"used CHGIDENT to change the ident of {target.name} to \"{target.user.username}\"")

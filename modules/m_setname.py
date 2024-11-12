@@ -12,11 +12,11 @@ def cmd_setname(client, recv):
     Changes your own 'real name' (GECOS)
     Syntax:     SETNAME <real name>
     """
+
     realname = ' '.join(recv[1:])[:NAMELEN].rstrip().removeprefix(':')
-    if realname and realname != client.info:
-        client.setinfo(realname, t='gecos')
-        if client.local:
-            IRCD.server_notice(client, f"Your 'real name' has now been changed to: {client.info}")
+    if realname.strip() and realname != client.info:
+        client.setinfo(realname, t="gecos")
+
     data = f":{client.id} {' '.join(recv)}"
     IRCD.send_to_servers(client, [], data)
 

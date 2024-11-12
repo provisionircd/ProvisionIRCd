@@ -11,9 +11,12 @@ def cmd_sethost(client, recv):
     for c in str(host):
         if c.lower() not in IRCD.HOSTCHARS:
             host = host.replace(c, '')
+
     host = host.removeprefix('.').removesuffix('.').strip()
     if host and host != client.user.cloakhost:
         client.setinfo(host, t="host")
+        if client.local:
+            IRCD.server_notice(client, f"*** Your cloakhost is now '{client.user.cloakhost}'")
 
     data = f":{client.id} {' '.join(recv)}"
     IRCD.send_to_servers(client, [], data)
@@ -24,11 +27,13 @@ def cmd_setident(client, recv):
     for c in str(ident):
         if c.lower() not in IRCD.HOSTCHARS:
             ident = ident.replace(c, '')
+
     ident = ident.removeprefix('.').removesuffix('.').strip()
     if ident and ident != client.user.username:
         client.setinfo(ident, t="ident")
         if client.local:
             IRCD.server_notice(client, f"*** Your ident is now '{client.user.username}'")
+
     data = f":{client.id} {' '.join(recv)}"
     IRCD.send_to_servers(client, [], data)
 
