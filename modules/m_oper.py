@@ -16,22 +16,10 @@ class OperData:
     clients = {}
 
     @staticmethod
-    def save_host(client):
-        if client not in OperData.clients:
-            OperData.clients[client] = {}
-        OperData.clients[client]["host"] = client.user.cloakhost
-
-    @staticmethod
     def save_original_class(client):
         if client not in OperData.clients:
             OperData.clients[client] = {}
         OperData.clients[client]["class"] = client.class_
-
-    @staticmethod
-    def get_host(client):
-        if client not in OperData.clients or "host" not in OperData.clients[client]:
-            return None
-        return OperData.clients[client]["host"]
 
     @staticmethod
     def get_original_class(client):
@@ -63,15 +51,6 @@ def oper_check_account(client):
             break
 
 
-def restore_host(client):
-    if host := OperData.get_host(client):
-        if 'x' not in client.user.modes:
-            host = client.user.realhost
-        client.setinfo(info=host, t="host")
-        data = f":{client.id} SETHOST :{client.user.cloakhost}"
-        IRCD.send_to_servers(client, [], data)
-
-
 def restore_class(client):
     if original_class := OperData.get_original_class(client):
         client.set_class_obj(original_class)
@@ -100,19 +79,18 @@ def do_oper_up(client, oper):
             if IRCD.get_snomask(snomask) and snomask not in client.user.snomask:
                 client.user.snomask += snomask
 
+    client.add_user_modes(client.user.opermodes)
     client.local.flood_penalty = 0
     if oper.swhois.strip():
         client.add_swhois(line=oper.swhois[:128], tag="oper", remove_on_deoper=1)
 
-    if oper.operhost and '@' not in oper.operhost and '!' not in oper.operhost:
-        OperData.save_host(client)
+    if 't' in client.user.modes and oper.operhost and '@' not in oper.operhost and '!' not in oper.operhost:
         operhost = oper.operhost.removeprefix('.').removesuffix('.')
         if operhost.strip():
             if client.setinfo(operhost, t="host"):
                 data = f":{client.id} SETHOST :{client.user.cloakhost}"
                 IRCD.send_to_servers(client, [], data)
 
-    client.add_user_modes(client.user.opermodes)
     msg = f"*** {client.name} ({client.user.username}@{client.user.realhost}) [block: {client.user.operlogin}, operclass: {client.user.operclass.name}] is now an IRC Operator"
     IRCD.log(client, "info", "oper", "OPER_UP", msg)
 
@@ -184,7 +162,6 @@ def watch_deoper(client, target, current_modes, new_modes, param):
         """ Only show -o for oper-notify """
         data = f":{target.name} UMODE -o"
         IRCD.send_to_local_common_chans(client, [], client_cap="oper-notify", data=data)
-        restore_host(target)
         restore_class(target)
         target.user.operclass = None
         target.user.operlogin = None

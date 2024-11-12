@@ -66,10 +66,12 @@ def cmd_usermode(client, recv):
             continue
 
         if action == '+':
-            if umode.can_set == Usermode.allow_opers and client.local and not client.has_permission("self:opermodes") and Flag.CMD_OVERRIDE not in client.flags:
+            if umode.can_set == Usermode.allow_opers and Flag.CMD_OVERRIDE not in client.flags:
                 if not oper_warn:
                     client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
                     oper_warn = 1
+                continue
+            if not umode.can_set(client) and Flag.CMD_OVERRIDE not in client.flags:
                 continue
             if mode not in target.user.modes:
                 target.user.modes += mode
