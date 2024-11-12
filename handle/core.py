@@ -96,6 +96,11 @@ class Client:
     exitted: int = 0
     webirc: int = 0
     websocket: int = 0
+    remember = {
+        "cloakhost": '',
+        "ident": '',
+        "nick": ''
+    }
 
     @property
     def registered(self):
@@ -128,6 +133,16 @@ class Client:
     @property
     def fullrealhost(self):
         return f"{self.name}!{self.user.username or '*'}@{self.user.realhost or '*'}" if self.user else self.name
+
+    def remember_cloakhost(self):
+        if self.user:
+            self.remember["cloakhost"] = self.user.cloakhost
+
+    def restore_cloakhost(self):
+        if self.user and (cloakhost := self.remember["cloakhost"]):
+            self.setinfo(cloakhost, t="host")
+            data = f":{self.id} SETHOST {self.user.cloakhost}"
+            IRCD.send_to_servers(self, [], data)
 
     def get_ext_info(self):
         ext_info = ''
@@ -218,42 +233,47 @@ class Client:
 
     def setinfo(self, info, t='') -> int:
         try:
-            if not info or not t:
+            if not info or not t or t not in ["host", "ident", "gecos"]:
+                if t and t not in ["host", "ident", "gecos"]:
+                    logging.error(f"Incorrect type received in setinfo(): {t}")
                 return 0
-            if t not in ["host", "ident", "gecos"]:
-                logging.error(f"Incorrect type received in setinfo(): {t}")
-                return 0
+
             info = info.removeprefix(':')
             if self.registered and t in ["host", "ident"]:
-                for c in str(info):
-                    if c.lower() not in IRCD.HOSTCHARS:
-                        info = info.replace(c, '')
-                    if not info.strip():
-                        return 0
+                info = ''.join(c for c in info if c.lower() in IRCD.HOSTCHARS)
+                if not info:
+                    return 0
 
-            IRCD.new_message(self)
-            if t in ["ident", "host"]:
-                data = f":{self.fullmask} CHGHOST {info if t == 'ident' else self.user.username} {info if t == 'host' else self.user.cloakhost}"
-                IRCD.send_to_local_common_chans(self, [], "chghost", data)
-            else:  # Setname
-                data = f":{self.fullmask} SETNAME :{info}"
-                IRCD.send_to_local_common_chans(self, [], "setname", data)
+            match t:
+                case "host" | "ident":
+                    set_ident, set_host = self.user.username, self.user.cloakhost
+                    if t == "host":
+                        set_host = info
+                        if self.registered:
+                            self.sendnumeric(Numeric.RPL_HOSTHIDDEN, set_host)
+                    elif t == "ident":
+                        set_ident = info
 
-            if t == "host":
-                if self.user.cloakhost != info:
-                    self.user.cloakhost = info
-                    self.sendnumeric(Numeric.RPL_HOSTHIDDEN, self.user.cloakhost)
-                    # logging.debug(f"[setinfo()] Changed host of {self.name} to: {self.user.cloakhost}")
-            elif t == "ident":
-                self.user.username = info
-            elif t == "gecos":
-                if self.info != info:
+                    data = f":{self.fullmask} CHGHOST {set_ident} {set_host}"
+                    IRCD.send_to_local_common_chans(self, [], client_cap="chghost", data=data)
+                    if self.local:
+                        IRCD.run_hook(Hook.LOCAL_CHGHOST, self, set_ident, set_host)
+
+                    self.user.username = set_ident
+                    self.user.cloakhost = set_host
+
+                case "gecos":
                     self.info = info
                     if self.local:
+                        IRCD.server_notice(self, f"*** Your realname is now \"{self.info}\"")
                         if self.has_capability("setname"):
-                            self.send([], f":{self.name} SETNAME :{self.info}")
-                        else:
-                            IRCD.server_notice(self, f"*** Your realname is now \"{self.info}\"")
+                            self.send([], f":{self.fullmask} SETNAME :{self.info}")
+
+                    data = f":{self.fullmask} SETNAME :{self.info}"
+                    IRCD.send_to_local_common_chans(self, [], client_cap="setname", data=data)
+                    if self.local:
+                        IRCD.run_hook(Hook.LOCAL_SETNAME, self, self.info)
+
             return 1
 
         except Exception as ex:
@@ -272,12 +292,10 @@ class Client:
                 s2smd_tags.append(tag)
 
         if not self.local and self.uplink.exitted:
-            logging.warning(f"Not syncing user {self.name} because its uplink server {self.uplink.name} exitted abruptly.")
-            return
+            return logging.warning(f"Not syncing user {self.name} because its uplink server {self.uplink.name} exitted abruptly.")
 
         if self.name == '*':
-            logging.error(f"Tried to sync user {self.id} but it has no nickname yet?")
-            return
+            return logging.error(f"Tried to sync user {self.id} but it has no nickname yet?")
 
         sync_modes = ''.join(mode for mode in self.user.modes if (umode := IRCD.get_usermode_by_flag(mode)) and umode.is_global)
 
@@ -609,6 +627,7 @@ class Client:
 
         self.user.realhost = realhost
         self.user.cloakhost = IRCD.get_cloak(self)
+        self.remember["cloakhost"] = self.user.cloakhost
 
     def add_user_modes(self, modes):
         if not self.local:
@@ -737,9 +756,6 @@ class Client:
         Command.do(self, "LUSERS")
         Command.do(self, "MOTD")
 
-        self.sync(cause="welcome_user()")
-        self.add_flag(Flag.CLIENT_REGISTERED)
-
         if conn_modes := IRCD.get_setting("modes-on-connect"):
             modes = list(set(m for m in conn_modes if m.isalpha() and m not in self.user.modes))
             if self.local.tls:
@@ -747,7 +763,9 @@ class Client:
             if modes:
                 self.add_user_modes(modes)
 
+        self.add_flag(Flag.CLIENT_REGISTERED)
         IRCD.run_hook(Hook.LOCAL_CONNECT, self)
+        self.sync(cause="welcome_user()")
 
     def handle_recv(self):
         if Flag.CLIENT_HANDSHAKE_FINISHED not in self.flags:
@@ -1194,7 +1212,7 @@ class Usermode:
     def allow_opers(client):
         if client == IRCD.me or client.server:
             return 1
-        return 'o' in client.user.modes
+        return 'o' in client.user.modes and client.has_permission("self:opermodes")
 
     @staticmethod
     def allow_none(client):
@@ -2321,8 +2339,11 @@ class IRCD:
         return [c for c in Client.table if not c.local]
 
     @staticmethod
-    def local_clients():
-        return [c for c in Client.table if c.local]
+    def local_clients(cap: str = ''):
+        local_clients = [c for c in Client.table if c.local]
+        if cap:
+            local_clients = [c for c in local_clients if c.has_capability(cap)]
+        return local_clients
 
     @staticmethod
     def global_clients():
@@ -2333,10 +2354,12 @@ class IRCD:
         return [c for c in Client.table if c.registered]
 
     @staticmethod
-    def local_users(usermodes=''):
+    def local_users(usermodes='', cap: str = ''):
         users = [c for c in Client.table if c.local and c.user]
         if usermodes:
             users = [c for c in users if all(mode in c.user.modes for mode in usermodes)]
+        if cap:
+            users = [c for c in users if c.has_capability(cap)]
         return users
 
     @staticmethod
@@ -2878,7 +2901,7 @@ class Numeric:
     ERR_INVALIDMODEPARAM = 696, "{} {} {} :{}"
 
     ERR_SASLFAIL = 904, ":SASL authentication failed"
-    ERR_SASLTOOLONG = 905
+    # ERR_SASLTOOLONG = 905
     ERR_SASLABORTED = 906, ":SASL authentication aborted"
     ERR_SASLALREADY = 907, ":You have already authenticated using SASL"
     ERR_CANNOTDOCOMMAND = 972, "{} :{}"
@@ -3216,6 +3239,9 @@ class Hook:
     # Return:       Hook.DENY or Hook.CONTINUE
     CAN_SEND_TO_CHANNEL = hook()
 
+    # Called before a channel notice will be sent.
+    # The message is a list so it can be modified by modules.
+    # Arguments:    client, channel, message, statusmsg_prefix
     PRE_LOCAL_CHANNOTICE = hook()
 
     # Called whenever a local channel notice has been sent.
@@ -3254,15 +3280,23 @@ class Hook:
     MODEBAR_ADD = hook()
 
     # Called when a modebar has been unset from a channel.
-    # Arguments:    client, channel, modebar, param
+    # Arguments:    Client, channel, modebar, param
     MODEBAR_DEL = hook()
 
     # Called after a user mode has been changed.
-    # Arguments:   client, target, current_modes, new_modes, param
+    # Arguments:   Client, target, current_modes, new_modes, param
     UMODE_CHANGE = hook()
 
+    # Called after a local user changes its host or ident.
+    # Arguments:    Client, ident, host
+    LOCAL_CHGHOST = hook()
+
+    # Called after a local user changes its realname (GECOS)
+    # Arguments:    Client, realname
+    LOCAL_SETNAME = hook()
+
     # Called before a user sets /away status.
-    # Arguments:    client, reason
+    # Arguments:    Client, reason
     # Can be rejected by returning Hook.DENY
     PRE_AWAY = hook()
 

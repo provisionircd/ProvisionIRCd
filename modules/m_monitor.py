@@ -5,7 +5,7 @@
 # Draft:
 # https://ircv3.net/specs/core/monitor-3.2
 
-from handle.core import IRCD, Command, Isupport, Numeric, Hook
+from handle.core import IRCD, Command, Isupport, Numeric, Hook, Capability
 from handle.logger import logging
 
 MAXMONITOR = 200
@@ -135,6 +135,46 @@ def mon_nickchange(client, newnick):
         user.sendnumeric(Numeric.RPL_MONOFFLINE, client.fullmask)
 
 
+def monitor_event(client, monitor_type, new_ident=None, new_host=None):
+    cap_map = {
+        "away": "away-notify",
+        "account": "account-notify",
+        "chghost": "chghost",
+        "setname": "setname"
+    }
+
+    cap = cap_map[monitor_type]
+    data = ''
+
+    for c in [c for c in IRCD.local_users(cap=cap) if not IRCD.common_channels(client, c) and c.has_capability("extended-monitor")]:
+        if monitor_type == "away":
+            data = f":{client.fullmask} AWAY {':' + client.user.away if client.user.away else ''}"
+        elif monitor_type == "account":
+            data = f":{client.fullmask} ACCOUNT {client.user.account}"
+        elif monitor_type == "chghost":
+            data = f":{client.fullmask} CHGHOST {new_ident} {new_host}"
+        elif monitor_type == "setname":
+            data = f":{client.fullmask} SETNAME :{client.info}"
+
+        c.send([], data)
+
+
+def monitor_away(client, awaymsg):
+    monitor_event(client, "away")
+
+
+def monitor_account(client):
+    monitor_event(client, "account")
+
+
+def monitor_chghost(client, ident, host):
+    monitor_event(client, "chghost", new_ident=ident, new_host=host)
+
+
+def monitor_setname(client, newname):
+    monitor_event(client, "setname")
+
+
 def init(module):
     Command.add(module, cmd_monitor, "MONITOR", 1)
     Hook.add(Hook.LOCAL_CONNECT, mon_connect)
@@ -143,4 +183,9 @@ def init(module):
     Hook.add(Hook.REMOTE_QUIT, mon_quit)
     Hook.add(Hook.LOCAL_NICKCHANGE, mon_nickchange)
     Hook.add(Hook.REMOTE_NICKCHANGE, mon_nickchange)
+    Hook.add(Hook.AWAY, monitor_away)
+    Hook.add(Hook.ACCOUNT_LOGIN, monitor_account)
+    Hook.add(Hook.LOCAL_CHGHOST, monitor_chghost)
+    Hook.add(Hook.LOCAL_SETNAME, monitor_setname)
     Isupport.add("MONITOR", MAXMONITOR)
+    Capability.add("extended-monitor")
