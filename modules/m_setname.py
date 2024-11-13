@@ -15,7 +15,7 @@ def cmd_setname(client, recv):
 
     realname = ' '.join(recv[1:])[:NAMELEN].rstrip().removeprefix(':')
     if realname.strip() and realname != client.info:
-        client.setinfo(realname, t="gecos")
+        client.setinfo(realname, change_type="gecos")
 
     data = f":{client.id} {' '.join(recv)}"
     IRCD.send_to_servers(client, [], data)

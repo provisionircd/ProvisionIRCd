@@ -47,6 +47,8 @@ class Founders:
 
     @staticmethod
     def is_founder(channel: str, client: Client) -> bool:
+        if not client.user:
+            return False
         return channel in Founders.channels and (
                 client.fullrealhost == Founders.channels[channel].get("fullrealhost") or
                 client.get_md_value("certfp") == Founders.channels[channel].get("certfp") or

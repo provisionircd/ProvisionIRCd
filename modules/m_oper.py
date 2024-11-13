@@ -59,12 +59,15 @@ def restore_class(client):
 def do_oper_up(client, oper):
     if client.user.oper or not client.local:
         return
+
     OperData.save_original_class(client)
     client.set_class_obj(IRCD.get_class_from_name(oper.connectclass))
+
     modes = 'o'
     if oper.modes:
         # Do not automatically set following modes: gqrzH
         modes += re.sub(r"[ogqrzH]", '', oper.modes)
+
     client.user.opermodes = ''
     for m in [m for m in modes if IRCD.get_usermode_by_flag(m) if m not in client.user.opermodes]:
         client.user.opermodes += m
@@ -87,7 +90,7 @@ def do_oper_up(client, oper):
     if 't' in client.user.modes and oper.operhost and '@' not in oper.operhost and '!' not in oper.operhost:
         operhost = oper.operhost.removeprefix('.').removesuffix('.')
         if operhost.strip():
-            if client.setinfo(operhost, t="host"):
+            if client.setinfo(operhost, change_type="host"):
                 data = f":{client.id} SETHOST :{client.user.cloakhost}"
                 IRCD.send_to_servers(client, [], data)
 
@@ -115,7 +118,7 @@ def do_oper_up(client, oper):
 
 
 def oper_fail(client, opername, reason):
-    client.local.flood_penalty += 350000
+    client.local.flood_penalty += 350_000
     client.sendnumeric(Numeric.ERR_NOOPERHOST)
     msg = f"Failed oper attempt by {client.name} [{opername}] ({client.user.username}@{client.user.realhost}): {reason}"
     IRCD.log(client, "warn", "oper", "OPER_FAILED", msg)
@@ -123,7 +126,7 @@ def oper_fail(client, opername, reason):
 
 def cmd_oper(client, recv):
     if client.user.oper:
-        return
+        return IRCD.server_notice(client, f"You are already an IRC operator. To re-oper, first remove your current IRC operator status with: /mode {client.name} -o")
     if not (oper := IRCD.configuration.get_oper(recv[1])):
         oper_fail(client, recv[1], "username not found")
         return
@@ -166,6 +169,7 @@ def watch_deoper(client, target, current_modes, new_modes, param):
         target.user.operclass = None
         target.user.operlogin = None
         target.user.oper = None
+
         for swhois in list(target.user.swhois):
             if swhois.remove_on_deoper or swhois.tag == "oper":
                 target.del_swhois(swhois.line)

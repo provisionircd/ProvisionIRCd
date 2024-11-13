@@ -62,17 +62,13 @@ def cmd_usermode(client, recv):
                 client.sendnumeric(Numeric.ERR_USERSDONTMATCH)
                 continue
 
-        if umode.can_set == Usermode.allow_none and client.local:
-            continue
-
         if action == '+':
-            if umode.can_set == Usermode.allow_opers and Flag.CMD_OVERRIDE not in client.flags:
-                if not oper_warn:
+            if client.local and Flag.CMD_OVERRIDE not in client.flags and not umode.can_set(client):
+                if umode.can_set == Usermode.allow_opers and not oper_warn:
                     client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
                     oper_warn = 1
                 continue
-            if not umode.can_set(client) and Flag.CMD_OVERRIDE not in client.flags:
-                continue
+
             if mode not in target.user.modes:
                 target.user.modes += mode
 
@@ -92,9 +88,13 @@ def cmd_usermode(client, recv):
                             target.user.snomask += sno
 
         elif action == '-':
-            if mode in IRCD.get_setting("modelock") and client.local and not client.has_permission("self:modelock") and Flag.CMD_OVERRIDE not in client.flags:
-                client.sendnumeric(Numeric.ERR_CANNOTCHANGEUMODE, mode, "This mode is locked")
-                continue
+            if client.local and Flag.CMD_OVERRIDE not in client.flags:
+                if not umode.can_set(client):
+                    continue
+                if mode in IRCD.get_setting("modelock") and not client.has_permission("self:modelock"):
+                    client.sendnumeric(Numeric.ERR_CANNOTCHANGEUMODE, mode, "This mode is locked")
+                    continue
+
             if mode in target.user.modes:
                 target.user.modes = target.user.modes.replace(mode, '')
 
@@ -119,7 +119,7 @@ def cmd_usermode(client, recv):
         diff_modes = set(oldumodes).difference(target.user.modes)
         if 'x' in diff_modes or 'x' in set(target.user.modes).difference(oldumodes):
             host = target.user.realhost if 'x' in diff_modes else IRCD.get_cloak(target)
-            target.setinfo(info=host, t="host")
+            target.setinfo(info=host, change_type="host")
             data = f":{target.id} SETHOST :{target.user.cloakhost}"
             IRCD.send_to_servers(client, [], data)
 

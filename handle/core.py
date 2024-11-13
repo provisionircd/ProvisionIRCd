@@ -54,13 +54,14 @@ class Flag(Enum):
     CMD_USER = flag()
     CMD_SERVER = flag()
     CMD_OPER = flag()
+
+    # Allows a user to bypass most command restrictions.
+    # At this moment this flag doesn't do much - not really implemented yet.
     CMD_OVERRIDE = flag()
 
     CLIENT_SHUNNED = flag()
     CLIENT_ON_HOLD = flag()
-
     CLIENT_HANDSHAKE_FINISHED = flag()
-
     CLIENT_REGISTERED = flag()
     CLIENT_KILLED = flag()
     CLIENT_USER_FLOOD_SAFE = flag()
@@ -88,8 +89,8 @@ class Client:
     # MessageTag objects this client has generated.
     mtags: list = field(default_factory=list)
     recv_mtags: list = field(default_factory=list)
-    idle_since: int = 0
-    creationtime: int = 0
+    idle_since: int = int(time())
+    creationtime: int = int(time())
     last_ping_sent: int = 0
     last_command: str = ''
     lag: int = 0
@@ -140,7 +141,7 @@ class Client:
 
     def restore_cloakhost(self):
         if self.user and (cloakhost := self.remember["cloakhost"]):
-            self.setinfo(cloakhost, t="host")
+            self.setinfo(cloakhost, change_type="host")
             data = f":{self.id} SETHOST {self.user.cloakhost}"
             IRCD.send_to_servers(self, [], data)
 
@@ -231,33 +232,31 @@ class Client:
         self.class_ = client_class_obj
         self.add_md("class", client_class_obj.name)
 
-    def setinfo(self, info, t='') -> int:
+    def setinfo(self, info, change_type) -> int:
         try:
-            if not info or not t or t not in ["host", "ident", "gecos"]:
-                if t and t not in ["host", "ident", "gecos"]:
-                    logging.error(f"Incorrect type received in setinfo(): {t}")
+            if change_type not in ["host", "ident", "gecos"]:
+                logging.error(f"Incorrect type received in setinfo(): {change_type}")
                 return 0
 
             info = info.removeprefix(':')
-            if self.registered and t in ["host", "ident"]:
+            if self.registered and change_type in ["host", "ident"]:
                 info = ''.join(c for c in info if c.lower() in IRCD.HOSTCHARS)
                 if not info:
                     return 0
 
-            match t:
+            match change_type:
                 case "host" | "ident":
                     set_ident, set_host = self.user.username, self.user.cloakhost
-                    if t == "host":
+                    if change_type == "host":
                         set_host = info
                         if self.registered:
                             self.sendnumeric(Numeric.RPL_HOSTHIDDEN, set_host)
-                    elif t == "ident":
+                    else:
                         set_ident = info
 
                     data = f":{self.fullmask} CHGHOST {set_ident} {set_host}"
                     IRCD.send_to_local_common_chans(self, [], client_cap="chghost", data=data)
-                    if self.local:
-                        IRCD.run_hook(Hook.LOCAL_CHGHOST, self, set_ident, set_host)
+                    IRCD.run_hook(Hook.USERHOST_CHANGE, self, set_ident, set_host)
 
                     self.user.username = set_ident
                     self.user.cloakhost = set_host
@@ -271,8 +270,7 @@ class Client:
 
                     data = f":{self.fullmask} SETNAME :{self.info}"
                     IRCD.send_to_local_common_chans(self, [], client_cap="setname", data=data)
-                    if self.local:
-                        IRCD.run_hook(Hook.LOCAL_SETNAME, self, self.info)
+                    IRCD.run_hook(Hook.REALNAME_CHANGE, self, self.info)
 
             return 1
 
@@ -644,8 +642,10 @@ class Client:
             self.user.modes += new_modes
             data = f":{self.name} MODE {self.name} +{new_modes}"
             self.send([], data)
+
             data = f":{self.id} MODE {self.name} +{new_modes}"
-            IRCD.send_to_servers(self, [], data)
+            if self.registered:
+                IRCD.send_to_servers(self, [], data)
 
     def assign_class(self):
         """
@@ -764,8 +764,8 @@ class Client:
                 self.add_user_modes(modes)
 
         self.add_flag(Flag.CLIENT_REGISTERED)
-        IRCD.run_hook(Hook.LOCAL_CONNECT, self)
         self.sync(cause="welcome_user()")
+        IRCD.run_hook(Hook.LOCAL_CONNECT, self)
 
     def handle_recv(self):
         if Flag.CLIENT_HANDSHAKE_FINISHED not in self.flags:
@@ -828,8 +828,8 @@ class Client:
                 if recv.startswith(':'):
                     find_source = recv[1:].split()[0]
                     if self.server:
-                        if not IRCD.find_client(find_source) and self.server.authed:
-                            logging.warning(f"Unknown server message from {find_source}: {recv}")
+                        if not IRCD.find_client(find_source) and self.server.synced:
+                            logging.warning(f"Unknown server message from {self.id}: {recv}")
                             continue
                         source_client = IRCD.find_client(find_source) or self
                         if not self.server.authed:
@@ -2451,24 +2451,27 @@ class IRCD:
 
     @staticmethod
     def find_client(find: str):
+        """ Find a client based on ID/name """
+
         if not find:
             return
-        """ Find a client based on ID/name """
-        find = find.removeprefix(':')
-        if hasattr(IRCD, "me"):
-            if find.lower() in [IRCD.me.name.lower(), IRCD.me.id.lower()]:
-                return IRCD.me
+
+        find = find.removeprefix(':').lower()
+
+        if hasattr(IRCD, "me") and find in {IRCD.me.name.lower(), IRCD.me.id.lower()}:
+            return IRCD.me
+
         for client in Client.table:
-            if not client.id:
-                continue
-            if find.lower() in [client.name.lower(), client.id.lower()]:
+            if client.id and find in {client.name.lower(), client.id.lower()}:
                 return client
 
     @staticmethod
     def find_server_match(find: str) -> list:
         """ Support for wildcards. """
+
         if not find:
             return []
+
         find = find.removeprefix(':')
         matches = []
         if is_match(find.lower(), IRCD.me.name.lower()) or is_match(find.lower(), IRCD.me.id.lower()):
@@ -3287,13 +3290,13 @@ class Hook:
     # Arguments:   Client, target, current_modes, new_modes, param
     UMODE_CHANGE = hook()
 
-    # Called after a local user changes its host or ident.
+    # Called after a user changes its host or ident.
     # Arguments:    Client, ident, host
-    LOCAL_CHGHOST = hook()
+    USERHOST_CHANGE = hook()
 
-    # Called after a local user changes its realname (GECOS)
+    # Called after a user changes its realname (GECOS)
     # Arguments:    Client, realname
-    LOCAL_SETNAME = hook()
+    REALNAME_CHANGE = hook()
 
     # Called before a user sets /away status.
     # Arguments:    Client, reason
@@ -3301,7 +3304,7 @@ class Hook:
     PRE_AWAY = hook()
 
     # Called after a user successfully set /away status.
-    # Arguments:    client, reason
+    # Arguments:    Client, reason
     AWAY = hook()
 
     # Called very early when a server requests a link, before negotiation.

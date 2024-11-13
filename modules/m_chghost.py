@@ -15,19 +15,18 @@ def cmd_chghost(client, recv):
         return client.sendnumeric(Numeric.ERR_NOSUCHNICK, recv[1])
 
     host = str(recv[2][:64]).strip().removeprefix(':')
-    for c in str(host):
-        if c.lower() not in IRCD.HOSTCHARS:
-            host = host.replace(c, '')
+    host = ''.join(c for c in host if c.lower() in IRCD.HOSTCHARS)
+
     host = host.removeprefix('.').removesuffix('.').strip()
     if host == target.user.cloakhost or not host:
         return
 
-    target.setinfo(host, t="host")
+    target.setinfo(host, change_type="host")
     if client.user:
-        IRCD.server_notice(client, f"Your cloakhost has now been changed to: {client.user.cloakhost}")
-        IRCD.send_snomask(client, 's',
-                          f"*** {client.name} ({client.user.username}@{client.user.realhost}) "
-                          f"used CHGHOST to change the host of {target.name} to \"{target.user.cloakhost}\"")
+        if target.local:
+            IRCD.server_notice(target, f"Your cloakhost has now been changed to: {target.user.cloakhost}")
+        data = f"*** {client.name} ({client.user.username}@{client.user.realhost}) used CHGHOST to change the host of {target.name} to \"{target.user.cloakhost}\""
+        IRCD.log(client, "info", "chgcmds", "CHGHOST_COMMAND", data)
 
     data = f":{client.id} CHGHOST {target.id} :{target.user.cloakhost}"
     IRCD.send_to_servers(client, [], data)
@@ -42,20 +41,20 @@ def cmd_chgident(client, recv):
     if not (target := IRCD.find_user(recv[1])):
         return client.sendnumeric(Numeric.ERR_NOSUCHNICK, recv[1])
 
-    ident = str(recv[2][:12]).strip().removeprefix(':')
-    for c in str(ident):
-        if c.lower() not in IRCD.HOSTCHARS:
-            ident = ident.replace(c, '')
+    ident = recv[2][:12].strip().removeprefix(':')
+    ident = ''.join(c for c in ident if c.lower() in IRCD.HOSTCHARS)
+
     ident = ident.removeprefix('.').removesuffix('.').strip()
     if ident == target.user.username or not ident:
         return
 
-    target.setinfo(ident, t="ident")
+    target.setinfo(ident, change_type="ident")
     if client.user:
-        IRCD.server_notice(client, f"Your ident has now been changed to: {client.user.username}")
-        IRCD.send_snomask(client, 's',
-                          f"*** {client.name} ({client.user.username}@{client.user.realhost}) "
-                          f"used CHGIDENT to change the ident of {target.name} to \"{target.user.username}\"")
+        if target.local:
+            IRCD.server_notice(target, f"Your ident has now been changed to: {target.user.username}")
+        data = f"*** {client.name} ({client.user.username}@{client.user.realhost}) used CHGIDENT to change the ident of {target.name} to \"{target.user.username}\""
+        IRCD.log(client, "info", "chgcmds", "CHGIDENT_COMMAND", data, sync=0)
+
     data = f":{client.id} CHGIDENT {target.id} :{target.user.username}"
     IRCD.send_to_servers(client, [], data)
 
