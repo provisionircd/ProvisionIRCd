@@ -7,15 +7,14 @@ from handle.core import Numeric, Command, IRCD, Capability, Isupport
 
 def cmd_names(client, recv):
     if not (channel := IRCD.find_channel(recv[1])):
-        return client.sendnumeric(Numeric.ERR_NOSUCHCHANNEL, recv[1])
+        return client.sendnumeric(Numeric.RPL_ENDOFNAMES, recv[1])
 
-    if not channel.find_member(client) and not client.has_permission("channel:see:names"):
-        client.sendnumeric(Numeric.RPL_ENDOFNAMES, channel.name)
-        return
+    if 's' in channel.modes and (not channel.find_member(client) and not client.has_permission("channel:see:names:secret")):
+        return client.sendnumeric(Numeric.RPL_ENDOFNAMES, recv[1])
 
     users = []
     for names_client in channel.member_by_client:
-        if 'i' in names_client.user.modes and (not channel.find_member(names_client) and not client.has_permission("channel:see:names")):
+        if 'i' in names_client.user.modes and (not channel.find_member(client) and not client.has_permission("channel:see:names:invisible")):
             continue
 
         if not channel.user_can_see_member(client, names_client):

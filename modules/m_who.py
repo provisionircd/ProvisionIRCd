@@ -4,6 +4,7 @@
 
 from handle.core import IRCD, Command, Isupport, Numeric
 from handle.functions import is_match
+from handle.logger import logging
 
 
 def get_who_status(client, user_client, channel=None):
@@ -78,14 +79,28 @@ def get_who_reply(who_client):
     return WhoData(who_client)
 
 
+def who_can_see_channel(client, channel, who_target):
+    if not channel.user_can_see_member(client, who_target):
+        return 0
+    if 's' in channel.modes and (not channel.find_member(client) and not client.has_permission("channel:see:who:secret")):
+        return 0
+    if 'i' in who_target.user.modes and (not channel.find_member(client) and not client.has_permission("channel:see:who:invisible")):
+        return 0
+    return 1
+
+
 def send_who_reply(client, mask: str):
+    if chan := IRCD.find_channel(mask):
+        mask = chan.name
+
     for reply in WhoData.replies:
-        if 'i' in reply.who_client.user.modes:
-            if 'o' not in client.user.modes and not IRCD.common_channels(client, reply.who_client) and reply.who_client != client:
-                continue
+        # if 'i' in reply.who_client.user.modes:
+        #     if not client.has_permission("channel:see:who:invisible") and not IRCD.common_channels(client, reply.who_client) and reply.who_client != client:
+        #         continue
+
         if reply.fields != [''] * 13:
             # reply_string = mask + ' ' + ' '.join(reply.fields)
-            reply_string = mask + ' ' + ' '.join(map(str, reply.fields))
+            reply_string = ' '.join(str(field) for field in reply.fields if field)
             client.sendnumeric(Numeric.RPL_WHOSPCRPL, reply_string)
         else:
             if 'I' in reply.flags and 'o' in client.user.modes:
@@ -95,12 +110,11 @@ def send_who_reply(client, mask: str):
                 reply.cloakhost = reply.who_client.user.realhost
 
             if reply.channel:
-                if not reply.channel.user_can_see_member(client, reply.who_client):
+                for channel in reply.who_client.channels:
+                    if who_can_see_channel(client, channel, reply.who_client):
+                        reply.channel = channel
+                        break
                     reply.channel = None
-                    for chan in reply.who_client.channels:
-                        if chan.user_can_see_member(client, reply.who_client):
-                            reply.channel = chan
-                            break
 
             client.add_flood_penalty(100)
             client.sendnumeric(Numeric.RPL_WHOREPLY, *reply.who_reply())
@@ -159,12 +173,19 @@ def cmd_who(client, recv):
     for mask in who_mask.split(','):
         who_matches = []
         if who_channel := IRCD.find_channel(mask):
-            who_matches = [c for c in who_channel.clients() if who_channel.user_can_see_member(client, c)]
+            if 's' in who_channel.modes and (not who_channel.find_member(client) and not client.has_permission("channel:see:who:secret")):
+                return client.sendnumeric(Numeric.RPL_ENDOFWHO, mask)
+
+            who_matches = [c for c in who_channel.clients()
+                           if who_channel.user_can_see_member(client, c)
+                           and ('i' not in c.user.modes or who_channel.find_member(client) or client.has_permission("channel:see:who:invisible"))]
 
         elif (user := IRCD.find_user(mask)) and user.registered:
             who_matches.append(user)
         else:
-            who_matches = [c for c in IRCD.global_registered_users() if is_match(mask, c.ip)]
+            who_matches = [c for c in IRCD.global_registered_users() if is_match(mask, c.ip)
+                           and ('i' not in c.user.modes or IRCD.common_channels(client, c)
+                                or client.has_permission("channel:see:who:invisible") or c == client)]
 
         for char in flags:
             flag_match_increment += 1
@@ -273,7 +294,7 @@ def cmd_who(client, recv):
                         who_reply.fields[3] = ip
 
                     if char == 'h':
-                        who_reply.fields[4] = who_client.user.realhost
+                        who_reply.fields[4] = who_client.user.cloakhost
 
                     if char == 's':
                         # who_reply.fields[5] = who_client.user.server.name
@@ -305,8 +326,9 @@ def cmd_who(client, recv):
                             for cmode in [cmode for cmode in who_channel.get_membermodes_sorted() if who_channel.client_has_membermodes(who_client, cmode.flag)]:
                                 status += cmode.prefix
                         who_reply.fields[11] = status
+
                     if 'r' in flags:
-                        who_reply.fields[12] = who_client.info
+                        who_reply.fields[12] = ':' + who_client.info
 
         for who_client in who_matches:
             who_reply = get_who_reply(who_client)
