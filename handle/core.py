@@ -192,7 +192,7 @@ class Client:
         return cap in self.local.caps
 
     def has_permission(self, permission_path: str):
-        if self == IRCD.me or self.server or not self.local or not self.user:
+        if self == IRCD.me or self.server or not self.local or not self.user or Flag.CMD_OVERRIDE in self.flags:
             return 1
         if not self.user.operlogin or 'o' not in self.user.modes:
             return 0
@@ -1210,13 +1210,13 @@ class Usermode:
 
     @staticmethod
     def allow_opers(client):
-        if client == IRCD.me or client.server:
+        if client == IRCD.me or not client.local or Flag.CMD_OVERRIDE in client.flags:
             return 1
         return 'o' in client.user.modes and client.has_permission("self:opermodes")
 
     @staticmethod
     def allow_none(client):
-        if client == IRCD.me or client.server:
+        if client == IRCD.me or not client.local or Flag.CMD_OVERRIDE in client.flags:
             return 1
         return 0
 
@@ -1427,7 +1427,6 @@ class Channel:
             if prefix_check:
                 membermodes_sorted = self.get_membermodes_sorted()
                 prefix_rank_map = {obj.prefix: obj.rank for obj in membermodes_sorted}
-
                 specified_rank = min((prefix_rank_map[pfx] for pfx in prefix if pfx in prefix_rank_map), default=0)
                 client_rank = self.get_highest_member_rank(client)
 
@@ -2806,10 +2805,10 @@ class Numeric:
     RPL_WHOSPCRPL = 354, "{}"
     RPL_LINKS = 364, "{} {} :{} {}"
     RPL_ENDOFLINKS = 365, ":End of LINKS"
-    RPL_ENDOFNAMES = 366, "{} :End of /NAMES list."
+    RPL_ENDOFNAMES = 366, "{} :End of /NAMES list"
     RPL_BANLIST = 367, "{} {} {} {}"
-    RPL_ENDOFBANLIST = 368, "{} :End of Channel Ban List."
-    RPL_ENDOFWHOWAS = 369, "{} :End of /WHOWAS list."
+    RPL_ENDOFBANLIST = 368, "{} :End of Channel Ban List"
+    RPL_ENDOFWHOWAS = 369, "{} :End of /WHOWAS list"
     RPL_INFO = 371, ":{}"
     RPL_MOTD = 372, ":- {}"
     RPL_MOTDSTART = 375, ":{} - Message of the Day"
@@ -2819,8 +2818,12 @@ class Numeric:
     RPL_YOUREOPER = 381, ":You are now an IRC Operator."
     RPL_REHASHING = 382, "{} :Rehashing"
     RPL_IRCOPS = 386, ":{}"
-    RPL_TIME = 391, ":{}"
+    RPL_QLIST = 386, "{} {}"
     RPL_ENDOFIRCOPS = 387, ":End of /IRCOPS."
+    RPL_ENDOFQLIST = 387, "{} :End of Channel Owner List"
+    RPL_ALIST = 388, "{} {}"
+    RPL_ENDOFALIST = 389, "{} :End of Channel Admin List"
+    RPL_TIME = 391, ":{}"
     RPL_HOSTHIDDEN = 396, "{} :is now your displayed host"
 
     RPL_LOGON = 600, "{} {} {} {} :logged online"

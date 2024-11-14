@@ -2,7 +2,15 @@
 chanadmin mode (+a)
 """
 
-from handle.core import IRCD, Channelmode
+from handle.core import IRCD, Channelmode, Hook, Numeric
+
+
+def list_chanadmins(client, channel, mode):
+    if mode == 'a' and (cmode := IRCD.get_channelmode_by_flag(mode)):
+        for entry in [c for c in reversed(channel.clients()) if channel.client_has_membermodes(c, mode)]:
+            client.sendnumeric(Numeric.RPL_ALIST, channel.name, entry.name)
+        client.sendnumeric(Numeric.RPL_ENDOFALIST, channel.name)
+        return 1
 
 
 def validate_member(client, channel, action, mode, param, CHK_TYPE):
@@ -30,3 +38,4 @@ def init(module):
     Cmode_a.is_ok = validate_member
     Cmode_a.desc = "Give/take channel admin status"
     Channelmode.add(module, Cmode_a)
+    Hook.add(Hook.CHAN_LIST_ENTRY, list_chanadmins)

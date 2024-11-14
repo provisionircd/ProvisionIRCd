@@ -57,14 +57,14 @@ def cmd_usermode(client, recv):
         oldumodes = target.user.modes
 
         if target != client:
-            if client.user and not client.has_permission("client:set:usermode") and client.local and Flag.CMD_OVERRIDE not in client.flags:
+            if not client.has_permission("client:set:usermode"):
                 # Not authorised to change target user modes.
                 client.sendnumeric(Numeric.ERR_USERSDONTMATCH)
                 continue
 
         if action == '+':
-            if client.local and Flag.CMD_OVERRIDE not in client.flags and not umode.can_set(client):
-                if umode.can_set == Usermode.allow_opers and not oper_warn:
+            if not umode.can_set(client):
+                if client.is_local_user and client.user.oper and umode.can_set == Usermode.allow_opers and not oper_warn:
                     client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
                     oper_warn = 1
                 continue
@@ -75,11 +75,9 @@ def cmd_usermode(client, recv):
             # Handle snomasks.
             if mode == 's' and param and (target.user.oper or Flag.CMD_OVERRIDE in client.flags):
                 sno_action = '+'
-                for sno in param:
+                for sno in [s for s in param if s in "+-" or IRCD.get_snomask(s)]:
                     if sno in "+-":
                         sno_action = sno
-                        continue
-                    if not IRCD.get_snomask(sno):
                         continue
                     if sno_action == '-' and sno in target.user.snomask:
                         target.user.snomask = target.user.snomask.replace(sno, '')
@@ -88,12 +86,11 @@ def cmd_usermode(client, recv):
                             target.user.snomask += sno
 
         elif action == '-':
-            if client.local and Flag.CMD_OVERRIDE not in client.flags:
-                if not umode.can_set(client):
-                    continue
-                if mode in IRCD.get_setting("modelock") and not client.has_permission("self:modelock"):
-                    client.sendnumeric(Numeric.ERR_CANNOTCHANGEUMODE, mode, "This mode is locked")
-                    continue
+            if not umode.can_set(client):
+                continue
+            if mode in IRCD.get_setting("modelock") and not client.has_permission("self:modelock"):
+                client.sendnumeric(Numeric.ERR_CANNOTCHANGEUMODE, mode, "This mode is locked")
+                continue
 
             if mode in target.user.modes:
                 target.user.modes = target.user.modes.replace(mode, '')
@@ -111,7 +108,6 @@ def cmd_usermode(client, recv):
             for opermode in [m for m in target.user.modes if IRCD.get_usermode_by_flag(m).unset_on_deoper]:
                 target.user.modes = target.user.modes.replace(opermode, '')
                 modebuf.append(opermode)
-            target.user.snomask = target.user.snomask = ''
 
         if 's' in set(oldumodes).difference(target.user.modes):
             target.user.snomask = ''
@@ -127,16 +123,14 @@ def cmd_usermode(client, recv):
         # Broadcast buffer.
         modes = ''.join(modebuf)
         if target.local:
-            data = f":{client.name} MODE {target.name} {modes}"
-            target.send([], data)
+            target.send([], f":{client.name} MODE {target.name} {modes}")
 
         sync_modes = ''
         for mode in modes:
             if mode in "+-":
                 sync_modes += mode
                 continue
-            umode = IRCD.get_usermode_by_flag(mode)
-            if umode and umode.is_global:
+            if (umode := IRCD.get_usermode_by_flag(mode)) and umode.is_global:
                 sync_modes += mode
 
         data = f":{client.id} MODE {target.name} {sync_modes}"
@@ -145,29 +139,24 @@ def cmd_usermode(client, recv):
         if target != client:
             client.sendnumeric(Numeric.RPL_OTHERUMODEIS, target.name, target.user.modes)
 
+        IRCD.run_hook(Hook.UMODE_CHANGE, client, target, current_modes, target.user.modes, param)
+
     if target.user.snomask != current_snomask and target.local:
         target.sendnumeric(Numeric.RPL_SNOMASK, target.user.snomask)
-
-    IRCD.run_hook(Hook.UMODE_CHANGE, client, target, current_modes, target.user.modes, param)
 
     if unknown:
         client.sendnumeric(Numeric.ERR_UMODEUNKNOWNFLAG, ''.join(unknown))
 
 
 def do_channel_member_mode(client, channel, action, mode, param):
-    # logging.debug(f"[member] Client sets mode: {action}{mode} {param} on {channel.name}")
     if not (target_client := IRCD.find_user(param)):
         return client.sendnumeric(Numeric.ERR_NOSUCHNICK, param)
     if not channel.find_member(target_client):
         return client.sendnumeric(Numeric.ERR_USERNOTINCHANNEL, param, channel.name)
-    if action == '+':
-        if channel.client_has_membermodes(target_client, mode):
-            return 0
+    if action == '+' and not channel.client_has_membermodes(target_client, mode):
         channel.member_give_modes(target_client, mode)
         return 1
-    elif action == '-':
-        if not channel.client_has_membermodes(target_client, mode):
-            return 0
+    elif action == '-' and channel.client_has_membermodes(target_client, mode):
         channel.member_take_modes(target_client, mode)
         return 1
     return 0
@@ -177,11 +166,10 @@ def add_to_buff(modebuf, parambuf, action, prevaction, mode, param):
     # logging.debug(f"Adding {action}{mode} to modebuf")
     if action != prevaction:
         modebuf.append(action)
-        prevaction = action
     modebuf.append(mode)
     if param:
         parambuf.append(str(param))
-    return prevaction
+    return action
 
 
 def handle_mode_list(client, channel, action, mode, param):
@@ -219,7 +207,7 @@ def handle_mode_list(client, channel, action, mode, param):
 def display_channel_list_entries(client, channel, mode):
     if client == IRCD.me:
         return 0
-    list_modes = IRCD.get_list_modes_str()
+    list_modes = IRCD.get_list_modes_str() + "aq"
     for char in mode:
         if char in list_modes:
             mode = char

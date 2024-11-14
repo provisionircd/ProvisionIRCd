@@ -2,7 +2,15 @@
 chanowner mode (+q)
 """
 
-from handle.core import IRCD, Channelmode
+from handle.core import IRCD, Channelmode, Hook, Numeric
+
+
+def list_chanowners(client, channel, mode):
+    if mode == 'q' and (cmode := IRCD.get_channelmode_by_flag(mode)):
+        for entry in [c for c in reversed(channel.clients()) if channel.client_has_membermodes(c, mode)]:
+            client.sendnumeric(Numeric.RPL_QLIST, channel.name, entry.name)
+        client.sendnumeric(Numeric.RPL_ENDOFQLIST, channel.name)
+        return 1
 
 
 def validate_member(client, channel, action, mode, param, CHK_TYPE):
@@ -30,3 +38,4 @@ def init(module):
     Cmode_q.is_ok = validate_member
     Cmode_q.desc = "Give/take channel owner status"
     Channelmode.add(module, Cmode_q)
+    Hook.add(Hook.CHAN_LIST_ENTRY, list_chanowners)
