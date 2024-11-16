@@ -763,8 +763,8 @@ class Client:
             if modes:
                 self.add_user_modes(modes)
 
-        self.add_flag(Flag.CLIENT_REGISTERED)
         self.sync(cause="welcome_user()")
+        self.add_flag(Flag.CLIENT_REGISTERED)
         IRCD.run_hook(Hook.LOCAL_CONNECT, self)
 
     def handle_recv(self):
@@ -869,6 +869,7 @@ class Client:
                     result, *args = cmd.check(source_client, recv)
                     if result != 0 and not self.server:
                         self.sendnumeric(result, *args)
+                        source_client.recv_mtags.clear()
                         continue
                     cmd.do(source_client, *recv)
                 elif cmd == 0:
@@ -876,7 +877,8 @@ class Client:
                         self.sendnumeric(Numeric.ERR_UNKNOWNCOMMAND, command)
                         # Unknown command, but command still ended.
                         IRCD.run_hook(Hook.POST_COMMAND, self, recv[0], recv)
-                        self.mtags = []
+                        self.mtags.clear()
+                        self.recv_mtags.clear()
                         self.flood_safe_off()
                     continue
 
@@ -1011,6 +1013,7 @@ class Server:
     synced: int = 0
     authed: int = 0
     squit: int = 0
+    registered: int = 1
     link = None
 
     def flood_safe_off(self):
@@ -1141,7 +1144,8 @@ class Command:
                 if client.user:
                     client.del_flag(Flag.CMD_OVERRIDE)
                 IRCD.run_hook(Hook.POST_COMMAND, client, trigger, recv)
-                client.mtags = []
+                client.mtags.clear()
+                client.recv_mtags.clear()
                 client.flood_safe_off()
         except Exception as ex:
             logging.exception(ex)
@@ -3656,7 +3660,8 @@ class Tkl:
             return
 
         for tkl in list(Tkl.table):
-            if tkl.type == flag and (tkl.ident, tkl.host) == (ident, host):
+            tkl_match = (tkl.ident, tkl.host) == (ident, host) or (tkl.type == 'Q' and tkl.host == host)
+            if tkl.type == flag and tkl_match:
                 Tkl.table.remove(tkl)
 
                 if client == IRCD.me or client.registered:
@@ -3752,7 +3757,7 @@ class Tkl:
         return Tkl.table[num]
 
     def __repr__(self):
-        return f"<TKL '{self.type}' -> '{self.mask}'>"
+        return f"<TKL '{self.type}' -> '{self.mask} (ident: {self.ident}, host: {self.host})'>"
 
 
 class LogEntry:

@@ -8,7 +8,8 @@ from handle.core import Usermode, Snomask, Numeric, Hook
 def umode_q_is_ok(client):
     if client.has_permission("self:protected") or 'q' in client.user.modes:
         return 1
-    client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
+    if client.user.oper:
+        client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
     return 0
 
 

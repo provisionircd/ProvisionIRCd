@@ -8,41 +8,36 @@ HEADER = dict(name="message-tags", version='1')
 
 
 def cmd_tagmsg(client, recv):
-    if not client.recv_mtags:
+    if not client.recv_mtags or len(recv[1]) < 2:
         return
-    # logging.debug(f"TAGMSG from {client.name}: {recv}")
-    target = recv[1]
-    prefix = ''
-    if target[0] in ''.join([m.prefix for m in IRCD.channel_modes() if m.type == m.MEMBER]):
-        prefix = target[0]
-        target = target[1:]
 
-    if target[0] in IRCD.CHANPREFIXES:
-        if target := IRCD.find_channel(target):
-            broadcast = [c for c in target.clients(client_cap="message-tags", prefix=prefix) if c != client]
-        else:
-            return client.sendnumeric(Numeric.ERR_NOSUCHCHANNEL, recv[1])
+    recv_target = recv[1]
+    prefix = ''
+    if recv_target[0] in IRCD.get_member_prefix_str_sorted():
+        prefix = recv_target[0]
+        recv_target = recv_target[1:]
+
+    if recv_target[0] in IRCD.CHANPREFIXES + IRCD.get_member_prefix_str_sorted():
+        if not (target := IRCD.find_channel(recv_target)):
+            return client.sendnumeric(Numeric.ERR_NOSUCHCHANNEL, recv_target)
+        broadcast = [c for c in target.clients(client_cap="message-tags", prefix=prefix) if c != client]
     else:
-        if target := IRCD.find_user(target):
-            if target == client and not client.has_capability("echo-message") or not client.has_capability("message-tags"):
-                return
-            broadcast = [target]
-        else:
-            return client.sendnumeric(Numeric.ERR_NOSUCHNICK, recv[1])
+        if not (target := IRCD.find_user(recv_target)):
+            return client.sendnumeric(Numeric.ERR_NOSUCHNICK, recv_target)
+        if target == client and not client.has_capability("echo-message") or not client.has_capability("message-tags"):
+            return
+        broadcast = [target]
 
     """ Add client-tags to .mtags list. """
     mtags = client.recv_mtags
-    for tag in client.mtags:
-        if tag.name not in [mtag.name for mtag in mtags]:
-            mtags.append(tag)
+    existing_names = {mtag.name for mtag in mtags}
+    mtags.extend(tag for tag in client.mtags if tag.name not in existing_names)
     client.mtags = mtags
 
-    data = f":{client.fullmask} TAGMSG {recv[1]}"
     for user in broadcast:
-        user.send(client.mtags, data)
+        user.send(client.mtags, f":{client.fullmask} TAGMSG {target.name}")
 
-    data = f":{client.id} TAGMSG {recv[1]}"
-    IRCD.send_to_servers(client, client.mtags, data)
+    IRCD.send_to_servers(client, client.mtags, f":{client.id} TAGMSG {target.name}")
 
 
 def init(module):
