@@ -7,7 +7,6 @@ import re
 from handle.core import Flag, Command, Client, IRCD
 from classes.errors import Error
 from handle.client import make_client, make_server
-from handle.functions import is_match
 from handle.logger import logging
 from handle.handleLink import (sync_data, start_link_negotiation, broadcast_network_to_new_server,
                                broadcast_new_server_to_network, deny_direct_link)
@@ -55,14 +54,9 @@ def auth_incoming_link(client):
         return 0
 
     if client.local.incoming:
-        mask_match = 0
-        for mask in link.incoming_mask:
-            if is_match(mask, client.ip):
-                mask_match = 1
-                break
-        if not mask_match:
-            deny_direct_link(client, Error.SERVER_LINK_NOMATCH_IP)
-            logging.debug(f"Link denied for {client.name}: incoming IP {client.ip} does not incoming:mask for this link.")
+        if not link.incoming_mask.is_match(client):
+            deny_direct_link(client, Error.SERVER_LINK_NOMATCH_MASK)
+            logging.debug(f"Link denied for {client.name}: incoming mask does not match incoming:mask")
             return 0
 
         client_certfp = client.get_md_value("certfp")

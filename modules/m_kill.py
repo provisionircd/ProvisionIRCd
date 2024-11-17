@@ -21,10 +21,8 @@ def cmd_kill(client, recv):
                          or target.local and not client.has_permission("kill:local")):
         return client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
 
-    if client.user and IRCD.is_except_client("kill", target):
-        IRCD.server_notice(client, f"*** User {target.name} matches a kill-except and cannot be killed")
-        client.sendnumeric(Numeric.ERR_KILLDENY, target.name)
-        return
+    if client.is_local_user and IRCD.is_except_client("kill", target):
+        return client.sendnumeric(Numeric.ERR_KILLDENY, target.name)
 
     if not client.has_permission("kill:oper") and client.local:
         return client.sendnumeric(Numeric.ERR_NOPRIVILEGES)

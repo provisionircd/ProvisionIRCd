@@ -41,10 +41,10 @@ class Mask:
             match mask_what:
                 case "country" | "account" | "certfp" | "realname" | "nick" | "ip":
                     attribute = getattr(self, mask_what)
-                    if len(mask_item.path) > 3:
-                        mask_value = mask_item.path[3]
-                    if mask_value and mask_value not in attribute:
-                        attribute.append(mask_value)
+                    mask_index = mask_item.path.index("mask")
+                    mask_value = mask_item.path[mask_index + 2]
+                    attribute.append(mask_value)
+
                 case "tls" | "identified" | "webirc" | "websockets":
                     mask_value = mask_item.path[3]
                     attribute = getattr(self, mask_what)
@@ -86,6 +86,12 @@ class Mask:
 
             case _:
                 block_key = f"{block.name}:{block.value}"
+                if block.name == "link":
+                    try:
+                        ipaddress.ip_address(mask_what.replace('*', '0'))
+                    except ValueError:
+                        return conf_error(f"Invalid {block_key} mask '{mask_what}'. Must be a valid IP address", item=item)
+
                 if block_key == "ban:nick":
                     if mask_value[0].isdigit():
                         return conf_error(f"Invalid account name: {mask_value} -- cannot start with number", item=item)
@@ -101,8 +107,8 @@ class Mask:
                             return conf_error(f"Invalid {block_key} mask '{mask_what}'. Must be either an ident@host or IP", item=item)
 
     def is_match(self, client):
-        ident = client.user.username or '*'
-        usermask = f"{ident}@{client.user.realhost}"
+        ident = client.user.username if client.user else '*'
+        usermask = f"{ident}@{client.user.realhost if client.user else client.name}"
         ipmask = f"{ident}@{client.ip}"
 
         checks = [
@@ -310,17 +316,17 @@ class Oper:
 
 
 class Link:
-    def __init__(self, name, password, connectclass):
+    def __init__(self, name, password, connectclass, incoming_mask: Mask):
         self.name = name
         # Deprecated. Use `auth` instead.
         self.password = password
-        self.auth = {}
         self.connectclass = connectclass
+        self.incoming_mask = incoming_mask
+        self.auth = {}
         self.incoming = {}
         self.outgoing = {}
         self.options = []
         self.outgoing_options = []
-        self.incoming_mask = []
         self.last_connect_attempt = int(time.time()) + IRCD.get_random_interval()
         self.fingerprint = None
         self.auto_connect = 0

@@ -1,4 +1,3 @@
-import ipaddress
 import os
 import re
 import socket
@@ -572,7 +571,8 @@ def config_test_link(block):
         ok = 0
 
     if ok:
-        link = Link(link_name, password=None, connectclass=block.get_single_value("class"))
+        mask = Mask(block)
+        link = Link(link_name, password=None, connectclass=block.get_single_value("class"), incoming_mask=mask)
         if password := block.get_single_value("password"):
             link.password = password
             for item in outgoing_items:
@@ -583,19 +583,6 @@ def config_test_link(block):
                     link.outgoing["port"] = item.get_single_value("port")
                 for option in item.get_path("options"):
                     link.outgoing_options.append(option)
-
-        for mask_item in block.get_items("incoming:mask"):
-            ip = mask_item.path[3]
-            if not ip == '*':
-                valid_check = ip.replace('*', '0')
-                try:
-                    ipaddress.ip_address(valid_check)
-                except ValueError:
-                    conf_error(f"Invalid IP address '{ip}' in incoming:mask", item=mask_item)
-                    continue
-            if ip in link.incoming_mask:
-                continue
-            link.incoming_mask.append(ip)
 
         for entry in block.get_items():
             if entry.path[1] == "options" and len(entry.path) > 2:
@@ -695,7 +682,7 @@ def config_test_except(block):
         for type_item in block.get_items("type"):
             path = type_item.path
             type_what = path[2]
-            if type_what not in ["kline", "gline", "zline", "gzline", "shun", "spamfilter", "dnsbl", "throttle", "require"]:
+            if type_what not in ["kline", "gline", "zline", "gzline", "shun", "spamfilter", "dnsbl", "throttle", "require", "kill"]:
                 conf_error(f"Invalid except:type: {type_what}", item=type_item)
                 continue
             types.append(type_what)
@@ -750,4 +737,6 @@ def config_test_bans(block):
 
     bans_mask = Mask(block)
     reason = block.get_single_value("reason")
+    if not reason.strip():
+        return conf_error(f"Block '{block.name} {block.value}' has an empty reason", block)
     ban = Ban(ban_type=ban_type, mask=bans_mask, reason=reason)

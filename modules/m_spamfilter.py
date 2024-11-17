@@ -11,9 +11,16 @@ from handle.functions import valid_expire, is_match
 from handle.validate_conf import Spamfilter
 
 
+def is_valid_regex(pattern):
+    try:
+        return re.compile(pattern) if isinstance(pattern, str) else 0
+    except re.error:
+        return 0
+
+
 def spamfilter_match(client, spamfilter, target_cause):  # filtertarget, to_target, target_cause):
     msg = f"Spamfilter match by {client.name} ({client.user.username}@{client.user.realhost}) matching {spamfilter.match} [{target_cause}] (action: {spamfilter.action})"
-    IRCD.send_snomask(client, 'F', msg)
+    IRCD.log(client, "warn", "spamfilter", "SPAMFILTER_MATCH", msg, sync=1)
     reason = spamfilter.reason.replace('_', ' ')
     if spamfilter.action == "warn":
         client.sendnumeric(Numeric.ERR_CANNOTSENDTOCHAN, client.name, f"[WARNING] Spamfilter match: {reason}")
@@ -35,20 +42,16 @@ def spamfilter_match(client, spamfilter, target_cause):  # filtertarget, to_targ
 
 
 def spamfilter_check(client, target, to_target, target_cause):
-    if client.has_permission("immune:spamfilter"):
+    if client.has_permission("immune:spamfilter") or IRCD.is_except_client("spamfilter", client):
         return Hook.ALLOW
     allow = 1
     for spamfilter in [s for s in IRCD.configuration.spamfilters if target in s.target]:
         _filter = spamfilter.match
-        if (spamfilter.match_type == "simple" and
-            is_match(_filter.lower(), target_cause.lower())) or \
+        if (spamfilter.match_type == "simple" and is_match(_filter.lower(), target_cause.lower())) or \
                 (spamfilter.match_type == "regex" and re.search(_filter, target_cause)):
 
-            if IRCD.is_except_client("spamfilter", client):
-                return Hook.ALLOW
-
             for e in [e for e in IRCD.configuration.excepts if e.name == "spamfilter"]:
-                for e_mask in e.mask:
+                for e_mask in e.mask.mask:
                     if e_mask[0][0] in IRCD.CHANPREFIXES and to_target[0] in IRCD.CHANPREFIXES:
                         # Channel exception.
                         if is_match(e_mask[0].lower(), to_target.lower()):
@@ -95,6 +98,7 @@ def cmd_spamfilter(client, recv):
 -          /SPAMFILTER add|+ <simple|regex> <target(s)> <action> <duration> <reason> <match>
 -          /SPAMFILTER del|- <id|match>
 -
+    You can combine multiple targets as a single string.
     Valid targets are:
         * private (p)
         * channel (c)
@@ -103,15 +107,21 @@ def cmd_spamfilter(client, recv):
         * away (a)
         * topic (t)
 -
+    When specifying the <reason>, replace spaces with underscores (_).
+-
     To view the spamfilter list, use /SPAMFILTER without any arguments.
     """
 
     targets = "pcnNat"
     actions = ["warn", "block", "kill", "gzline"]
 
-    if len(recv) == 1 and client.has_permission("server:spamfilter:view"):
+    if len(recv) == 1:
+        if not client.has_permission("server:spamfilter:view"):
+            return client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
         Command.do(client, "STATS", 'F')
-        return IRCD.server_notice(client, f"To view info about removing spamfilter entries, use: /SPAMFILTER del")
+        if client.has_permission("server:spamfilter:del"):
+            IRCD.server_notice(client, f"To view info about removing spamfilter entries, use: /SPAMFILTER del")
+        return
 
     if recv[1] not in ["add", "del", '+', '-']:
         return IRCD.server_notice(client, "Syntax: SPAMFILTER <add|+|del|-> <simple|regex> <target(s)> <action> <duration> <reason> <match> [id]")
@@ -161,7 +171,7 @@ def cmd_spamfilter(client, recv):
             return IRCD.server_notice(client, f"Syntax: SPAMFILTER {recv[1]} {match_type} {targets} {action} {duration} <reason> <match>")
 
         reason = recv[6]
-        match = recv[7]
+        match = ' '.join(recv[7:])
 
         # Check for possible duplicates.
         if next((s for s in IRCD.configuration.spamfilters if s.match == match), 0):
@@ -170,38 +180,47 @@ def cmd_spamfilter(client, recv):
         if len(match.replace('*', '')) <= 3:
             return IRCD.server_notice(client, f"Spamfilter match too broad.")
 
+        if match_type == "regex" and not is_valid_regex(match):
+            return IRCD.server_notice(client, f"Invalid regex pattern: {match}")
+
         reason = reason.replace('_', ' ')
         s = Spamfilter(match_type, action, duration, match, targets, reason, conf_file=None, conf=0)
         s.set_by = client.fullrealhost
         logging.debug(f"Spamfilter object added: {s}")
-        snotice_string = f"Spamfilter object added by {client.name} ({client.user.username}@{client.user.realhost}) [{match_type} {action} {targets}: {match}]. Reason: {reason}"
-        IRCD.send_snomask(client, "f", snotice_string)
+        msg = f"Spamfilter object added by {client.name} ({client.user.username}@{client.user.realhost}) [{match_type} {action} {targets}: {match}]. Reason: {reason}"
+        IRCD.log(client, "info", "spamfilter", "SPAMFILTER_ADD", msg, sync=1)
 
     if recv[1] in ["del", '-']:
         if not client.has_permission("server:spamfilter:del"):
             return client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
+        count = 0
         if len(recv) < 3:
-            for obj in IRCD.configuration.spamfilters:
-                if obj.conf:
-                    continue
+            for obj in [s for s in IRCD.configuration.spamfilters if not s.conf]:
+                count += 1
                 client.sendnumeric(Numeric.RPL_STATSSPAMF, obj.match_type, obj.target, obj.action, obj.duration, obj.active_time(), obj.set_time, obj.set_by, obj.reason, obj.match)
                 if obj.conf:
                     client.sendnumeric(Numeric.RPL_TEXT, "This spamfilter is stored in the configuration file and cannot be removed with /SPAMFILTER del")
                 else:
                     client.sendnumeric(Numeric.RPL_TEXT, f"To remove this spamfilter entry, use: /SPAMFILTER del {obj.entry_num}")
+
+            if not count:
+                return client.sendnumeric(Numeric.RPL_TEXT, "No entries found to be removed.")
             return
 
         for obj in list(IRCD.configuration.spamfilters):
             if obj.entry_num == int(recv[2]) and not obj.conf:
                 IRCD.configuration.spamfilters.remove(obj)
                 reason = obj.reason.replace('_', ' ')
-                return IRCD.send_snomask(client, 'f',
-                                         f"Spamfilter entry removed by {client.name} ({client.user.username}@{client.user.realhost}): "
-                                         f"[{obj.match_type}, {obj.action}, {''.join(obj.target)}: {obj.match}]. Reason: {reason}")
+                msg = f"Spamfilter entry removed by {client.name} ({client.user.username}@{client.user.realhost}): [{obj.match_type}, {obj.action}, {''.join(obj.target)}: {obj.match}]. Reason: {reason}"
+                IRCD.log(client, "info", "spamfilter", "SPAMFILTER_DEL", msg, sync=1)
+                return
         return IRCD.server_notice(client, "Could not find a spamfilter entry with that ID.")
 
 
 def spamfilter_stats(client):
+    if not client.has_permission("server:spamfilter:view"):
+        client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
+        return -1
     for t in IRCD.configuration.spamfilters:
         if not t.set_by:
             t.set_by = IRCD.me.name

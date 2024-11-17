@@ -51,7 +51,8 @@ def cmd_netinfo(client, recv):
         IRCD.log(client.uplink, "info", "link", "LINK_ESTABLISHED", msg, sync=0)
 
     if cloakhash.split(':')[1] != hashlib.md5(IRCD.get_setting("cloak-key").encode("utf-8")).hexdigest():
-        IRCD.send_snomask(IRCD.me, 's', "*** (warning) Network wide cloak keys are not the same! This will affect channel bans and must be fixed!")
+        data = "*** (warning) Network wide cloak keys are not the same! This will affect channel bans and must be fixed!"
+        IRCD.log(IRCD.me, "warn", "link", "LINK_NETINFO", data, sync=0)
 
     data = f":{client.id} {' '.join(recv)}"
     IRCD.send_to_servers(client, [], data)

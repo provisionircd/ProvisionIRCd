@@ -19,7 +19,7 @@ class Error:
     SERVER_PROTOCTL_PARSE_FAIL = error(), "Invalid PROTOCTL received from {}: {}"
 
     SERVER_LINK_NOMATCH = error(), "No matching link configuration"
-    SERVER_LINK_NOMATCH_IP = error(), "Link block mask does not match"
+    SERVER_LINK_NOMATCH_MASK = error(), "Link block mask does not match"
     SERVER_LINK_NOMATCH_CERTFP = error(), "Certificate fingerprints do not match"
     SERVER_LINK_NOMATCH_CN = error(), "Certificate Common-Name does not match"
     SERVER_LINK_MAXCLASS = error(), "Maximum instances of link class '{}' reached"

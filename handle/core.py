@@ -563,31 +563,32 @@ class Client:
 
             if buffer_len_recv > recvq or buffer_len_send > sendq:
                 if self.registered:
-                    IRCD.send_snomask(self, 'f',
-                                      f"*** Flood -- {self.name} ({self.user.username}@{self.user.realhost})"
-                                      f"has reached their max {'RecvQ' if flood_type == 'recvq' else 'SendQ'} ({flood_amount}) while the limit is {flood_limit}")
+                    msg = f"*** Flood -- {self.name} ({self.user.username}@{self.user.realhost}) has reached " \
+                          f"their max {'RecvQ' if flood_type == 'recvq' else 'SendQ'} ({flood_amount}) while the limit is {flood_limit}"
+                    IRCD.log(self, "warn", "flood", f"FLOOD_{flood_type.upper()}", msg, sync=1)
+
                 self.exit("Excess Flood")
             else:
                 cmd_len = len(self.local.recvbuffer)
                 max_cmds = int(recvq / 50)
                 if (cmd_len >= max_cmds) and (self.registered and self.seconds_since_signon() >= 1):
                     if self.registered:
-                        IRCD.send_snomask(self, 'f',
-                                          f"*** Buffer Flood -- {self.name} ({self.user.username}@{self.user.realhost}) has reached "
-                                          f"their max buffer length ({cmd_len}) while the limit is {max_cmds}")
+                        msg = f"*** Buffer Flood -- {self.name} ({self.user.username}@{self.user.realhost}) has reached " \
+                              f"their max buffer length ({cmd_len}) while the limit is {max_cmds}"
+                        IRCD.log(self, "warn", "flood", f"FLOOD_BUFFER_EXCEEDED", msg, sync=1)
                     self.exit("Excess Flood")
-                    return
+                return
 
-                flood_penalty_treshhold = 1_000_000 if 'o' not in self.user.modes else 10_000_000
-                if int(time()) - self.local.flood_penalty_time >= 60:
-                    self.local.flood_penalty = 0
-                    self.local.flood_penalty_time = 0
-                if self.local.flood_penalty >= flood_penalty_treshhold:
-                    if self.registered:
-                        IRCD.send_snomask(self, 'f',
-                                          f"*** Flood -- {self.name} ({self.user.username}@{self.user.realhost}) has reached "
-                                          f"their max flood penalty ({self.local.flood_penalty}) while the limit is {flood_penalty_treshhold}")
-                    self.exit("Excess Flood")
+            flood_penalty_treshhold = 1_000_000 if 'o' not in self.user.modes else 10_000_000
+            if int(time()) - self.local.flood_penalty_time >= 60:
+                self.local.flood_penalty = 0
+                self.local.flood_penalty_time = 0
+            if self.local.flood_penalty >= flood_penalty_treshhold:
+                if self.registered:
+                    msg = f"*** Flood -- {self.name} ({self.user.username}@{self.user.realhost}) has reached " \
+                          f"their max flood penalty ({self.local.flood_penalty}) while the limit is {flood_penalty_treshhold}"
+                    IRCD.log(self, "warn", "flood", f"FLOOD_PENALTY_LIMIT", msg, sync=1)
+                self.exit("Excess Flood")
 
     def assign_host(self):
         if not self.user or self.user.realhost:
@@ -2134,7 +2135,7 @@ class IRCD:
         targets = [
             f"{client.name}!{client.user.username}@{client.user.realhost}",
             f"{client.name}!{client.user.username}@{client.ip}",
-            f"{client.name}!{client.user.username}@{client.user.cloakhost}",
+            f"{client.name}!{client.user.username}@{client.user.cloakhost}"
         ]
         return int(any(is_match(mask, target) for target in targets))
 
@@ -2214,7 +2215,7 @@ class IRCD:
         return interval
 
     @staticmethod
-    def get_cloak(client, host=None):
+    def get_cloak(client, host=None, key=None):
         """
         host = received hostname, depending on resolve settings.
         Can either be IP or realhost.
@@ -2229,7 +2230,7 @@ class IRCD:
         if "static" in host or ".ip-" in host:
             host = ip
 
-        cloak_key = IRCD.get_setting("cloak-key")
+        cloak_key = IRCD.get_setting("cloak-key") if not key else key
         key = f"{host}{cloak_key}"
         hashhost = hashlib.sha512(bytes(key, "utf-8"))
         hex_dig = hashhost.hexdigest()
@@ -2975,10 +2976,10 @@ class Stat:
         return next((s for s in Stat.table if s.letter == letter), 0)
 
     def show(self, client):
-        self.func(client)
-        client.sendnumeric(Numeric.RPL_ENDOFSTATS, self.letter)
-        msg = f"* Stats \"{self.letter}\" requested by {client.name} ({client.user.username}@{client.user.realhost})"
-        IRCD.send_snomask(client, 's', msg)
+        if self.func(client) != -1:
+            client.sendnumeric(Numeric.RPL_ENDOFSTATS, self.letter)
+            msg = f"* Stats \"{self.letter}\" requested by {client.name} ({client.user.username}@{client.user.realhost})"
+            IRCD.send_snomask(client, 's', msg)
 
 
 class Extban:
@@ -3779,9 +3780,11 @@ class Log:
         ("connect", "LOCAL_USER_QUIT"): 'c',
         ("connect", "REMOTE_USER_CONNECT"): 'C',
         ("connect", "REMOTE_USER_QUIT"): 'C',
+        ("spamfilter", None): 'F',
+        ("flood", None): 'f',
+        ("tkl", None): 'G',
         ("oper", None): 'o',
         ("link", None): 'L',
-        ("tkl", None): 'G',
         ("kill", None): 'k',
         ("sajoin", None): 'S',
         ("sapart", None): 'S',
