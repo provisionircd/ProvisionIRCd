@@ -11,8 +11,18 @@ def cmd_chghost(client, recv):
     Syntax: CHGHOST <user> <newhost>
     """
 
+    permission_parent = "chgcmds:chghost"
+
+    if not client.has_permission(f"{permission_parent}:local") and not client.has_permission(f"{permission_parent}:global"):
+        return client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
+
     if not (target := IRCD.find_user(recv[1])):
         return client.sendnumeric(Numeric.ERR_NOSUCHNICK, recv[1])
+
+    if client.local:
+        permission_check = f"{permission_parent}:global" if not target.local else f"{permission_parent}:local"
+        if not client.has_permission(permission_check) and not client.has_permission(f"{permission_parent}:global"):
+            return client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
 
     host = str(recv[2][:64]).strip().removeprefix(':')
     host = ''.join(c for c in host if c.lower() in IRCD.HOSTCHARS)
@@ -38,8 +48,18 @@ def cmd_chgident(client, recv):
     Syntax: CHGIDENT <target> <newident>
     """
 
+    permission_parent = "chgcmds:chgident"
+
+    if not client.has_permission(f"{permission_parent}:local") and not client.has_permission(f"{permission_parent}:global"):
+        return client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
+
     if not (target := IRCD.find_user(recv[1])):
         return client.sendnumeric(Numeric.ERR_NOSUCHNICK, recv[1])
+
+    if client.local:
+        permission_check = f"{permission_parent}:global" if not target.local else f"{permission_parent}:local"
+        if not client.has_permission(permission_check) and not client.has_permission(f"{permission_parent}:global"):
+            return client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
 
     ident = recv[2][:12].strip().removeprefix(':')
     ident = ''.join(c for c in ident if c.lower() in IRCD.HOSTCHARS)

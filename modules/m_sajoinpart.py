@@ -9,20 +9,23 @@ def cmd_sajoinpart(client, recv):
     if not (Command.find_command(client, "PART")) or not (Command.find_command(client, "JOIN")):
         return
 
+    cmd = recv[0].lower()
+    if not client.has_permission(f"sacmds:{cmd}:local") and not client.has_permission(f"sacmds:{cmd}:global"):
+        return client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
+
     if not (target := IRCD.find_user(recv[1])):
         return client.sendnumeric(Numeric.ERR_NOSUCHNICK, recv[1])
 
-    cmd = recv[0].lower()
     if client.local:
         permission_check = f"sacmds:{cmd}:global" if not target.local else f"sacmds:{cmd}:local"
 
-        if not client.has_permission(permission_check):
+        if not client.has_permission(permission_check) and not client.has_permission(f"sacmds:{cmd}:global"):
             return client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
 
         if 'S' in target.user.modes or target.ulined or target.is_service:
             return IRCD.server_notice(client, f"*** You cannot use /{cmd.upper()} on services.")
 
-        client.local.flood_penalty += 100_000
+        client.local.flood_penalty += 50_000
 
     chan = IRCD.strip_format(recv[2])
     if not (channel := IRCD.find_channel(chan)):
@@ -31,31 +34,28 @@ def cmd_sajoinpart(client, recv):
     if channel.name[0] == '&':
         return IRCD.server_notice(client, f"*** You cannot use /{cmd.upper()} on local channels.")
 
-    if cmd == "sapart" and not channel.find_member(target):
-        return client.sendnumeric(Numeric.ERR_USERNOTINCHANNEL, target.name, channel.name)
-
-    if cmd == "sajoin" and channel.find_member(target):
-        return client.sendnumeric(Numeric.ERR_USERONCHANNEL, target.name, channel.name)
+    if (cmd == "sapart" and not channel.find_member(target)) or (cmd == "sajoin" and channel.find_member(target)):
+        error = Numeric.ERR_USERNOTINCHANNEL if cmd == "sapart" else Numeric.ERR_USERONCHANNEL
+        return client.sendnumeric(error, target.name, channel.name)
 
     what = "join" if cmd == "sajoin" else "part"
-    if what == "join" and target.local:
-        target.add_flag(Flag.CLIENT_USER_SAJOIN)
-        Command.do(target, "JOIN", channel.name)
-        target.flags.remove(Flag.CLIENT_USER_SAJOIN)
-    elif target.local:
-        Command.do(target, "PART", channel.name)
+    if target.local:
+        if what == "join":
+            target.add_flag(Flag.CLIENT_USER_SAJOIN)
+            Command.do(target, "JOIN", channel.name)
+            target.flags.remove(Flag.CLIENT_USER_SAJOIN)
+        else:
+            Command.do(target, "PART", channel.name)
+
     data = f":{client.id} SA{what.upper()} {target.name} {channel.name}"
     IRCD.send_to_servers(client, [], data)
 
-    rootevent = cmd
-    event = "LOCAL_" if target.local else "REMOTE_"
-    event += rootevent.upper()
+    event = f"{'LOCAL' if target.local else 'REMOTE'}_{cmd.upper()}"
     msg = f"*** {client.name} ({client.user.username}@{client.user.realhost}) used {cmd.upper()} to make {target.name} {what} {channel.name}"
-    IRCD.log(client, "info", rootevent, event, msg, sync=0)
+    IRCD.log(client, "info", cmd, event, msg, sync=1 if target.local else 0)
 
     if target.local:
-        msg = f"*** Your were forced to {what} {channel.name}."
-        IRCD.server_notice(target, msg)
+        IRCD.server_notice(target, f"*** Your were forced to {what} {channel.name}.")
 
 
 def init(module):

@@ -11,10 +11,20 @@ def cmd_chgname(client, recv):
     Syntax: CHGNAME <user> <new real name>
     """
 
+    permission_parent = "chgcmds:chgname"
+
+    if not client.has_permission(f"{permission_parent}:local") and not client.has_permission(f"{permission_parent}:global"):
+        return client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
+
     if not (target := IRCD.find_user(recv[1])):
         return client.sendnumeric(Numeric.ERR_NOSUCHNICK, recv[1])
 
-    gecos = ' '.join(recv[2:])[:48].removeprefix(':')
+    if client.local:
+        permission_check = f"{permission_parent}:global" if not target.local else f"{permission_parent}:local"
+        if not client.has_permission(permission_check) and not client.has_permission(f"{permission_parent}:global"):
+            return client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
+
+    gecos = ' '.join(recv[2:])[:48].removeprefix(':').strip()
     if gecos == target.info or not gecos:
         return
 

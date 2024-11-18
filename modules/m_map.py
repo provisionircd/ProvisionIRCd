@@ -13,6 +13,9 @@ def cmd_map(client, recv):
     Displays a detailed overview of all linked servers.
     """
 
+    if not client.has_permission("server:info:map"):
+        return client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
+
     for s in [s for s in IRCD.global_servers() if s.id]:
         usercount = len([c for c in IRCD.global_users() if c.uplink == s])
         percentage = round(100 * float(usercount) / float(IRCD.global_user_count), 2)
@@ -25,6 +28,10 @@ def cmd_links(client, recv):
     """
     Displays an overview of all linked servers.
     """
+
+    if not client.has_permission("server:info:links"):
+        return client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
+
     for s in IRCD.global_servers():
         client.sendnumeric(Numeric.RPL_LINKS, s.name, s.direction.name, s.hopcount, s.info)
     client.sendnumeric(Numeric.RPL_ENDOFLINKS)
