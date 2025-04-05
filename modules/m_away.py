@@ -2,7 +2,7 @@
 /away command
 """
 
-from handle.core import Isupport, Command, Numeric, Flag, IRCD, Capability, Hook
+from handle.core import IRCD, Command, Isupport, Numeric, Flag, Capability, Hook
 
 AWAYLEN = 300
 
@@ -13,7 +13,7 @@ def cmd_away(client, recv):
     if (not away and not client.user.away) or away == client.user.away:
         return
 
-    for result, cb in Hook.call(Hook.PRE_AWAY, args=(client, away)):
+    for result, _ in Hook.call(Hook.PRE_AWAY, args=(client, away)):
         if result == Hook.DENY:
             return
         elif result == Hook.ALLOW:

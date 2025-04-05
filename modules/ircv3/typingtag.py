@@ -3,7 +3,7 @@ Provides +typing client tag.
 https://ircv3.net/specs/client-tags/typing.html
 """
 
-from handle.core import MessageTag
+from modules.ircv3.messagetags import MessageTag
 
 
 class TypingTag(MessageTag):
@@ -13,5 +13,5 @@ class TypingTag(MessageTag):
         super().__init__(name=TypingTag.name, value=value)
 
 
-def init(module):
+def post_load(module):
     MessageTag.add(TypingTag)

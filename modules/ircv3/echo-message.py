@@ -7,7 +7,7 @@ from handle.core import Capability, Hook
 
 def echo_msg(client, target, message, cmd, prefix):
     if client.has_capability("echo-message") and 'd' not in client.user.modes:
-        data = f":{client.name}!{client.user.username}@{client.user.cloakhost} {cmd} {prefix}{target.name} :{message}"
+        data = f":{client.name}!{client.user.username}@{client.user.host} {cmd} {prefix}{target.name} :{message}"
         client.send(client.mtags, data)
 
 

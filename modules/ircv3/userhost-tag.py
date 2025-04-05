@@ -2,7 +2,8 @@
 userhost and userip tags
 """
 
-from handle.core import IRCD, MessageTag, Hook
+from handle.core import IRCD, Hook
+from modules.ircv3.messagetags import MessageTag
 
 
 class UserhostTag(MessageTag):
@@ -37,7 +38,7 @@ def add_useriptag(client):
         client.mtags.append(tag)
 
 
-def init(module):
+def post_load(module):
     Hook.add(Hook.NEW_MESSAGE, add_userhosttag)
     Hook.add(Hook.NEW_MESSAGE, add_useriptag)
     MessageTag.add(UserhostTag)

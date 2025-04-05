@@ -3,58 +3,54 @@
 """
 
 import time
-
-from handle.core import IRCD, Command, Flag, Isupport, Extban, Batch, Hook
-from handle.logger import logging
 import re
+
+from handle.core import IRCD, Command
+from classes.data import Extban, Flag, Isupport, Hook
+from handle.logger import logging
+from modules.ircv3.batch import Batch
 
 
 def get_users_from_memberlist(memberlist: list) -> list:
-    users = []
     user_prefixes = [m.sjoin_prefix for m in IRCD.channel_modes() if m.type == m.MEMBER]
     list_prefixes = [m.sjoin_prefix for m in IRCD.channel_modes() if m.type == m.LISTMODE]
+
+    users = []
     for entry in memberlist:
-        if entry[0] == '<':
-            if not (match := re.match(r"<(.*),(.*)>(.*)", entry)):
-                continue
+        if entry[0] == '<' and (match := re.match(r"<(.*),(.*)>(.*)", entry)):
             entry = match.groups()[2]
+
         user_uid = ''
         for char in entry:
             if char in list_prefixes:
                 # Not interested in those.
                 break
-            if char in user_prefixes:
-                # Skip prefixes.
-                continue
-            user_uid += char
-        if user_uid and (user := IRCD.find_user(user_uid)):
+            if char not in user_prefixes:
+                user_uid += char
+
+        if user_uid and (user := IRCD.find_client(user_uid)):
             users.append(user)
+
     return users
 
 
+@logging.client_context
 def get_usermodes_from_memberlist(remote_server, memberlist: list) -> list:
     usermodes = []
     known_user_prefixes = [m.sjoin_prefix for m in IRCD.channel_modes() if m.sjoin_prefix and m.type == m.MEMBER]
     for entry in memberlist:
-        try:
-            if entry[0] == '<':
-                continue
-        except IndexError:
-            logging.error(f"[get_usermodes_from_memberlist()] IndexError on entry: {entry}")
+        if not entry or entry[0] == '<':
             continue
+
         modes = ''
         user_uid = ''
         for char in entry:
-            if char in known_user_prefixes:
-                if cmode := next((cm for cm in IRCD.channel_modes() if cm.sjoin_prefix == char), 0):
-                    modes += cmode.flag
-                continue
+            if char in known_user_prefixes and (cmode := next((cm for cm in IRCD.channel_modes() if cm.sjoin_prefix == char), 0)):
+                modes += cmode.flag
             else:
                 user_uid += char
 
-        if user_uid:
-            if not (user := IRCD.find_user(user_uid)):
-                continue
+        if user_uid and (user := IRCD.find_client(user_uid)):
             if user.name == '*':
                 # How the fuck...?
                 logging.error(f"Found remote user without nickname. UID command without nickname received?")
@@ -63,10 +59,10 @@ def get_usermodes_from_memberlist(remote_server, memberlist: list) -> list:
     return usermodes
 
 
+@logging.client_context
 def get_listmodes_from_memberlist(remote_server, memberlist: list) -> (list, list):
     known_list_prefixes = [m.sjoin_prefix for m in IRCD.channel_modes() if m.sjoin_prefix and m.type == m.LISTMODE]
-    listmodes_modebuf = []
-    listmodes_parambuf = []
+    listmodes_modebuf, listmodes_parambuf = [], []
     timestamp = int(time.time())
     setter = remote_server.name
 
@@ -74,26 +70,28 @@ def get_listmodes_from_memberlist(remote_server, memberlist: list) -> (list, lis
         if entry[0] == '<':
             if not (match := re.match(r"<(.*),(.*)>(.*)", entry)):
                 logging.error(f"Malformed SJSBY format received: {entry} -- skipping entry.")
-                IRCD.send_snomask(remote_server, 's', f"ERROR: Malformed SJSBY format received: {entry} -- some channel modes may not have been synced correctly!")
+                IRCD.send_snomask(remote_server, 's', f"ERROR: Malformed SJSBY format received: "
+                                                      f"{entry} -- some channel modes may not have been synced correctly!")
                 continue
             timestamp, setter, entry = match.groups()
+
         for char in entry:
             if char in known_list_prefixes:
                 if cmode := next((cm for cm in IRCD.channel_modes() if cm.sjoin_prefix == char), 0):
                     listmodes_modebuf.append(cmode.flag)
                     listmodes_parambuf.append((timestamp, setter, entry[1:]))
+
     return listmodes_modebuf, listmodes_parambuf
 
 
 def do_normal_join(server_client, channel_object, memberlist: list) -> None:
     """ Join all remote members from memberlist to local channel. """
-    for user in [c for c in get_users_from_memberlist(memberlist)]:  # if not channel_object.find_member(c)]:
+    for user in get_users_from_memberlist(memberlist):
         IRCD.new_message(user)
-        mtags = server_client.recv_mtags if server_client.server.synced else user.mtags
         # Remove msgid tag because it won't be the same across the network.
-        if not server_client.server.synced:
-            mtags = [t for t in mtags if t.name != "msgid"]
+        mtags = server_client.recv_mtags if server_client.server.synced else [t for t in user.mtags if t.name != "msgid"]
         channel_object.do_join(mtags, user)
+        IRCD.run_hook(Hook.REMOTE_JOIN, user, channel_object)
         user.mtags = []
 
 
@@ -185,6 +183,7 @@ def handle_modes(channel_object, remote_modes: str, remote_params: list, action:
     return modebuf, parambuf
 
 
+@logging.client_context
 def set_remote_modes(remote_server, channel_object, remote_modes: str, remote_params: list, memberlist: list) -> None:
     remote_modes = remote_modes.replace('+', '')
     modebuf_give, parambuf_give = handle_modes(channel_object, remote_modes, remote_params, action='+')
@@ -218,25 +217,27 @@ def set_remote_modes(remote_server, channel_object, remote_modes: str, remote_pa
     send_modelines(remote_server, channel_object, modebuf_give, parambuf_give, action='+')
 
 
-def remote_wins(remote_server, channel_object, remote_modes: str, remote_params: list, memberlist: list, remote_channel_creation: int) -> None:
+def remote_wins(remote_server, channel_object, remote_modes: str, remote_params: list,
+                memberlist: list, remote_channel_creation: int) -> None:
     common_modes = set(channel_object.modes) & set(remote_modes)
-    modebuf_remove, parambuf_remove = handle_modes(channel_object, channel_object.modes, remote_params, action='-', common_modes=common_modes)
+    modebuf_remove, parambuf_remove = handle_modes(channel_object, channel_object.modes, remote_params,
+                                                   action='-', common_modes=common_modes)
 
     # Now remove +vhoaq etc.
     for client in channel_object.member_by_client:
-        for membermode in channel_object.get_modes_of_client_str(client):
-            modebuf_remove.append(membermode)
-            parambuf_remove.append(client.name)
-        client_membermodes = channel_object.get_modes_of_client_str(client)
-        channel_object.member_take_modes(client, client_membermodes)
+        if member_modes := channel_object.get_membermodes_sorted(client=client):
+            modes = ''.join(mode.flag for mode in member_modes)
+            modebuf_remove.extend(modes)
+            parambuf_remove.extend([client.name] * len(modes))
+            channel_object.member_take_modes(client, modes)
 
     # Remove bans etc.
-    for listmode in channel_object.List:
-        for entry in channel_object.List[listmode]:
+    for listmode, entries in channel_object.List.items():
+        for entry in entries:
             modebuf_remove.append(listmode)
             parambuf_remove.append(entry.mask)
-    channel_object.init_lists()
 
+    channel_object.init_lists()
     channel_object.creationtime = remote_channel_creation
     send_modelines(remote_server, channel_object, modebuf_remove, parambuf_remove, action='-')
 
@@ -244,6 +245,7 @@ def remote_wins(remote_server, channel_object, remote_modes: str, remote_params:
     set_remote_modes(remote_server, channel_object, remote_modes, remote_params, memberlist)
 
 
+@logging.client_context
 def merge_modes(remote_server, channel_object, remote_modes: str, remote_params: list, memberlist: list) -> None:
     merge_modebuf, merge_parambuf = handle_modes(channel_object, remote_modes, remote_params, action='+')
 
@@ -277,11 +279,11 @@ def merge_modes(remote_server, channel_object, remote_modes: str, remote_params:
     send_modelines(remote_server, channel_object, merge_modebuf, merge_parambuf, action='+')
 
 
+@logging.client_context
 def cmd_sjoin(client, recv: list) -> None:
-    # logging.debug(f"SJOIN from {client.name}: {recv}")
     channel_name = recv[2]
     if channel_name[0] == '&':
-        logging.error(f"ERROR: received a local channel from remote server {client.name}: {channel_name}")
+        logging.error(f"ERROR: received a local channel: {channel_name}")
         msg = f"Link failed for {client.name}: Sync error! Server {client.name} tried to link local channels!"
         client.direct_send(f"ERROR :{msg}")
         return client.exit(msg)
@@ -290,28 +292,20 @@ def cmd_sjoin(client, recv: list) -> None:
         channel_object = IRCD.create_channel(IRCD.me, channel_name)
 
     remote_channel_creation = int(recv[1])
-
-    if not channel_object.remote_creationtime:
-        channel_object.remote_creationtime = remote_channel_creation
+    channel_object.remote_creationtime = channel_object.remote_creationtime or remote_channel_creation
 
     channel_modes = ''
     channel_modes_params = []
     memberlist = []
 
-    idx = 3
-    for param in recv[idx:]:
+    for idx, param in enumerate(recv[3:], 3):
         if param.startswith(':'):
-            memberlist = recv[idx:]
-            memberlist[0] = memberlist[0][1:]
+            memberlist = [p[1:] if i == idx else p for i, p in enumerate(recv[idx:], idx)]
             if not memberlist[0].strip():
-                logging.error(f"Found empty member in memberlist on position {idx}. Removing last entry. Received data: {recv}")
                 del memberlist[0]
             break
-        if not channel_modes:
-            channel_modes = param
-        else:
-            channel_modes_params.append(param)
-        idx += 1
+        channel_modes = param if not channel_modes else channel_modes
+        channel_modes_params.append(param) if channel_modes != param else None
 
     # Start our netjoin batch, if one doesn't already exist.
     if not client.server.synced and not Batch.find_batch_by(client.direction):
@@ -334,9 +328,6 @@ def cmd_sjoin(client, recv: list) -> None:
         do_normal_join(client, channel_object, memberlist)
 
     elif remote_channel_creation == channel_object.creationtime:
-        if not client.server.synced:
-            """ Don't spam this debug message on every remote join. """
-            logging.debug(f"Equal timestamps for remote channel {channel_object.name} -- merging modes.")
         merge_modes(client, channel_object, channel_modes, channel_modes_params, memberlist)
 
     if not client.registered:

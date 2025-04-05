@@ -8,31 +8,28 @@ from handle.core import IRCD, Command, Numeric, Flag
 
 
 def connect_to(client, link, auto_connect=0):
-    try:
-        if "host" not in link.outgoing:
-            return IRCD.server_notice(client, f"Unable to process outgoing link '{link.name}' because it has no outgoing host defined.")
-        if "port" not in link.outgoing:
-            return IRCD.server_notice(client, f"Unable to process outgoing link '{link.name}' because it has no outgoing port defined.")
-        # If the host is local, and you are listening for servers on the port, do not connect to yourself.
-        out_host, out_port = link.outgoing["host"], int(link.outgoing["port"])
-        if out_host in ["127.0.0.1", "0.0.0.0", "localhost"] and \
-                (out_port in [int(listen.port) for listen in IRCD.configuration.listen]):
-            if client and client.user:
-                IRCD.server_notice(client, f"Unable to process outgoing link {out_host}:{out_port} because destination is localhost.")
-            return
+    if "host" not in link.outgoing or "port" not in link.outgoing:
+        missing = "host" if "host" not in link.outgoing else "port"
+        return IRCD.server_notice(client, f"Unable to process outgoing link '{link.name}' because it has no outgoing {missing} defined.")
 
-        is_tls = 0
-        if "tls" in link.outgoing_options or "ssl" in link.outgoing_options:
-            is_tls = 1
+    # If the host is local, and you are listening for servers on the port, do not connect to yourself.
+    out_host, out_port = link.outgoing["host"], int(link.outgoing["port"])
+    listening_ports = [int(listen.port) for listen in IRCD.configuration.listen]
+    if out_host in ["127.0.0.1", "0.0.0.0", "localhost"] and out_port in listening_ports:
+        if client and client.user:
+            IRCD.server_notice(client, f"Unable to process outgoing link {out_host}:{out_port} because destination is localhost.")
+        return
 
-        if client.user:
-            msg = f"*** {client.name} ({client.user.username}@{client.user.realhost}) has opened a{' secure' if is_tls else 'n insecure'} link channel to {link.name}..."
-            IRCD.log(client, "info", "link", "LINK_CONNECTING", msg)
-        if not IRCD.find_server(link.name) and not IRCD.current_link_sync:
-            IRCD.run_parallel_function(target=start_outgoing_link, args=(link, is_tls, auto_connect))
+    is_tls = "tls" in link.outgoing_options or "ssl" in link.outgoing_options
 
-    except Exception as ex:
-        logging.exception(ex)
+    if client.user:
+        connection_type = "secure" if is_tls else "unsecure"
+        msg = (f"*** {client.name} ({client.user.username}@{client.user.realhost}) "
+               f"has opened a{('n ' if connection_type == 'unsecure' else ' ')}{connection_type} link channel to {link.name}...")
+        IRCD.log(client, "info", "link", "LINK_CONNECTING", msg)
+
+    if not IRCD.find_client(link.name) and not IRCD.current_link_sync:
+        IRCD.run_parallel_function(target=start_outgoing_link, args=(link, is_tls, auto_connect, client))
 
 
 def cmd_connect(client, recv):
@@ -58,10 +55,10 @@ def cmd_connect(client, recv):
     if name.lower() == IRCD.me.name.lower():
         return IRCD.server_notice(client, "*** Cannot link to own local server.")
 
-    if not (link := next((link for link in IRCD.configuration.links if link.name.lower() == name.lower()), 0)):
+    if not (link := IRCD.get_link(name)):
         return IRCD.server_notice(client, f"*** Server {name} is not configured for linking.")
 
-    server_client = IRCD.find_server(name)
+    server_client = IRCD.find_client(name)
 
     if server_client:
         if not server_client.server.synced:

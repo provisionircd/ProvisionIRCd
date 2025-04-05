@@ -2,6 +2,7 @@ import base64
 import binascii
 import string
 import socket
+
 from handle.logger import logging
 
 
@@ -27,21 +28,12 @@ def fixup_ip6(ip6):
     return ip6
 
 
-def reverse_ip(ip):
-    x = 3
-    revip = ''
-    while 1:
-        if revip:
-            revip = revip + '.' + ip.split('.')[x]
-        else:
-            revip = ip.split('.')[x]
-        if x == 0:
-            break
-        x -= 1
-    return revip
+def reverse_ip(ip: str) -> str:
+    octets = ip.split('.')
+    return '.'.join(octets[::-1])
 
 
-def valid_expire(s):
+def valid_expire(s: str) -> bool | int:
     spu = dict(s=1, m=60, h=3600, d=86400, w=604800, M=2592000)
     s = str(s) if isinstance(s, int) else s
     if s.isdigit():
@@ -54,26 +46,20 @@ def valid_expire(s):
         return False
 
 
-def IPtoBase64(ip):
+def ip_to_base64(ip: str) -> str | None:
     if ip == '*':
-        return
+        return None
     try:
-        ip = ip.split('.')
-        s = ''
-        for g in ip:
-            b = "%X" % int(g)
-            if len(b) == 1:
-                b = '0' + b
-            s += b
-        result = binascii.unhexlify(s.rstrip().encode("utf-8"))
-        binip = base64.b64encode(result)
-        binip = binip.decode()
-        return binip
-    except Exception as ex:
-        logging.exception(ex)
+        hex_octets = [f"{int(octet):02X}" for octet in ip.split('.')]
+        hex_str = ''.join(hex_octets)
+        binary_data = binascii.unhexlify(hex_str)
+        return base64.b64encode(binary_data).decode()
+    except (ValueError, binascii.Error) as ex:
+        logging.exception(f"Error encoding IP address {ip}: {ex}")
+        return None
 
 
-def Base64toIP(base):
+def base64_to_ip(base: str):
     try:
         ip = []
         string = base64.b64decode(base)
@@ -88,7 +74,7 @@ def Base64toIP(base):
         logging.exception(ex)
 
 
-def make_mask(data):
+def make_mask(data: str) -> str:
     # Check if data should be treated as host
     if '!' not in data and '@' not in data and ('.' in data or ':' in data):
         nick = '*'
@@ -113,12 +99,8 @@ def make_mask(data):
             else:
                 ident = '*'
 
-        # Assign host
         if '@' in data:
             host = data.split('@')[1]
-            # # Adjust host if it starts with '!' and ident is '*' or empty
-            # if ident in ('', '*') and host.startswith('!'):
-            #     host = host[1:]
         else:
             host = '*'
 
@@ -129,12 +111,22 @@ def make_mask(data):
     return f"{nick}!{ident}@{host}"
 
 
-def is_match(first, second):
+def is_match(first: str, second: str, memo=None) -> bool:
+    if memo is None:
+        memo = {}
+
+    key = (first, second)
+    if key in memo:
+        return memo[key]
+
     if not first:
-        return not second
-    if first[0] == '*':
-        return is_match(first[1:], second) or (second and is_match(first, second[1:]))
+        result = not second
+    elif first[0] == '*':
+        result = is_match(first[1:], second, memo) or (second and is_match(first, second[1:], memo))
     elif second and (first[0] == '?' or first[0] == second[0]):
-        return is_match(first[1:], second[1:])
+        result = is_match(first[1:], second[1:], memo)
     else:
-        return False
+        result = False
+
+    memo[key] = result
+    return result

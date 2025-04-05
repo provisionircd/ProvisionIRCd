@@ -2,9 +2,11 @@
 /rehash command
 """
 
-from classes.configuration import ConfigBuild
-from handle.core import Command, IRCD, Numeric, Flag
 import gc
+
+from handle.core import IRCD, Command, Numeric, Flag
+from classes.configuration import ConfigBuild
+from handle.logger import logging
 
 gc.enable()
 
@@ -13,14 +15,18 @@ def cmd_rehash(client, recv):
     """
     Reloads the configuration files.
     """
+
     if client.user and not client.has_permission("server:rehash"):
         return client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
+
     if IRCD.rehashing:
         return
 
     IRCD.rehashing = 1
     IRCD.current_link_sync = None
-    if client.is_local_user:
+    cmd_rehash_errors = []
+
+    if client.is_local_user():
         client.local.flood_penalty += 500_000
     if client.user:
         msg = f"*** {client.name} ({client.user.username}@{client.user.realhost}) is rehashing the server configuration file..."
@@ -38,7 +44,10 @@ def cmd_rehash(client, recv):
                 IRCD.log(client, "info", "config", "CONFIG_REHASH", msg)
 
     client.sendnumeric(Numeric.RPL_REHASHING, IRCD.conf_path)
-    if ConfigBuild(conffile=IRCD.conf_file).is_ok(rehash=1, rehash_client=client, reloadmods=reloadmods):
+    if ConfigBuild(conffile=IRCD.conf_file).is_ok(rehash=1,
+                                                  rehash_client=client,
+                                                  reloadmods=reloadmods,
+                                                  cmd_rehash_errors=cmd_rehash_errors):
         msg = "*** Configuration reloaded without any problems."
     else:
         msg = "*** Configuration failed to reload."
@@ -47,6 +56,12 @@ def cmd_rehash(client, recv):
 
     gc.collect()
     IRCD.rehashing = 0
+
+    if not client.user:
+        if cmd_rehash_errors:
+            IRCD.command_socket.sendall('\n'.join(cmd_rehash_errors).encode())
+        else:
+            IRCD.command_socket.sendall('1'.encode())
 
 
 def init(module):

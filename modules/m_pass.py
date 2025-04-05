@@ -2,14 +2,12 @@
 /pass command (server)
 """
 
-from handle.core import Numeric, IRCD, Command, Flag
-from handle.logger import logging
+from handle.core import IRCD, Command, Numeric, Flag
 
 
 def cmd_pass(client, recv):
     if not client.registered:
         client.local.authpass = recv[1].removeprefix(':')
-        logging.debug(f"Password set for local client {client.name}: {client.local.authpass}")
     else:
         return client.sendnumeric(Numeric.ERR_ALREADYREGISTRED)
 

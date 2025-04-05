@@ -3,7 +3,8 @@ Draft of +channel-context client tag.
 https://ircv3.net/specs/client-tags/channel-context
 """
 
-from handle.core import IRCD, MessageTag
+from handle.core import IRCD
+from modules.ircv3.messagetags import MessageTag
 
 
 class ChannelContextTag(MessageTag):
@@ -21,5 +22,5 @@ class ChannelContextTag(MessageTag):
         return ChannelContextTag(value=channel_name)
 
 
-def init(module):
+def post_load(module):
     MessageTag.add(ChannelContextTag)

@@ -2,7 +2,8 @@
 server-time capability
 """
 
-from handle.core import MessageTag, Capability, IRCD, Hook
+from handle.core import IRCD, Capability, Hook
+from modules.ircv3.messagetags import MessageTag
 
 
 class ServerTime(MessageTag):
@@ -20,7 +21,7 @@ def add_server_time(client):
     client.mtags.append(time_tag)
 
 
-def init(module):
+def post_load(module):
     Capability.add("server-time")
     Hook.add(Hook.NEW_MESSAGE, add_server_time)
     MessageTag.add(ServerTime)

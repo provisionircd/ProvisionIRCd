@@ -15,7 +15,7 @@ def cmd_invite(client, recv):
 
     oper_override = 0
 
-    if not (invite_client := IRCD.find_user(recv[1])):
+    if not (invite_client := IRCD.find_client(recv[1], user=1)):
         return client.sendnumeric(Numeric.ERR_NOSUCHNICK, recv[1])
 
     if not (channel := IRCD.find_channel(recv[2])):
@@ -53,15 +53,13 @@ def cmd_invite(client, recv):
             'z': " [Overriding +z]" if 'z' in channel.modes and 'z' not in invite_client.user.modes else ''
         }
         s = next((msg for key, msg in overrides.items() if msg), '')
-        msg = f"*** OperOverride by {client.name} ({client.user.username}@{client.user.realhost}) with INVITE {invite_client.name} {channel.name}{s}"
-
-        IRCD.log(client, "info", "oper", "OPER_OVERRIDE", msg, sync=1)
+        IRCD.send_oper_override(client, f"INVITE {invite_client.name} {channel.name}{s}")
 
     data = f":{client.fullmask} INVITE {invite_client.name} {channel.name}"
     invite_client.send([], data)
     client.sendnumeric(Numeric.RPL_INVITING, invite_client.name, channel.name)
 
-    broadcast_users = [c for c in channel.clients() if c.local and c.has_capability("invite-notify")
+    broadcast_users = [c for c in channel.clients(client_cap="invite-notify") if c.local
                        and (channel.client_has_membermodes(c, "hoaq") or c.has_permission("channel:see:invites"))]
 
     for user in broadcast_users:
@@ -70,12 +68,12 @@ def cmd_invite(client, recv):
     # Users who do not have the invite-notify capability should still receive a traditional notice.
     notice_users = [c for c in channel.clients() if c.local and c not in broadcast_users
                     and (channel.client_has_membermodes(c, "hoaq") or c.has_permission("channel:see:invites"))]
-    broadcast_data = f"NOTICE {channel.name} :{client.name} ({client.user.username}@{client.user.cloakhost}) has invited {invite_client.name} to join the channel"
+    broadcast_data = (f"NOTICE {channel.name} :{client.name} ({client.user.username}@{client.user.host}) "
+                      f"has invited {invite_client.name} to join the channel")
     for notice_user in notice_users:
         IRCD.server_notice(notice_user, broadcast_data)
 
-    data = f":{client.id} INVITE {invite_client.name} {channel.name}"
-    IRCD.send_to_servers(client, [], data)
+    IRCD.send_to_servers(client, [], f":{client.id} INVITE {invite_client.name} {channel.name}")
 
 
 def expired_invites():

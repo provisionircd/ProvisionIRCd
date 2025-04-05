@@ -12,10 +12,10 @@ def stripmsg_S(client, channel, msg, prefix):
 
 
 def init(module):
-    Hook.add(Hook.PRE_LOCAL_CHANMSG, stripmsg_S)
-    Hook.add(Hook.PRE_LOCAL_CHANNOTICE, stripmsg_S)
     Chmode_S = Channelmode()
     Chmode_S.flag = 'S'
     Chmode_S.is_ok = Channelmode.allow_chanop
     Chmode_S.desc = "Strip colors and other formatting from channel messages"
     Channelmode.add(module, Chmode_S)
+    Hook.add(Hook.PRE_LOCAL_CHANMSG, stripmsg_S)
+    Hook.add(Hook.PRE_LOCAL_CHANNOTICE, stripmsg_S)

@@ -9,10 +9,10 @@ def cmd_svsnick(client, recv):
     if not (nick_cmd := Command.find_command(client, "NICK")):
         return
 
-    if not (target := IRCD.find_user(recv[1])):
+    if not (target := IRCD.find_client(recv[1], user=1)):
         return
 
-    if target.name == recv[2] or recv[2][0].isdigit() or IRCD.find_user(recv[2]):
+    if target.name == recv[2] or recv[2][0].isdigit() or IRCD.find_client(recv[2]):
         return
 
     newnick = recv[2][:IRCD.NICKLEN]
@@ -29,7 +29,7 @@ def cmd_svsnick(client, recv):
     if target.local:
         target.add_flag(Flag.CLIENT_USER_SANICK)
         nick_cmd.do(target, "NICK", newnick)
-        target.flags.remove(Flag.CLIENT_USER_SANICK)
+        target.del_flag(Flag.CLIENT_USER_SANICK)
 
 
 def init(module):

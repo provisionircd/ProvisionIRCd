@@ -26,17 +26,21 @@ class WebSockets:
 def websockets_ping():
     pingfreq = 10
     current_time = time()
+    try:
 
-    for client in list(IRCD.websocketbridge.clients):
-        if (current_time - client.local.last_msg_received) >= 20:
-            IRCD.websocketbridge.exit_client(client)
-            continue
+        for client in list(IRCD.websocketbridge.clients):
+            if (current_time - client.local.last_msg_received) >= 20:
+                IRCD.websocketbridge.exit_client(client)
+                continue
 
-        time_since_last_ping = (current_time * 1000 - client.last_ping_sent) / 1000
-        if (current_time - client.local.last_msg_received) >= pingfreq and time_since_last_ping > pingfreq / 3:
-            data = f"PING :{IRCD.me.name}"
-            client.send([], data)
-            client.last_ping_sent = current_time * 1000
+            time_since_last_ping = (current_time * 1000 - client.last_ping_sent) / 1000
+            if (current_time - client.local.last_msg_received) >= pingfreq and time_since_last_ping > pingfreq / 3:
+                data = f"PING :{IRCD.me.name}"
+                client.send([], data)
+                client.last_ping_sent = current_time * 1000
+    except Exception as ex:
+        logging.exception(ex)
+        exit()
 
 
 def create_ssl_context(certfile, keyfile):
@@ -55,7 +59,8 @@ class WebSocketIRCBridge:
         self.server = None
         self.host = WebSockets.host
         self.port = WebSockets.port
-        self.tls = None if "tls" not in WebSockets.options else create_ssl_context(IRCD.default_tls["certfile"], IRCD.default_tls["keyfile"])
+        self.tls = (None if "tls" not in WebSockets.options
+                    else create_ssl_context(IRCD.default_tls["certfile"], IRCD.default_tls["keyfile"]))
         self.clients = set()
 
     def start_server(self):

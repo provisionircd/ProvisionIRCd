@@ -2,7 +2,7 @@
 /kick command
 """
 
-from handle.core import Command, IRCD, Isupport, Flag, Numeric, Hook
+from handle.core import IRCD, Command, Isupport, Flag, Numeric, Hook
 
 KICKLEN = 300
 
@@ -27,9 +27,11 @@ def do_kick(client, channel, target_client, reason):
     data = f":{client.id} KICK {channel.name} {target_client.id} :{reason}"
     IRCD.send_to_servers(client, mtags=client.mtags, data=data)
 
-    if (client.user and client.local and client.registered) or (not client.local and client.uplink.server.synced) and not client.ulined:
+    if (client.user and client.local and client.registered) or (
+            not client.local and client.uplink.server.synced) and not client.is_uline() and not client.is_service():
         event = "LOCAL_KICK" if client.local else "REMOTE_KICK"
-        msg = f"*** {client.name} ({client.user.username}@{client.user.realhost}) has kicked {target_client.name} off channel {channel.name}: {reason}"
+        msg = (f"*** {client.name} ({client.user.username}@{client.user.realhost}) "
+               f"has kicked {target_client.name} off channel {channel.name}: {reason}")
         IRCD.log(client, "info", "kick", event, msg, sync=0)
 
 
@@ -57,7 +59,7 @@ def cmd_kick(client, recv):
             oper_override[0] = 1
 
     for target in recv[2].split(','):
-        if not (target_client := IRCD.find_user(target)):
+        if not (target_client := IRCD.find_client(target, user=1)):
             client.sendnumeric(Numeric.ERR_NOSUCHNICK, target)
             continue
 
@@ -69,7 +71,8 @@ def cmd_kick(client, recv):
             do_kick(client, channel, target_client, reason)
             continue
 
-        if (channel.level(target_client) > channel.level(client) or 'q' in target_client.user.modes) and not client.has_permission("channel:override:kick:protected"):
+        if ((channel.level(target_client) > channel.level(client) or 'q' in target_client.user.modes)
+                and not client.has_permission("channel:override:kick:protected")):
             client.sendnumeric(Numeric.ERR_ATTACKDENY, channel.name, target_client.name)
             continue
 
@@ -82,8 +85,7 @@ def cmd_kick(client, recv):
         do_kick(client, channel, target_client, reason)
 
         if oper_override[0] and client.user and client.local:
-            msg = f"*** OperOverride by {client.name} ({client.user.username}@{client.user.realhost}) with KICK {channel.name} {target_client.name} ({reason})"
-            IRCD.log(client, "info", "oper", "OPER_OVERRIDE", msg, sync=1)
+            IRCD.send_oper_override(client, f"with KICK {channel.name} {target_client.name} ({reason})")
 
 
 def init(module):

@@ -2,10 +2,10 @@
 /cap command
 """
 
-from handle.core import Numeric, Flag, IRCD, Command, Capability, Hook
+from handle.core import IRCD, Command, Numeric, Flag, Capability, Hook
 
 
-class Cap_handshake:
+class CapHandshake:
     in_progress = []
 
 
@@ -15,8 +15,8 @@ def cmd_cap(client, recv):
 
     if recv[1].lower() == "ls":
         # Don't reg until CAP END
-        if client not in Cap_handshake.in_progress:
-            Cap_handshake.in_progress.append(client)
+        if client not in CapHandshake.in_progress:
+            CapHandshake.in_progress.append(client)
         caps = []
         for c in Capability.table:
             caps.append(c.string)
@@ -29,8 +29,8 @@ def cmd_cap(client, recv):
 
     elif recv[1].lower() == "req":
         # Don't reg until CAP END
-        if client not in Cap_handshake.in_progress:
-            Cap_handshake.in_progress.append(client)
+        if client not in CapHandshake.in_progress:
+            CapHandshake.in_progress.append(client)
         if len(recv) < 3:
             return
 
@@ -54,8 +54,8 @@ def cmd_cap(client, recv):
     elif recv[1].lower() == "end":
         if client.registered:
             return
-        if client in Cap_handshake.in_progress:
-            Cap_handshake.in_progress.remove(client)
+        if client in CapHandshake.in_progress:
+            CapHandshake.in_progress.remove(client)
         if client.user:
             if client.handshake_finished():
                 client.register_user()
@@ -64,16 +64,16 @@ def cmd_cap(client, recv):
 
 
 def cap_handshake_finished(client):
-    return client not in Cap_handshake.in_progress
+    return client not in CapHandshake.in_progress
 
 
 def cap_cleanup(client, reason):
-    if client in Cap_handshake.in_progress:
-        Cap_handshake.in_progress.remove(client)
+    if client in CapHandshake.in_progress:
+        CapHandshake.in_progress.remove(client)
 
 
 def init(module):
-    Command.add(module, cmd_cap, "CAP", 1, Flag.CMD_USER, Flag.CMD_SERVER, Flag.CMD_UNKNOWN)
+    Command.add(module, cmd_cap, "CAP", 1, Flag.CMD_UNKNOWN)
     Capability.add("cap-notify")
     Hook.add(Hook.IS_HANDSHAKE_FINISHED, cap_handshake_finished)
     Hook.add(Hook.LOCAL_QUIT, cap_cleanup)

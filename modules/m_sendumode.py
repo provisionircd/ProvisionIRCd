@@ -7,7 +7,7 @@ from handle.core import IRCD, Command, Flag
 
 def cmd_sendumode(client, recv):
     # :00B SENDUMODE o :message
-    for user_client in IRCD.local_users(usermodes=recv[1]):
+    for user_client in IRCD.get_clients(local=1, user=1, usermodes=recv[1]):
         IRCD.server_notice(user_client, ' '.join(recv[2:]).removeprefix(':'))
     data = f":{client.id} {' '.join(recv)}"
     IRCD.send_to_servers(client, [], data)

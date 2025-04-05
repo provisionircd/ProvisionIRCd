@@ -80,3 +80,4 @@ def init(module):
     Hook.add(Hook.BOOT, restore_channel)
     Hook.add(Hook.CHANNEL_DESTROY, permanent_channel_destroy)
     Hook.add(Hook.PRE_LOCAL_JOIN, permanent_channel_join)
+    Hook.add(Hook.REMOTE_JOIN, permanent_channel_join)

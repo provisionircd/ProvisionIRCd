@@ -16,11 +16,11 @@ def cmd_map(client, recv):
     if not client.has_permission("server:info:map"):
         return client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
 
-    for s in [s for s in IRCD.global_servers() if s.id]:
-        usercount = len([c for c in IRCD.global_users() if c.uplink == s])
-        percentage = round(100 * float(usercount) / float(IRCD.global_user_count), 2)
-        uptime = datetime.timedelta(seconds=int(time.time()) - s.creationtime)
-        client.sendnumeric(Numeric.RPL_MAP, s.name + ' (' + s.id + ')', usercount, percentage, uptime, round(s.lag, 2))
+    current_time = int(time.time())
+    for s in [IRCD.me] + [s for s in IRCD.get_clients(server=1) if s.id]:
+        percentage = round(100 * (usercount := sum(c.uplink == s for c in IRCD.get_clients(user=1))) / IRCD.global_user_count, 2)
+        uptime = datetime.timedelta(seconds=current_time - s.creationtime)
+        client.sendnumeric(Numeric.RPL_MAP, f"{s.name} ({s.id})", usercount, percentage, uptime, round(s.lag, 2))
     client.sendnumeric(Numeric.RPL_MAPEND)
 
 
@@ -32,7 +32,7 @@ def cmd_links(client, recv):
     if not client.has_permission("server:info:links"):
         return client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
 
-    for s in IRCD.global_servers():
+    for s in IRCD.get_clients(server=1):
         client.sendnumeric(Numeric.RPL_LINKS, s.name, s.direction.name, s.hopcount, s.info)
     client.sendnumeric(Numeric.RPL_ENDOFLINKS)
 

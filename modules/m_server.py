@@ -4,32 +4,52 @@
 
 import re
 
-from handle.core import Flag, Command, Client, IRCD
+from handle.core import IRCD, Command, Flag, Hook
 from classes.errors import Error
 from handle.client import make_client, make_server
 from handle.logger import logging
-from handle.handleLink import (sync_data, start_link_negotiation, broadcast_network_to_new_server,
-                               broadcast_new_server_to_network, deny_direct_link)
+from handle.handleLink import sync_data, start_link_negotiation, deny_direct_link
 
 
-def auth_incoming_link(client):
+def broadcast_network_to_new_server(client):
+    if client.has_flag(Flag.CLIENT_EXIT):
+        return
+
+    logging.debug(f"Broadcasting all our servers to {client.name}")
+    for s_client in [s for s in IRCD.get_clients(server=1) if s != client and s.name and s.id]:
+        logging.debug(f"Syncing server {s_client.name} to {client.name}")
+        client.send([], f":{s_client.uplink.id} SID {s_client.name} {s_client.hopcount + 1} {s_client.id} :{s_client.info}")
+
+
+def broadcast_new_server_to_network(client):
+    if client.has_flag(Flag.CLIENT_EXIT):
+        return
+
+    logging.debug(f"Broadcasting new server ({client.name}) to the rest of the network")
+    for server in [c for c in IRCD.get_clients(local=1, server=1) if c.direction != client]:
+        logging.debug(f"Syncing new server {client.name} to {server.name}")
+        # server.send([], f":{IRCD.me.id} SID {newserver.name} 2 {newserver.id} :{newserver.info}")
+        server.send([], f":{client.uplink.id} SID {client.name} 2 {client.id} :{client.info}")
+
+
+def auth_incoming_link(client) -> int:
     if not client.local.socket:
         logging.error(f"Local client {client.name} does not have a socket?")
         client.exit("Read error: no socket")
-        return
+        return 0
     try:
         client.local.socket.getpeername()
         client.local.socket.getsockname()
     except OSError:
         # Closed early.
-        return
+        return 0
 
     if client.name.lower() == IRCD.me.name.lower():
         deny_direct_link(client, Error.SERVER_LINK_NAME_COLLISION, client.name)
         logging.debug(f"Link denied for {client.name}: server names are the same")
         return 0
 
-    if not (link := next((link for link in IRCD.configuration.links if link.name.lower() == client.name.lower()), 0)):
+    if not (link := IRCD.get_link(client.name)):
         deny_direct_link(client, Error.SERVER_LINK_NOMATCH)
         logging.debug(f"Link denied for {client.name}: server not found in conf")
         return 0
@@ -47,7 +67,7 @@ def auth_incoming_link(client):
         logging.debug(f"Link denied for {client.name}: unable to assign class to connection")
         return 0
 
-    class_count = len([c.local for c in Client.table if c.local and c.class_ == client.class_])
+    class_count = len([c for c in IRCD.get_clients(local=1) if c.class_ == client.class_])
     if class_count > client.class_.max:
         deny_direct_link(client, Error.SERVER_LINK_MAXCLASS, client.class_.name)
         logging.debug(f"Link denied for {client.name}: max connections for this class")
@@ -65,6 +85,7 @@ def auth_incoming_link(client):
             password = link.auth["password"]
             fingerprint = link.auth["fingerprint"]
             cn = link.auth["common-name"]
+            auth_match = 0
 
             if password:
                 if client.local.authpass != password:
@@ -72,8 +93,12 @@ def auth_incoming_link(client):
                     logging.debug(f"[auth] Link denied for {client.name}: incorrect password")
                     return 0
                 logging.debug(f"[auth] Incoming link password is a match")
+                auth_match = 1
 
             if fingerprint:
+                if not client.local.tls:
+                    deny_direct_link(client, Error.SERVER_LINK_AUTH_NO_TLS)
+                    return 0
                 if not client_certfp or client_certfp != fingerprint:
                     deny_direct_link(client, Error.SERVER_LINK_NOMATCH_CERTFP)
                     logging.debug(f"Link denied for {client.name}: certificate fingerprint mismatch")
@@ -81,9 +106,17 @@ def auth_incoming_link(client):
                     logging.debug(f"Received: {client_certfp}")
                     return 0
                 logging.debug(f"[auth] Incoming link fingerprint is a match")
+                auth_match = 1
 
             if cn:
-                if (client_cn := client.get_md_value(name="certfp_cn")) and client_cn.lower() != cn.lower():
+                if not client.local.tls:
+                    deny_direct_link(client, Error.SERVER_LINK_AUTH_NO_TLS)
+                    return 0
+                if not auth_match:
+                    deny_direct_link(client, Error.SERVER_LINK_MISSING_AUTH_CN)
+                    return 0
+                client_cn = client.get_md_value(name="cert_cn")
+                if not client_cn or client_cn.lower() != cn.lower():
                     deny_direct_link(client, Error.SERVER_LINK_NOMATCH_CN)
                     logging.debug(f"Link denied for {client.name}: certificate Common-Name mismatch")
                     logging.debug(f"Required: {cn}")
@@ -97,7 +130,7 @@ def auth_incoming_link(client):
 
         # Deprecated method below.
         if re.match(r"[A-Fa-f0-9]{64}$", link.password):
-            """ This link requires a certificate fingerprint """
+            """ This link requires a certificate fingerprint. """
             if client_certfp and client_certfp == link.password:
                 logging.debug(f"Link authenticated by certificate fingerprint")
                 client.server.link = link
@@ -117,25 +150,28 @@ def auth_incoming_link(client):
     return 1
 
 
-def cmd_server(client, recv):
-    if not client.local or client.registered or client.exitted:
+@logging.client_context
+def cmd_server(client, recv) -> None:
+    if not client.local or client.registered or client.has_flag(Flag.CLIENT_EXIT):
+        logging.warning(f"Ignoring SERVER command: {recv}")
+        logging.warning(bool(client.local))
+        logging.warning(bool(client.registered))
+        logging.warning(bool(client.has_flag(Flag.CLIENT_EXIT)))
         return
 
-    logging.debug(f"SERVER from {client.name}: {recv}")
+    logging.debug(f"{recv}")
 
     if len(recv) < 4:
         return client.exit(f"Insufficient SERVER parameters")
 
     if not client.local.protoctl:
         logging.warning(f"Received SERVER message from {client.name} before PROTOCTL.")
-        client.exit("No PROTOCTL message received")
-        return
+        return client.exit("No PROTOCTL message received")
 
     name = recv[1]
-    if (server_exists := IRCD.find_server(name)) and server_exists != client:
+    if (server_exists := IRCD.find_client(name)) and server_exists != client:
         logging.warning(f"[SERVER] Server with name {name} already exists")
-        deny_direct_link(client, Error.SERVER_NAME_EXISTS, name)
-        return
+        return deny_direct_link(client, Error.SERVER_NAME_EXISTS, name)
 
     client.name = name
     client.hopcount = int(recv[2])
@@ -146,8 +182,8 @@ def cmd_server(client, recv):
         version, flags, num = vl.split('-')
         info = ' '.join(recv[4:])
 
-    info = info.removeprefix(':')
-    client.info = info
+    client.info = info.removeprefix(':')
+
     if not client.local.authpass:
         return client.exit("Missing password")
 
@@ -163,29 +199,35 @@ def cmd_server(client, recv):
     broadcast_network_to_new_server(client)
     sync_data(client)
 
+    security = "Secure " if client.local and client.local.tls else "Unsecure " if client.local else ''
+    IRCD.log(client.uplink, "info", "link", "LINK_ESTABLISHED",
+             f"{security}link {client.uplink.name} -> {client.name} successfully established", sync=0)
 
+    IRCD.run_hook(Hook.SERVER_CONNECT, client)
+
+
+@logging.client_context
 def cmd_sid(client, recv):
-    logging.debug(F"SID from {client.name}: {recv}")
     name = recv[1]
     hopcount = int(recv[2])
     sid = recv[3]
 
-    if IRCD.find_server(name):
+    if IRCD.find_client(name):
         err_msg = f"Server {name} is already in use on the network"
         client.direct_send(f":{IRCD.me.id} ERROR :{err_msg}")
         client.exit(err_msg)
         return
 
-    if IRCD.find_server(sid):
-        client.send([], f"SQUIT {sid} :SID {sid} is already in use on the network")
+    if IRCD.find_client(sid):
+        client.direct_send(f"SQUIT {sid} :SID {sid} is already in use on the network")
         return
 
-    if client.local and client.server.link and "nohub" in client.server.link.options:
-        logging.warning(f"Server {client.name} is not configured as a hub")
-        data = f"SQUIT {sid} :Server {client.name} may not introduce other servers to {IRCD.me.name}"
-        logging.warning(f"Sending to {client.name}: {data}")
-        client.send([], data)
-        return
+    if client.direction.server.link:
+        if client.local and "nohub" in client.direction.server.link.options:
+            errmsg = f"Server {client.direction.name} may not introduce other servers ({client.direction.name} is not a hub)"
+            data = f"SQUIT {sid} :{errmsg}"
+            client.direct_send(data)
+            return
 
     info = ' '.join(recv[4:]).removeprefix(':')
     new_server = make_client(direction=client.direction, uplink=client)
@@ -194,14 +236,23 @@ def cmd_sid(client, recv):
     new_server.hopcount = hopcount
     new_server.info = info
     new_server.id = sid
+    IRCD.client_by_id[new_server.id.lower()] = new_server
     new_server.ip = client.ip
     new_server.server.authed = 1
+
     logging.info(f"[SID] New server added to the network: {new_server.name} ({new_server.info})")
     logging.info(f"[SID] SID: {new_server.id}, Hopcount: {new_server.hopcount}")
-    logging.info(f"[SID] Direction: {new_server.direction.name} ({new_server.direction.id}), Uplink: {new_server.uplink.name} ({new_server.uplink.id})")
+    logging.info(f"[SID] Direction: {new_server.direction.name} ({new_server.direction.id}),"
+                 f"Uplink: {new_server.uplink.name} ({new_server.uplink.id})")
 
+    if new_server.direction.server.synced:
+        msg = f"Link {client.name} -> {new_server.name} successfully established"
+        IRCD.log(client.uplink, "info", "link", "SERVER_LINKED_REMOTE", msg, sync=0)
+
+    IRCD.run_hook(Hook.SERVER_CONNECT, client)
     data = f":{client.id} SID {new_server.name} {new_server.hopcount + 1} {new_server.id} :{new_server.info}"
     IRCD.send_to_servers(client, mtags=[], data=data)
+    IRCD.run_hook(Hook.POST_SERVER_CONNECT, client)
 
 
 def init(module):

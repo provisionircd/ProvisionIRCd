@@ -2,12 +2,12 @@
 /swhois command (server)
 """
 
-from handle.core import Command, IRCD, Flag
+from handle.core import IRCD, Command, Flag
 
 
 def cmd_swhois(client, recv):
     # :001 SWHOIS <nickname> + <tag> :[swhois]
-    if not (target_client := IRCD.find_user(recv[1])):
+    if not (target_client := IRCD.find_client(recv[1], user=1)):
         return
 
     if len(recv) < 5:

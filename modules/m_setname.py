@@ -13,12 +13,11 @@ def cmd_setname(client, recv):
     Syntax:     SETNAME <real name>
     """
 
-    realname = ' '.join(recv[1:])[:NAMELEN].rstrip().removeprefix(':')
+    realname = ' '.join(recv[1:])[:NAMELEN].removeprefix(':').strip()
     if realname.strip() and realname != client.info:
         client.setinfo(realname, change_type="gecos")
 
-    data = f":{client.id} {' '.join(recv)}"
-    IRCD.send_to_servers(client, [], data)
+    IRCD.send_to_servers(client, [], data=f":{client.id} {' '.join(recv)}")
 
 
 def init(module):

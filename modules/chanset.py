@@ -109,8 +109,7 @@ def cmd_chanset(client, recv):
 
                 Chanset.remove(client, chanset, channel)
                 if override:
-                    override_string = f"*** OperOverride by {client.name} ({client.user.username}@{client.user.realhost}) with CHANSET {channel.name} {chansetting} {param}"
-                    IRCD.log(client, "info", "oper", "OPER_OVERRIDE", override_string, sync=1)
+                    IRCD.send_oper_override(client, f"with CHANSET {channel.name} {chansetting} {param}")
                 return
 
             if not param.isdigit() or not 1 <= int(param) <= 60:
@@ -119,8 +118,7 @@ def cmd_chanset(client, recv):
             chanset = Chanset(client=client, name="rejoindelay", param=str(param), set_by=client.fullrealhost, set_time=int(time.time()))
             Chanset.add(client, chanset, channel)
             if override:
-                override_string = f"*** OperOverride by {client.name} ({client.user.username}@{client.user.realhost}) with CHANSET {channel.name} {chansetting} {param}"
-                IRCD.log(client, "info", "oper", "OPER_OVERRIDE", override_string, sync=1)
+                IRCD.send_oper_override(client, f"with CHANSET {channel.name} {chansetting} {param}")
 
         case "nomasshighlight":
             if param == ':':
@@ -129,18 +127,17 @@ def cmd_chanset(client, recv):
 
                 Chanset.remove(client, chanset, channel)
                 if override:
-                    override_string = f"*** OperOverride by {client.name} ({client.user.username}@{client.user.realhost}) with CHANSET {channel.name} {chansetting} {param}"
-                    IRCD.log(client, "info", "oper", "OPER_OVERRIDE", override_string, sync=1)
+                    IRCD.send_oper_override(client, f"with CHANSET {channel.name} {chansetting} {param}")
                 return
 
             if not param.isdigit() or not 3 <= int(param):
                 return IRCD.server_notice(client, f"Nomasshighlight value must be an integer higher than 3.")
 
-            chanset = Chanset(client=client, name="nomasshighlight", param=str(param), set_by=client.fullrealhost, set_time=int(time.time()))
+            chanset = Chanset(client=client, name="nomasshighlight", param=str(param),
+                              set_by=client.fullrealhost, set_time=int(time.time()))
             Chanset.add(client, chanset, channel)
             if override:
-                override_string = f"*** OperOverride by {client.name} ({client.user.username}@{client.user.realhost}) with CHANSET {channel.name} {chansetting} {param}"
-                IRCD.log(client, "info", "oper", "OPER_OVERRIDE", override_string, sync=1)
+                IRCD.send_oper_override(client, f"with CHANSET {channel.name} {chansetting} {param}")
 
         case _:
             return IRCD.server_notice(client, f"Channel setting '{chansetting}' not supported.")

@@ -5,7 +5,9 @@ provides chmode +H (channel message history support)
 from time import time
 from datetime import datetime, timezone
 
-from handle.core import IRCD, Channelmode, Hook, Batch, MessageTag, Numeric, Command
+from handle.core import IRCD, Channelmode, Hook, Numeric, Command
+from modules.ircv3.batch import Batch
+from modules.ircv3.messagetags import MessageTag
 from handle.validate_conf import conf_error
 
 
@@ -106,8 +108,13 @@ def add_to_historybuf(client, channel, message, sendtype):
         ChatHistory.backlog[channel] = []
     while limit and len(ChatHistory.backlog[channel]) >= limit:
         ChatHistory.backlog[channel] = ChatHistory.backlog[channel][1:]
-    utc_time = utc_time = datetime.now(timezone.utc).timestamp()
-    history_obj = ChatHistory(sender=client.fullmask, mtags=client.mtags, svid=client.user.account, utc_time=utc_time, sendtype=sendtype, data=message)
+    utc_time = datetime.now(timezone.utc).timestamp()
+    history_obj = ChatHistory(sender=client.fullmask,
+                              mtags=client.mtags,
+                              svid=client.user.account,
+                              utc_time=utc_time,
+                              sendtype=sendtype,
+                              data=message)
     ChatHistory.add_to_buff(channel, history_obj)
 
 
@@ -140,21 +147,23 @@ def show_history_on_join(client, channel):
 def send_history(client, channel, results: list) -> None:
     if not client.has_capability("server-time"):
         return
+
     ChatHistory.reply_time[client] = int(time())
     batch = None
+
     if client.has_capability("batch"):
         batch = Batch(started_by=IRCD.me)
         client.send([], f":{IRCD.me.name} BATCH +{batch.label} chathistory {channel.name}")
+
     if results:
         for history_obj in results:
             filtered_mtags = []
             if batch:
-                batch_tag = MessageTag.find_tag("batch")(value=batch.label)
-                filtered_mtags.append(batch_tag)
-            for tag in MessageTag.filter_tags(history_obj.mtags, client):
-                filtered_mtags.append(tag)
-            data = f"{'@' + ';'.join([t.string for t in filtered_mtags]) + ' ' if filtered_mtags else ''}" \
-                   f":{history_obj.sender} {history_obj.sendtype} {channel.name} :{history_obj.data}"
+                filtered_mtags.append(MessageTag.find_tag("batch")(value=batch.label))
+
+            filtered_mtags.extend(MessageTag.filter_tags(history_obj.mtags, client))
+            prefix = f"@{';'.join(t.string for t in filtered_mtags)} " if filtered_mtags else ""
+            data = f"{prefix}:{history_obj.sender} {history_obj.sendtype} {channel.name} :{history_obj.data}"
             client.send([], data)
 
     if batch:
@@ -286,7 +295,7 @@ def check_chathistory_conf():
     if not max_unreg.isdigit() or int(max_unreg) <= 0:
         return conf_error("chathistory::max-lines-unregistered missing must be a positive number")
 
-    if not max_unreg.isdigit() or int(max_reg) <= 0:
+    if not max_reg.isdigit() or int(max_reg) <= 0:
         return conf_error("chathistory::max-lines-registered missing must be a positive number")
 
     max_reg, max_unreg = int(max_reg), int(max_unreg)
@@ -305,17 +314,15 @@ def post_load(module):
 
 
 def check_expired_backlog():
+    current_time = datetime.now(timezone.utc).timestamp()
     for channel in list(ChatHistory.backlog):
         if 'H' not in channel.modes:
             del ChatHistory.backlog[channel]
             continue
 
-        param = channel.get_param('H')
-        expire = int(param.split(':')[1])
-        utc_time = datetime.now(timezone.utc).timestamp()
-        for history_entry in list(ChatHistory.backlog[channel]):
-            if utc_time - int(history_entry.utc_time) >= (expire * 60):
-                ChatHistory.backlog[channel].remove(history_entry)
+        expire_minutes = int(channel.get_param('H').split(':')[1])
+        max_age = expire_minutes * 60
+        ChatHistory.backlog[channel] = [entry for entry in ChatHistory.backlog[channel] if current_time - entry.utc_time < max_age]
 
 
 def init(module):

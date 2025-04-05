@@ -3,7 +3,10 @@ Draft of +reply client tag.
 https://ircv3.net/specs/client-tags/reply.html
 """
 
-from handle.core import MessageTag
+from modules.ircv3.messagetags import MessageTag
+
+
+# from modules.ircv3.messagetags import MessageTag
 
 
 class ReplyTag(MessageTag):
@@ -14,5 +17,5 @@ class ReplyTag(MessageTag):
         super().__init__(name=ReplyTag.name, value=value)
 
 
-def init(module):
+def post_load(module):
     MessageTag.add(ReplyTag)

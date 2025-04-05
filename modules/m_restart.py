@@ -2,20 +2,7 @@
 /restart command
 """
 
-import os
-import sys
-
 from handle.core import IRCD, Command, Numeric, Flag
-from threading import Thread
-from time import sleep
-
-
-def do_restart():
-    IRCD.running = 0
-    sleep(0.1)
-    Thread(target=exit).start()
-    python = sys.executable
-    os.execl(python, python, *sys.argv)
 
 
 def cmd_restart(client, recv):
@@ -24,23 +11,24 @@ def cmd_restart(client, recv):
     -
     Restarts the server.
     """
+
     if not client.has_permission("server:restart"):
         return client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
-    if recv[1] != IRCD.get_setting("restartpass"):
-        client.local.flood_penalty += 2500001
-        return client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
 
-    reason = f"RESTART command received by {client.name} ({client.user.username}@{client.user.realhost})"
-    msg = f"*** {reason}"
-    IRCD.send_snomask(client, 's', msg)
+    if client.user:
+        if recv[1] != IRCD.get_setting("restartpass"):
+            client.local.flood_penalty += 2500001
+            return client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
 
-    for server in IRCD.local_servers():
+    reason = (f"RESTART command received by {client.name} ({client.user.username}@{client.user.realhost})"
+              if client.user else "RESTART command received from the command line.")
+
+    IRCD.send_snomask(client, 's', f"*** {reason}")
+
+    for server in IRCD.get_clients(local=1, server=1):
         server.send([], f"SQUIT {IRCD.me.name} :{reason}")
 
-    for user in IRCD.local_users():
-        user.exit("Server is restarting")
-
-    Thread(target=do_restart).start()
+    IRCD.run_parallel_function(IRCD.restart, delay=0.1)
 
 
 def init(module):

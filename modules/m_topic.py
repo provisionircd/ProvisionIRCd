@@ -4,7 +4,7 @@
 
 from time import time
 
-from handle.core import Isupport, IRCD, Command, Numeric, Hook
+from handle.core import IRCD, Command, Isupport, Numeric, Hook
 from handle.logger import logging
 
 TOPICLEN = 350
@@ -29,6 +29,7 @@ def local_topic_win(client, local_topic, remote_topic):
     return 1 if our_score > their_score else 0
 
 
+@logging.client_context
 def cmd_topic(client, recv):
     """
     Syntax: TOPIC <channel> [text]
@@ -112,8 +113,7 @@ def cmd_topic(client, recv):
     send_topic(client, channel)
 
     if oper_override and client.user and client.local:
-        override_string = f"*** OperOverride by {client.name} ({client.user.username}@{client.user.realhost}) with TOPIC {channel.name} \'{channel.topic}\'"
-        IRCD.log(client, "info", "oper", "OPER_OVERRIDE", override_string)
+        IRCD.send_oper_override(client, f"with TOPIC {channel.name} \'{channel.topic}\'")
 
     IRCD.run_hook(Hook.TOPIC, client, channel, channel.topic)
 

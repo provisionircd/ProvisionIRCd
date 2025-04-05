@@ -4,7 +4,8 @@
 
 import os
 
-from handle.core import Numeric, IRCD, Command
+from handle.core import IRCD, Command, Numeric
+from handle.logger import logging
 
 
 def cmd_motd(client, recv):
@@ -25,8 +26,8 @@ def cmd_motd(client, recv):
             with open(file) as f:
                 for line in f.read().split('\n'):
                     client.sendnumeric(Numeric.RPL_MOTD, line.rstrip())
-        except:
-            pass
+        except Exception as ex:
+            logging.exception(ex)
         client.sendnumeric(Numeric.RPL_ENDOFMOTD)
 
 
@@ -42,8 +43,8 @@ def cmd_rules(client, recv):
             with open(file) as f:
                 for line in f.read().split('\n'):
                     client.sendnumeric(Numeric.RPL_RULES, line.rstrip())
-        except:
-            pass
+        except Exception as ex:
+            logging.exception(ex)
         client.sendnumeric(Numeric.RPL_ENDOFRULES)
 
 

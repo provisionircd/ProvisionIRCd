@@ -4,7 +4,8 @@ timed bans, +b/e/I ~timed:<min>:<mask>
 
 import time
 
-from handle.core import IRCD, Extban, Hook, Command
+from handle.core import IRCD, Hook, Command
+from classes.data import Extban
 from handle.functions import make_mask
 from handle.logger import logging
 
@@ -15,7 +16,7 @@ HEADER = {
 
 def check_expired_bans():
     def send_mode_lines(modes):
-        Command.do(IRCD.me, "MODE", chan.name, f"-{modes}", *bans, '0')
+        Command.do(IRCD.me, "MODE", chan.name, f"-{modes}", *bans, chan.creationtime)
 
     for chan in IRCD.get_channels():
         modes = ''

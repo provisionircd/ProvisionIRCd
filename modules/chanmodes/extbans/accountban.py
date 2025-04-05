@@ -3,7 +3,7 @@ account bans/exceptions/invex
 +b/e/I ~account:accountname
 """
 
-from handle.core import Extban, Isupport
+from classes.data import Extban, Isupport
 
 
 def account_is_valid(client, channel, action, mode, param):

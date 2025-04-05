@@ -9,7 +9,7 @@ def cmd_sanick(client, recv):
     if not (nick_cmd := Command.find_command(client, "NICK")):
         return
 
-    if not (target := IRCD.find_user(recv[1])):
+    if not (target := IRCD.find_client(recv[1], user=1)):
         return client.sendnumeric(Numeric.ERR_NOSUCHNICK, recv[1])
 
     if client.local:
@@ -20,7 +20,7 @@ def cmd_sanick(client, recv):
 
         client.local.flood_penalty += 100000
 
-    if 'S' in target.user.modes or target.ulined or target.is_service:
+    if 'S' in target.user.modes or target.is_uline() or target.is_service():
         return IRCD.server_notice(client, f"*** You cannot use /SANICK on services.")
 
     if target.name == recv[2]:
@@ -29,7 +29,7 @@ def cmd_sanick(client, recv):
     if recv[2][0].isdigit():
         return IRCD.server_notice(client, "*** Nicknames may not start with a number")
 
-    if nick_client := IRCD.find_user(recv[2]):
+    if nick_client := IRCD.find_client(recv[2]):
         return IRCD.server_notice(client, f"*** Nickname {nick_client.name} is already in use")
 
     newnick = recv[2][:IRCD.NICKLEN]

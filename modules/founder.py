@@ -3,7 +3,7 @@ Basic channel founder support
 """
 
 from time import time
-from handle.core import IRCD, Hook, Command, Client
+from handle.core import IRCD, Client, Command, Hook
 
 
 class ChannelsDict(dict):
@@ -22,6 +22,7 @@ class ChannelsDict(dict):
         super().__delitem__(key.lower())
 
     def __contains__(self, key):
+        # noinspection PyUnresolvedReferences
         return super().__contains__(key.lower())
 
     def pop(self, key, default=None):
@@ -49,6 +50,7 @@ class Founders:
     def is_founder(channel: str, client: Client) -> bool:
         if not client.user:
             return False
+
         return channel in Founders.channels and (
                 client.fullrealhost == Founders.channels[channel].get("fullrealhost") or
                 client.get_md_value("certfp") == Founders.channels[channel].get("certfp") or
@@ -57,8 +59,13 @@ class Founders:
 
     @staticmethod
     def founder_is_online(channel: str):
-        chan_obj = IRCD.find_channel(channel)
-        return chan_obj and next((client for client in chan_obj.clients() if Founders.is_founder(channel, client)), 0)
+        """
+        Checks if the channel founder is online, and then returns it.
+        """
+
+        if chan_obj := IRCD.find_channel(channel):
+            founder_client = next((client for client in chan_obj.clients() if Founders.is_founder(channel, client)), 0)
+            return founder_client
 
 
 def expire_founder():
@@ -82,6 +89,13 @@ def check_founder_pre_join(client, channel):
 def check_founder_join(client, channel):
     if channel.name not in Founders.channels or channel.name[0] == '+' or 'r' in channel.modes:
         return
+
+    if (founder := Founders.founder_is_online(channel.name)) and founder != client and channel.client_has_membermodes(founder, 'o'):
+        """
+        The current founder is not the same as joining user.
+        """
+        return
+
     if Founders.is_founder(channel.name, client) and not channel.client_has_membermodes(client, 'o'):
         Command.do(IRCD.me, "MODE", channel.name, "+o", client.name)
 
@@ -110,6 +124,10 @@ def founder_remove_sjoin(client, recv):
     Founders.set(recv[2], client=None)
 
 
+def founder_destroy_channel(client, channel):
+    Founders.set(channel.name, client=None)
+
+
 def init(module):
     Hook.add(Hook.PRE_LOCAL_JOIN, check_founder_pre_join)
     Hook.add(Hook.LOCAL_JOIN, check_founder_join)
@@ -117,4 +135,5 @@ def init(module):
     Hook.add(Hook.LOCAL_PART, founder_remove_part)
     Hook.add(Hook.LOCAL_KICK, founder_remove_kick)
     Hook.add(Hook.SERVER_SJOIN_IN, founder_remove_sjoin)
+    # Hook.add(Hook.CHANNEL_DESTROY, founder_destroy_channel)
     Hook.add(Hook.LOOP, expire_founder)

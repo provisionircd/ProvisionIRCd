@@ -2,68 +2,61 @@
 /nick command
 """
 
-import time
+from time import time
+from collections import defaultdict, deque
 
-from handle.core import Flag, Numeric, Isupport, Command, IRCD, Client, Hook
+from handle.core import IRCD, Client, Command, Flag, Numeric, Isupport, Hook
 from classes.errors import Error
 from handle.client import make_client, make_user
-from handle.functions import Base64toIP
+from handle.functions import base64_to_ip
 from classes.conf_entries import ConnectClass, Operclass
+from handle.logger import logging
 
-NICKLEN = 24
+nick_flood = defaultdict(lambda: deque(maxlen=50))
 
 
 def broadcast_nickchange(client, newnick):
     if client.local:
         client.local.flood_penalty += 10_000
 
-    data = f":{client.name} NICK :{newnick}"
-    client.send(client.mtags, data)
-
-    data = f":{client.fullmask} NICK :{newnick}"
-    IRCD.send_to_local_common_chans(client, mtags=client.mtags, client_cap=None, data=data)
-
-    data = f":{client.id} NICK {newnick} {int(time.time())}"
-    IRCD.send_to_servers(client, mtags=client.mtags, data=data)
-
-
-class Nick:
-    flood = {}
+    client.send(mtags=client.mtags, data=f":{client.name} NICK :{newnick}")
+    IRCD.send_to_local_common_chans(client, mtags=client.mtags, client_cap=None, data=f":{client.fullmask} NICK :{newnick}")
+    IRCD.send_to_servers(client, mtags=client.mtags, data=f":{client.id} NICK {newnick} {int(time())}")
 
 
 def expired_nickflood():
-    for user in Nick.flood:
-        for nickchg in [nickchg for nickchg in dict(Nick.flood[user])
-                        if int(time.time()) - int(nickchg) >= int(IRCD.get_setting("nickflood").split(':')[1])]:
-            del Nick.flood[user][nickchg]
-            continue
+    current_time = int(time())
+    expiry_seconds = int(IRCD.get_setting("nickflood").split(':')[1])
+
+    for client, timestamps in list(nick_flood.items()):
+        while timestamps and current_time - timestamps[0] >= expiry_seconds:
+            timestamps.popleft()
+        if not timestamps:
+            del nick_flood[client]
 
 
 def cmd_nick_local(client, recv):
-    newnick = str(recv[1]).strip().removeprefix(':')
-    if not newnick.strip():
+    if not (newnick := recv[1].strip().removeprefix(':')):
         return client.sendnumeric(Numeric.ERR_NONICKNAMEGIVEN)
 
-    if newnick[0].isdigit():
-        return client.sendnumeric(Numeric.ERR_ERRONEUSNICKNAME, newnick, newnick[0])
-
-    if newnick.lower() in ["irc", "ircd", "provisionircd", "server", "network"]:
-        return client.sendnumeric(Numeric.ERR_ERRONEUSNICKNAME, newnick, newnick)
+    if newnick[0].isdigit() or newnick.lower() in ["irc", "ircd", "provisionircd", "server", "network"]:
+        return client.sendnumeric(Numeric.ERR_ERRONEUSNICKNAME, newnick, newnick[0] if newnick[0].isdigit() else newnick)
 
     if (nickban := IRCD.is_ban_client("nick", client, newnick)) and not client.has_permission("immune:ban"):
         return client.sendnumeric(Numeric.ERR_ERRONEUSNICKNAME, newnick, nickban.reason)
 
-    newnick = newnick[:NICKLEN]
-    for c in newnick:
-        if c.lower() not in IRCD.NICKCHARS:
-            return client.sendnumeric(Numeric.ERR_ERRONEUSNICKNAME, newnick, c)
+    newnick = newnick[:IRCD.NICKLEN]
+    if any(c.lower() not in IRCD.NICKCHARS for c in newnick):
+        invalid_char = next(c for c in newnick if c.lower() not in IRCD.NICKCHARS)
+        return client.sendnumeric(Numeric.ERR_ERRONEUSNICKNAME, newnick, invalid_char)
 
-    if not client.has_permission("immune:nick-flood") and Flag.CLIENT_USER_SANICK not in client.flags:
-        if client in Nick.flood and len(Nick.flood[client]) > int(IRCD.get_setting("nickflood").split(':')[0]):
+    if not client.has_permission("immune:nick-flood") and not client.has_flag(Flag.CLIENT_USER_SANICK):
+        max_changes = int(IRCD.get_setting("nickflood").split(':')[0])
+        if len(nick_flood[client]) >= max_changes:
             client.local.flood_penalty += 25_000
             return client.sendnumeric(Numeric.ERR_NICKTOOFAST, newnick)
 
-    in_use = IRCD.find_user(newnick)
+    in_use = IRCD.find_client(newnick)
     if in_use and newnick == client.name:
         return
 
@@ -77,15 +70,15 @@ def cmd_nick_local(client, recv):
         return
 
     for result, callback in Hook.call(Hook.PRE_LOCAL_NICKCHANGE, args=(client, newnick)):
-        # logging.debug(f"Result of callback {callback}: {result}")
         if result == Hook.DENY:
             return
+        if result == Hook.ALLOW:
+            break
 
     if client.registered:
-        if client not in Nick.flood:
-            Nick.flood[client] = {}
-        Nick.flood[client][time.time()] = True
-        if client.local and Flag.CLIENT_USER_SANICK not in client.flags:
+        nick_flood[client].append(int(time()))
+
+        if client.local and not client.has_flag(Flag.CLIENT_USER_SANICK):
             msg = f"*** {client.name} ({client.user.username}@{client.user.realhost}) has changed their nickname to {newnick}"
             IRCD.log(client, "info", "nick", "LOCAL_NICK_CHANGE", msg, sync=0)
 
@@ -96,16 +89,13 @@ def cmd_nick_local(client, recv):
     client.name = newnick
 
 
+@logging.client_context
 def cmd_nick(client, recv):
     """
     Changes your nickname.
     Users you share a channel with will be notified of this change.
     Syntax: NICK <newnick>
     """
-
-    if client.server:
-        client.exit("This port is for servers only")
-        return
 
     if client.local:
         cmd_nick_local(client, recv)
@@ -115,10 +105,10 @@ def cmd_nick(client, recv):
 
 def cmd_nick_remote(client, recv):
     newnick = str(recv[1]).strip().removeprefix(':')
-    IRCD.run_hook(Hook.REMOTE_NICKCHANGE, client, newnick)
     broadcast_nickchange(client, newnick)
     msg = f"*** {client.name} ({client.user.username}@{client.user.realhost}) has changed their nickname to {newnick}"
     IRCD.log(client, "info", "nick", "REMOTE_NICK_CHANGE", msg)
+    IRCD.run_hook(Hook.REMOTE_NICKCHANGE, client, newnick)
     client.name = newnick
 
 
@@ -126,10 +116,10 @@ def create_user_from_uid(client, info: list):
     if len(info) < 13:
         return Error.USER_UID_NOT_ENOUGH_PARAMS
 
-    signon = info[3]
-    if not signon.isdigit():
+    if not (signon := info[3]).isdigit():
         return Error.USER_UID_SIGNON_NO_DIGIT
-    if existing := IRCD.find_user(info[6]):
+
+    if IRCD.find_client(info[6]):
         return Error.USER_UID_ALREADY_IN_USE
 
     new_client = make_client(direction=client.direction, uplink=client)
@@ -139,24 +129,18 @@ def create_user_from_uid(client, info: list):
     new_client.user.username = info[4]
     new_client.user.realhost = info[5]
     new_client.id = info[6]
-    # logging.debug(F"Remote client {new_client.name} UID set: {new_client.id}")
-
+    IRCD.client_by_id[new_client.id.lower()] = new_client
     new_client.user.account = info[7]
     new_client.user.modes = info[8].replace('+', '')
+    vhost = info[9]
+    new_client.user.vhost = vhost if vhost != '*' else new_client.user.realhost
     cloakhost = info[10]
+    new_client.user.cloakhost = cloakhost if cloakhost != '*' else new_client.user.realhost
 
     ip = info[11]
-    new_client.ip = ip
-    if ip != '*' and not ip.replace('.', '').isdigit():
-        new_client.ip = Base64toIP(ip)
-    else:
-        new_client.ip = ip if ip != '*' else client.ip
+    new_client.ip = base64_to_ip(ip) if ip != '*' and not ip.replace('.', '').isdigit() else (ip if ip != '*' else client.ip)
 
     new_client.info = ' '.join(info[12:]).removeprefix(':')
-    if cloakhost == '*':
-        new_client.user.cloakhost = new_client.user.realhost
-    else:
-        new_client.user.cloakhost = cloakhost
 
     new_client.add_flag(Flag.CLIENT_REGISTERED)
     # logging.debug(f"New remote user {new_client.name}. Uplink: {new_client.uplink.name}, direction: {new_client.direction.name}")
@@ -167,26 +151,29 @@ def set_s2s_md(server, client):
     for tag in server.recv_mtags:
         if tag.string.split('=')[0].split('/')[0] != "s2s-md":
             continue
-        tag_name, tag_value = tag.string.split('=')
-        md_name, md_value = tag.name.split('/')[1], tag_value
-        client.add_md(md_name, md_value)
+
+        tag_value = tag.string.split('=')[1]
+        md_name = tag.name.split('/')[1]
+
+        client.add_md(md_name, tag_value)
+
         if md_name == "class":
-            client.class_ = ConnectClass(name=md_value, recvq=0, sendq=0, maxc=0)
-        if md_name == "operclass":
-            client.user.operclass = Operclass(name=md_value, permissions=[])
+            client.class_ = ConnectClass(name=tag_value, recvq=0, sendq=0, maxc=0)
+        elif md_name == "operclass":
+            client.user.operclass = Operclass(name=tag_value, permissions=[])
 
 
 def nick_collision(client, nick, remote_time):
-    for c in (c for c in IRCD.local_users() if c.name.lower() == nick.lower()):
-        if int(remote_time) <= int(c.creationtime) or client.ulined:
+    for c in (c for c in IRCD.get_clients(local=1, user=1) if c.name.lower() == nick.lower()):
+        if int(remote_time) <= int(c.creationtime) or client.is_uline():
             c.kill("Nick Collision")
         else:
             return 1
     return 0
 
 
+@logging.client_context
 def cmd_uid(client, recv):
-    # logging.debug(f"UID from {client.name}: {recv}")
     nick = recv[1]
     signon = recv[3]
 
@@ -200,35 +187,36 @@ def cmd_uid(client, recv):
         if IRCD.global_user_count > IRCD.maxgusers:
             IRCD.maxgusers = IRCD.global_user_count
         new_client.sync(cause="cmd_uid()")
-        IRCD.run_hook(Hook.REMOTE_CONNECT, new_client)
 
     else:
-        match new_client:
-            case Error.USER_UID_NOT_ENOUGH_PARAMS:
-                errmsg = Error.send(new_client, client.name, len(recv))
-            case Error.USER_UID_ALREADY_IN_USE:
-                errmsg = Error.send(new_client, recv[6])
-            case Error.USER_UID_SIGNON_NO_DIGIT:
-                errmsg = Error.send(new_client, signon)
-            case _:
-                errmsg = f"Unknown error: {new_client}"
+        error_messages = {
+            Error.USER_UID_NOT_ENOUGH_PARAMS: Error.send(new_client, client.name, len(recv)),
+            Error.USER_UID_ALREADY_IN_USE: Error.send(new_client, recv[6]),
+            Error.USER_UID_SIGNON_NO_DIGIT: Error.send(new_client, signon),
+        }
+        errmsg = error_messages.get(new_client, f"Unknown error: {new_client}")
+
         if errmsg:
+            IRCD.send_to_one_server(client, [], f"SQUIT {IRCD.me.id} {errmsg}")
             client.exit(errmsg)
-            IRCD.send_snomask(client, 's', f"Unable to connect to {client.name}: {errmsg}")
+            data = f"Unable to link with {client.name}: {errmsg}"
+            IRCD.log(client, "error", "link", "LINK_FAILED_UID", data, sync=1)
+        return
 
     # logging.debug(f"[UID] Remote client {client.name} server synced: {client.server.synced}")
     # logging.debug(f"Remote client server: {client.uplink.name} (synced: {client.server.synced})")
 
-    if client.server.synced and not client.ulined:
-        msg = f"*** Client connecting: {new_client.name} ({new_client.user.username}@{new_client.user.realhost}) [{new_client.ip}]{new_client.get_ext_info()}"
+    if client.server.synced and not client.is_uline():
+        msg = (f"*** Client connecting: {new_client.name} ({new_client.user.username}@{new_client.user.realhost}) [{new_client.ip}] "
+               f"{new_client.get_ext_info()}")
         IRCD.log(client, "info", "connect", "REMOTE_USER_CONNECT", msg, sync=0)
 
-    IRCD.run_hook(Hook.SERVER_UID_IN, client, recv)
+    IRCD.run_hook(Hook.REMOTE_CONNECT, new_client)
 
 
 def init(module):
-    IRCD.NICKLEN = NICKLEN
+    IRCD.NICKLEN = 24
     Hook.add(Hook.LOOP, expired_nickflood)
     Command.add(module, cmd_nick, "NICK", 1, Flag.CMD_UNKNOWN)
     Command.add(module, cmd_uid, "UID", 12, Flag.CMD_SERVER)
-    Isupport.add("NICKLEN", NICKLEN)
+    Isupport.add("NICKLEN", IRCD.NICKLEN)

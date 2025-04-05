@@ -3,11 +3,14 @@ Fetches and saves client geodata from ipapi.co.
 Edit API_URL to change.
 """
 
-from handle.core import IRCD, Hook, Numeric
-from urllib import request
 import json
 import ipaddress
+
 from time import time
+from urllib import request
+
+from handle.core import IRCD, Hook, Numeric
+from handle.logger import logging
 
 API_URL = "https://ipapi.co/%ip/json/"
 
@@ -27,15 +30,15 @@ def api_call(client):
         GeoData.data.update({client.ip: json_response})
         GeoData.clients[client] = json_response
         IRCD.write_data_file(GeoData.data, filename="geodata.json")
-    except:
-        pass
+    except Exception as ex:
+        logging.exception(ex)
     GeoData.process.remove(client.ip)
     IRCD.remove_delay_client(client, "geodata")
 
 
 def country_whois(client, whois_client, lines):
-    if whois_client in GeoData.clients and "country_name" in GeoData.clients[whois_client] and 'o' in client.user.modes:
-        line = (Numeric.RPL_WHOISSPECIAL, whois_client.name, f"is connecting from country: {GeoData.clients[whois_client]['country_name']}")
+    if (country := client.get_md_value("country")) and 'o' in client.user.modes:
+        line = (Numeric.RPL_WHOISSPECIAL, whois_client.name, f"is connecting from country: {country}")
         lines.append(line)
 
 

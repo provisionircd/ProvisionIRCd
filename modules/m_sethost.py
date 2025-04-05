@@ -2,50 +2,45 @@
 /sethost and /setident command
 """
 
-from handle.core import Command, Capability, Flag, IRCD
+from handle.core import IRCD, Command, Capability, Flag
 
 
 def cmd_sethost(client, recv):
     """
-    Changes your own cloaked hostmask
+    Changes your own hostmask.
     Syntax:     SETHOST <host>
     """
 
-    # logging.debug(f"SETHOST from {client.name}: {recv}")
-    host = str(recv[1][:64]).strip().removeprefix(':')
-    for c in str(host):
-        if c.lower() not in IRCD.HOSTCHARS:
-            host = host.replace(c, '')
+    host = IRCD.clean_string(string=recv[1], charset=IRCD.HOSTCHARS, maxlen=64)
+    host = host.removeprefix(':')
 
-    host = host.removeprefix('.').removesuffix('.').strip()
-    if host and host != client.user.cloakhost:
-        client.setinfo(host, change_type="host")
+    if host and host != client.user.host:
+        client.add_user_modes("xt")
+        client.set_host(host=host)
         if client.local:
-            IRCD.server_notice(client, f"*** Your cloakhost is now '{client.user.cloakhost}'")
+            IRCD.server_notice(client, f"*** Your host is now '{client.user.host}'")
 
-    data = f":{client.id} {' '.join(recv)}"
-    IRCD.send_to_servers(client, [], data)
+        IRCD.send_to_servers(client, [], data=f":{client.id} SETHOST {client.user.host}")
 
 
 def cmd_setident(client, recv):
     """
-    Changes your own username (ident)
+    Changes your own username (ident).
     Syntax:     SETIDENT <ident>
     """
 
-    ident = str(recv[1][:64]).strip().removeprefix(':')
-    for c in str(ident):
-        if c.lower() not in IRCD.HOSTCHARS:
-            ident = ident.replace(c, '')
+    ident = IRCD.clean_string(string=recv[1], charset=IRCD.HOSTCHARS, maxlen=12)
+    ident = ident.removeprefix(':')
 
-    ident = ident.removeprefix('.').removesuffix('.').strip()
-    if ident and ident != client.user.username:
-        client.setinfo(ident, change_type="ident")
-        if client.local:
-            IRCD.server_notice(client, f"*** Your ident is now '{client.user.username}'")
+    if ident == client.user.username or not ident:
+        return
 
-    data = f":{client.id} {' '.join(recv)}"
-    IRCD.send_to_servers(client, [], data)
+    client.user.username = ident
+
+    if client.local:
+        IRCD.server_notice(client, f"*** Your ident is now '{client.user.username}'")
+
+    IRCD.send_to_servers(client, [], data=f":{client.id} SETIDENT {client.user.username}")
 
 
 def init(module):

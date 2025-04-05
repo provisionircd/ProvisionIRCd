@@ -2,7 +2,7 @@
 /cloak command
 """
 
-from handle.core import Command, IRCD, Flag
+from handle.core import IRCD, Command, Flag
 
 
 def cmd_cloak(client, recv):

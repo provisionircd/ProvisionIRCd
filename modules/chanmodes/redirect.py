@@ -69,19 +69,26 @@ def redirect_to_link(client, channel, error):
 
     match error:
         case Numeric.ERR_BANNEDFROMCHAN:
-            IRCD.server_notice(client, f"You are banned from {channel.name} so you have been redirected to {link_chan.name}")
+            IRCD.server_notice(client,
+                               f"You are banned from {channel.name} so you have been redirected to {link_chan.name}")
         case Numeric.ERR_INVITEONLYCHAN:
-            IRCD.server_notice(client, f"Channel {channel.name} is invite-only so you have been redirected to {link_chan.name}")
+            IRCD.server_notice(client,
+                               f"Channel {channel.name} is invite-only so you have been redirected to {link_chan.name}")
         case Numeric.ERR_CHANNELISFULL:
-            IRCD.server_notice(client, f"Channel {channel.name} is full so you have been redirected to {link_chan.name}")
+            IRCD.server_notice(client,
+                               f"Channel {channel.name} is full so you have been redirected to {link_chan.name}")
         case Numeric.ERR_NEEDREGGEDNICK:
-            IRCD.server_notice(client, f"Channel {channel.name} is for registered users only so you have been redirected to {link_chan.name}")
+            IRCD.server_notice(client,
+                               f"Channel {channel.name} is for registered users only so you have been redirected to {link_chan.name}")
         case Numeric.ERR_SECUREONLY:
-            IRCD.server_notice(client, f"Channel {channel.name} is for TLS-users only so you have been redirected to {link_chan.name}")
+            IRCD.server_notice(client,
+                               f"Channel {channel.name} is for TLS-users only so you have been redirected to {link_chan.name}")
         case Numeric.ERR_OPERONLY:
-            IRCD.server_notice(client, f"Channel {channel.name} is for IRC operators only so you have been redirected to {link_chan.name}")
+            IRCD.server_notice(client,
+                               f"Channel {channel.name} is for IRC operators only so you have been redirected to {link_chan.name}")
         case _:
-            IRCD.server_notice(client, f"Unable to join {channel.name}. You have been redirected to {link_chan.name}")
+            IRCD.server_notice(client,
+                               f"Unable to join {channel.name}. You have been redirected to {link_chan.name}")
 
 
 def init(module):

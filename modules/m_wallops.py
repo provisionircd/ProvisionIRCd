@@ -7,7 +7,7 @@ from handle.core import IRCD, Usermode, Command, Flag
 
 def cmd_wallops(client, recv):
     msg = ' '.join(recv[1:]).removeprefix(':')
-    for user_client in [c for c in IRCD.local_users(usermodes='w')]:
+    for user_client in [c for c in IRCD.get_clients(local=1, user=1, usermodes='w')]:
         user_client.send([], f":{client.fullmask} WALLOPS :{msg}")
 
     data = f":{client.id} WALLOPS :{msg}"

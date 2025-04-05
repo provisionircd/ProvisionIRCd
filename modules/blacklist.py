@@ -9,7 +9,8 @@ import asyncio
 
 from dataclasses import dataclass, field
 
-from handle.core import IRCD, Hook, Numeric, Snomask, Tkl
+from handle.core import IRCD, Hook, Numeric, Snomask
+from modules.m_tkl import Tkl
 from handle.functions import reverse_ip, valid_expire
 from handle.validate_conf import conf_error
 from handle.logger import logging
@@ -21,6 +22,7 @@ logging.getLogger("asyncio").setLevel(logging.WARNING)
 class Blacklist:
     cache = []
     process = []
+    tasks = {}
 
     def __init__(self, name: str = '', ip: str = '', reason: str = '', set_time: int = 0, duration: int = 0):
         self.name = name
@@ -70,7 +72,7 @@ async def dnsbl_check_client(client, dnsbl):
         Blacklist.cache.append(entry)
 
         msg = f"*** DNSBL match for IP {client.ip} [nick: {client.name}]: {reason}"
-        IRCD.send_snomask(client, 'd', msg)
+        IRCD.log(client, level="info", rootevent="blacklist", event="BLACKLIST_HIT", message=msg)
 
         if dnsbl.action == "gzline":
             client.sendnumeric(Numeric.RPL_TEXT, reason)
@@ -80,7 +82,13 @@ async def dnsbl_check_client(client, dnsbl):
                 expire=int(time()) + dnsbl.duration, set_time=int(time()), reason=reason
             )
 
-    except (asyncio.TimeoutError, socket.gaierror):
+        if client.ip in Blacklist.tasks:
+            for task in [t for t in Blacklist.tasks[client.ip] if not t.done()]:
+                task.cancel()
+
+            del Blacklist.tasks[client.ip]
+
+    except (asyncio.TimeoutError, asyncio.CancelledError, socket.gaierror):
         pass
 
     except Exception as ex:
@@ -92,7 +100,7 @@ async def blacklist_check(client):
         return
 
     if blacklist := Blacklist.find(client.ip):
-        for c in [c for c in IRCD.local_users() if c.ip == client.ip]:
+        for c in [c for c in IRCD.get_clients(local=1) if c.ip == client.ip]:
             c.sendnumeric(Numeric.RPL_TEXT, blacklist.reason)
             c.exit(blacklist.reason)
         return Hook.DENY
@@ -101,9 +109,12 @@ async def blacklist_check(client):
         Blacklist.process.append(client.ip)
         client.sendnumeric(Numeric.RPL_TEXT, "* Please wait while your connection is being checked against DNSBL.")
         IRCD.delay_client(client, 1, "blacklist")
-        tasks = [dnsbl_check_client(client, dnsbl) for dnsbl in Dnsbl.table]
-        await asyncio.gather(*tasks)
-        IRCD.remove_delay_client(client)
+        try:
+            Blacklist.tasks[client.ip] = [asyncio.create_task(dnsbl_check_client(client, dnsbl)) for dnsbl in Dnsbl.table]
+            await asyncio.gather(*Blacklist.tasks[client.ip], return_exceptions=True)
+        finally:
+            Blacklist.process.remove(client.ip)
+            IRCD.remove_delay_client(client)
 
 
 def blacklist_expire():
@@ -114,10 +125,15 @@ def blacklist_expire():
 def start_blacklist_check(client):
     try:
         loop = asyncio.get_running_loop()
-        task = loop.create_task(blacklist_check(client))
+        loop.create_task(blacklist_check(client))
     except RuntimeError:
-        """ No event loop running. Create one. """
-        asyncio.run(blacklist_check(client))
+        # No running event loop, create a new one.
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(blacklist_check(client))
+        finally:
+            loop.close()
 
 
 def init(module):
@@ -141,7 +157,7 @@ def post_load(module):
         required = ["dns", "action", "reason"]
         for item in required:
             if not block.get_path(dnsbl_name + ':' + item):
-                conf_error(f"Block '{block.name}' is missing item '{item}'", filename=block.filename)
+                conf_error(f"Block '{block.name}' is missing item '{item}'", block=block)
 
         dnsbl_dns = block.get_single_value("dns")
         if '.' not in dnsbl_dns:

@@ -3,7 +3,7 @@ operclass bans/exceptions/invex
 ~operclass:name_of_operclass
 """
 
-from handle.core import Extban
+from classes.data import Extban
 from handle.functions import is_match
 
 

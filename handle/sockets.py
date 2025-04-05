@@ -1,35 +1,134 @@
 import ipaddress
 import logging
+import sys
+import os
 import socket
-from sys import argv
+import typing
 from time import time
+
+try:
+    # noinspection PyPackageRequirements
+    import psutil
+except ImportError:
+    psutil = None
+
 import select
 from OpenSSL import SSL
 
-from handle.client import (find_client_from_socket,
-                           make_client, make_server, make_user,
-                           find_listen_obj_from_socket)
-from handle.core import IRCD, Client, Hook, Numeric, Command
+from handle.client import make_client, make_server, make_user
+from handle.core import IRCD, Hook, Numeric, Command, Flag
+from handle.client import Client
 from handle.functions import logging, fixup_ip6
 from modules.m_connect import connect_to
 
 
-def close_socket(sock):
-    for method in [lambda: sock.shutdown(sock.SHUT_RDWR), sock.close]:
-        try:
-            method()
-        except:
-            pass
-    if IRCD.use_poll:
-        try:
-            IRCD.poller.unregister(sock)
-        except:
-            pass
+class SocketEvent:
+    READ, WRITE, ERROR, CLOSE = 1, 2, 4, 8
+
+    def __init__(self, socket, event_type):
+        self.socket = socket
+        self.type = event_type
+        self.can_read = bool(self.type & self.READ)
+        self.can_write = bool(self.type & self.WRITE)
+        self.has_error = bool(self.type & self.ERROR or self.type & self.CLOSE)
 
 
+def wait_for_events(listen_sockets=None, read_sockets=None, write_sockets=None):
+    events = []
+    timeout = 100  # Timeout in ms.
+
+    if IRCD.poller:
+        try:
+            for fd, event in IRCD.poller.poll(timeout):
+                if not (sock := find_sock_from_fd(fd)):
+                    try:
+                        IRCD.poller.unregister(fd)
+                    except KeyError:
+                        """ Already unregistered. """
+                        pass
+                    except Exception as ex:
+                        logging.exception(ex)
+                    continue
+
+                event_type = 0
+                if event & (select.POLLIN | select.POLLPRI):
+                    event_type |= SocketEvent.READ
+                if event & select.POLLOUT:
+                    event_type |= SocketEvent.WRITE
+                if event & (select.POLLHUP | select.POLLERR | select.POLLNVAL | select.EPOLLRDHUP):
+                    event_type |= SocketEvent.ERROR
+
+                events.append(SocketEvent(sock, event_type))
+        except Exception as ex:
+            logging.exception(ex)
+    else:
+        listen_sockets = listen_sockets or []
+        read_sockets = read_sockets or []
+        write_sockets = write_sockets or []
+
+        try:
+            reads, writes, errors = select.select(listen_sockets + read_sockets,
+                                                  write_sockets,
+                                                  listen_sockets + read_sockets + write_sockets,
+                                                  timeout / 1000.0)
+
+            events.extend(SocketEvent(sock, SocketEvent.READ) for sock in reads)
+            events.extend(SocketEvent(sock, SocketEvent.WRITE) for sock in writes)
+            events.extend(SocketEvent(sock, SocketEvent.ERROR) for sock in errors)
+        except Exception as ex:
+            logging.exception(ex)
+
+    return events
+
+
+def process_event(event, listen_sockets):
+    sock = event.socket
+    client = None if sock in listen_sockets else IRCD.find_client(sock)
+
+    if event.can_read:
+        if sock in listen_sockets:
+            if listen_obj := find_listen_obj_from_socket(sock):
+                accept_socket(sock, listen_obj)
+            else:
+                accept_socket(sock, None)
+        elif client and client.local.handshake:
+            if client.local.tls and client.has_flag(Flag.CLIENT_TLS_FIRST_READ):
+                client.del_flag(Flag.CLIENT_TLS_FIRST_READ)
+                return
+
+            if (bytes_read := get_full_recv(client, sock)) in (-1, 1):
+                # Value 0 is ignored here. Trying to read again later.
+                process_client_buffer(client)
+                if bytes_read == -1:
+                    client.exit("Connection closed", sock_error=1)
+
+    elif event.can_write and client:
+        if client.direct_send(client.local.sendbuffer):
+            client.local.sendbuffer = ''
+
+        if IRCD.use_poll and not client.has_flag(Flag.CLIENT_EXIT) and sock.fileno() > 0:
+            IRCD.poller.modify(sock, select.POLLIN | select.POLLPRI | select.POLLHUP | select.POLLERR | select.EPOLLRDHUP)
+
+    if event.has_error:
+        process_client_buffer(client)
+        message = "Connection closed"
+        try:
+            if sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR):
+                message = "Read error"
+        except OSError:
+            message = "Bad file descriptor"
+        except Exception as ex:
+            message = f"Socket error: {repr(ex)}"
+
+        client.exit(message, sock_error=1)
+        return
+
+
+@IRCD.debug_freeze
 def wrap_socket(client, starttls=0):
     while client.local.sendbuffer:
         continue
+
     tlsctx = client.local.listen.tlsctx or IRCD.default_tls["ctx"]
     tls_sock = SSL.Connection(tlsctx, client.local.conn)
     tls_sock.set_accept_state()
@@ -41,27 +140,43 @@ def wrap_socket(client, starttls=0):
         client.local.handshake = 1
         client.local.socket.setblocking(0)
         msg = "This port is for TLS connections only" if not starttls else f"STARTTLS failed: {str(ex) or 'unknown error'}"
-
         if starttls:
             logging.exception(ex)
             client.sendnumeric(Numeric.ERR_STARTTLS, "STARTTLS failed.")
         client.direct_send(f"ERROR :{msg}")
         client.exit(msg)
+        tls_sock.close()
         return 0
 
+    # Remove plain sock from table.
+    old_sock = client.local.socket
+    IRCD.client_by_sock.pop(old_sock, None)
+
     client.local.socket = tls_sock
+    sock = client.local.socket
+    IRCD.client_by_sock[sock] = client
+
     client.local.tls = tlsctx
     client.local.socket.setblocking(0)
     client.local.handshake = 1
+    client.add_flag(Flag.CLIENT_TLS_FIRST_READ)
     return 1
 
 
-def post_accept(conn, client, listen_obj):
-    if IRCD.use_poll:
-        IRCD.poller.register(conn, select.POLLIN | select.POLLPRI | select.POLLHUP | select.POLLERR | select.EPOLLRDNORM | select.EPOLLRDHUP)
+@IRCD.debug_freeze
+def post_accept(client, listen_obj):
+    if IRCD.use_poll and client.local.socket and client.local.socket.fileno() > 0:
+        try:
+            IRCD.poller.register(client.local.socket,
+                                 select.POLLIN | select.POLLPRI | select.POLLHUP | select.POLLERR |
+                                 select.EPOLLRDNORM | select.EPOLLRDHUP)
+        except Exception as ex:
+            logging.error(f"Failed to register socket with poller: {ex}")
+            client.exit("Socket registration error")
+            return
 
     if listen_obj.tls and not wrap_socket(client):
-        return client.exit("TLS handshake failed")
+        return
 
     """ Set to non-blocking after handshake """
     client.local.socket.setblocking(0)
@@ -71,132 +186,184 @@ def post_accept(conn, client, listen_obj):
         if IRCD.current_link_sync and IRCD.current_link_sync != client:
             logging.error(f"Denying new incoming link because we are already processing another link.")
             client.exit(f"Already processing a link, try again.")
-            data = f"New server client incoming ({client.ip}:{listen_obj.port}) but we are currently already processing an incoming server."
-            if IRCD.current_link_sync and IRCD.current_link_sync.ip == client.ip \
-                    and IRCD.current_link_sync.port in [int(lis.port) for lis in IRCD.configuration.listen] \
-                    and int(time()) == IRCD.current_link_sync.creationtime:
-                data += f" Are you connecting to yourself? Make sure the outgoing IP is correct in the '{IRCD.current_link_sync.name}' link block."
+
+            data = (f"New server client incoming ({client.ip}:{listen_obj.port})but we are currently already "
+                    f"processing an incoming server.")
+            if (IRCD.current_link_sync
+                    and IRCD.current_link_sync.ip == client.ip
+                    and IRCD.current_link_sync.port in [int(lis.port) for lis in IRCD.configuration.listen]
+                    and int(time()) == IRCD.current_link_sync.creationtime):
+                data += (f" Are you connecting to yourself? Make sure the outgoing IP is correct "
+                         f"in the '{IRCD.current_link_sync.name}' link block.")
+
                 IRCD.log(IRCD.me, "warn", "link", "LINK_IN_FAIL", data, sync=0)
                 logging.warning(data)
             return
-        make_server(client)
-        IRCD.current_link_sync = client
 
+        make_server(client)
     else:
         make_user(client)
 
-    if client.server:
-        IRCD.run_hook(Hook.SERVER_LINK_IN, client)
-
     IRCD.run_hook(Hook.NEW_CONNECTION, client)
+
+    if client.local.socket.fileno() == -1:
+        client.exit("Invalid socket")
+        IRCD.close_socket(client.local.socket)
+        logging.warning(f"Discarded invalid socket with fileno: {client.local.socket.fileno()}")
+        return
+
     logging.debug(f"Accepted new socket on {listen_obj.port}: {client.ip} -- fd: {client.local.socket.fileno()}")
 
 
+@IRCD.debug_freeze
 def accept_socket(sock, listen_obj):
-    if len(IRCD.unregistered_clients()) >= 100:
+    if sum(1 for _ in IRCD.get_clients(registered=0)) >= 100:
         return logging.warning(f"SYN flood - not processing current connection.")
+
+    sock.setblocking(0)
     try:
         conn, addr = sock.accept()
+        conn.settimeout(1)
+    except BlockingIOError:
+        return
     except OSError as ex:
-        close_socket(sock)
-        return logging.exception(ex)
+        if ex.errno == 9:
+            # Bad file descriptor
+            return
+        logging.exception(ex)
+        return
 
     client = make_client(direction=None, uplink=IRCD.me)
-    client.local.socket = conn
-    client.local.conn = conn
+    client.local.socket = client.local.conn = conn
+    IRCD.client_by_sock[client.local.socket] = client
     client.local.listen = listen_obj
     client.local.incoming = 1
     client.ip, client.port = addr
-    if not listen_obj and not ipaddress.ip_address(client.ip).is_private:
-        client.exit("Connection reset")
-        close_socket(conn)
-        return
+
     if client.ip[:7] == "::ffff:":
         client.ip = client.ip.replace("::ffff:", '')  # client connected through ipv6 compatible mode -- strip away cruft
     client.ip = fixup_ip6(client.ip)  # make address look safe, e.g. "::1" is invalid but "0::1" is
+
+    if not listen_obj and not ipaddress.ip_address(client.ip).is_private:
+        client.exit("Connection reset")
+        IRCD.close_socket(sock)
+        return
+
     if listen_obj:
-        IRCD.run_parallel_function(post_accept, args=(conn, client, listen_obj))
+        IRCD.run_parallel_function(post_accept, args=(client, listen_obj))
     else:
         client.local.handshake = 1
-        client.local.socket.setblocking(0)
-        IRCD.command_socket = conn
+        IRCD.command_socket = client.local.socket
 
 
-def check_ping_timeouts():
+@IRCD.debug_freeze
+def check_timeouts():
     current_time = int(time())
-    for client in IRCD.local_clients():
+
+    for client in IRCD.get_clients(local=1):
         timeout_seconds = current_time - client.local.last_msg_received
         if client.registered and timeout_seconds >= 120:
             client.exit(f"Ping timeout: {timeout_seconds} seconds", sock_error=1)
 
+    if reg_timeout := IRCD.get_setting("regtimeout"):
+        reg_timeout = int(reg_timeout)
+        for client in [c for c in IRCD.get_clients(local=1, registered=0)]:
+            if current_time - client.local.creationtime >= reg_timeout:
+                client.exit("Registration timed out")
 
-def check_invalid_clients():
-    for client in list(IRCD.remote_clients()):
-        if not IRCD.find_server(client.id[:3]):
+    for client in list(IRCD.get_clients(local=0)):
+        if not IRCD.find_client(client.id[:3]):
             logging.error(f"Invalid user leftover after possible netsplit: {client.name}. UID: {client.id}")
             client.exit("Invalid user")
             if client in Client.table:
                 Client.table.remove(client)
-                logging.warning(f"[check_invalid_clients()] Client was still in Client.table after .exit().")
+                logging.warning(f"[check_timeouts()] Client was still in Client.table after .exit().")
+
+    for sock, timestamp in list(IRCD.kill_socks.items()):
+        if current_time - timestamp >= 1:
+            try:
+                sock.close()
+            except OSError:
+                pass
+            IRCD.kill_socks.pop(sock)
 
 
+@IRCD.debug_freeze
 def check_freeze():
     now = int(time())
     since_last_activity = now - IRCD.last_activity
-    if IRCD.last_activity and since_last_activity > 1:
+    if IRCD.last_activity and since_last_activity > 2:
         logging.warning(f"IRCd froze for {since_last_activity} seconds. Check logs above for possible cause.")
     IRCD.last_activity = now
 
 
-def autoconnect_links():
-    if IRCD.current_link_sync or [c for c in IRCD.global_servers() if not c.server.synced]:
+@IRCD.debug_freeze
+@IRCD.parallel
+def manage_close_wait_sockets():
+    """ Close inactive sockets in CLOSE_WAIT state using psutil. """
+    try:
+        psutil_instance: typing.Any = psutil
+        if not (proc := psutil_instance.Process(IRCD.pid)):
+            return
+
+        for conn in list([c for c in proc.connections(kind="inet") if c.fd >= 0 and c.status == "CLOSE_WAIT"]):
+            try:
+                if conn.raddr:
+                    continue
+
+                os.close(conn.fd)
+                logging.warning(f"Closed orphaned CLOSE_WAIT socket: FD {conn.fd}")
+            except Exception as ex:
+                logging.error(f"Error handling socket FD {conn.fd}: {ex}")
+    except NameError:
+        # psutil not installed.
+        return
+    except Exception as ex:
+        logging.exception(ex)
+
+
+@IRCD.debug_freeze
+def autoconnect_links() -> None:
+    if IRCD.current_link_sync or any(IRCD.get_clients(registered=0)):
         return
 
+    current_time = int(time())
     for link in [link for link in IRCD.configuration.links if (link.outgoing
                                                                and "autoconnect" in link.outgoing_options
-                                                               and not IRCD.find_server(link.name)
-                                                               and not link.name.lower() == IRCD.me.name.lower())]:
-        if int(time()) - link.last_connect_attempt >= 60:
-            interval = IRCD.get_random_interval()
-            link.last_connect_attempt = int(time()) + interval
-            # logging.debug(f"Attempting autoconnect to: {link.name}")
-            # logging.debug(f"Next attempt in {interval} seconds (if this connection fails connected).")
+                                                               and not IRCD.find_client(link.name)
+                                                               and link.name.lower() != IRCD.me.name.lower())]:
+
+        seconds_since_last_attempt = current_time - link.last_connect_attempt
+        if seconds_since_last_attempt >= 10:
+            interval = IRCD.get_random_interval(max=300)
+            link.last_connect_attempt = current_time + interval
             connect_to(IRCD.me, link, auto_connect=1)
             break
 
 
-def check_reg_timeouts():
-    for client in IRCD.global_servers():
-        if not client.registered:
-            break
-    else:
-        """ Loop ended normally, so all servers are registered """
-        if IRCD.current_link_sync:
-            logging.debug(f"[check_reg_timeouts()] current_link_sync for {IRCD.current_link_sync} unset.")
-        IRCD.current_link_sync = None
-
-    reg_timeout = int(IRCD.get_setting("regtimeout"))
-    current_time = int(time())
-    for client in IRCD.unregistered_clients():
-        if current_time - client.creationtime >= reg_timeout:
-            client.exit("Registration timed out")
+@IRCD.debug_freeze
+def throttle_expire() -> None:
+    if throttle_setting := IRCD.get_setting("throttle"):
+        throttle_time = int(throttle_setting.split(':')[1])
+        cutoff_time = int(time()) - throttle_time
+        for client_ip in list(IRCD.throttle.keys()):
+            timestamps = IRCD.throttle[client_ip]
+            while timestamps and timestamps[0] <= cutoff_time:
+                timestamps.popleft()
+            if not timestamps:
+                del IRCD.throttle[client_ip]
 
 
-def throttle_expire():
-    if IRCD.get_setting("throttle"):
-        throttle_time = int(IRCD.get_setting("throttle").split(':')[1])
-        for throttle in [t for t in dict(IRCD.throttle) if int(time()) - IRCD.throttle[t] >= throttle_time]:
-            del IRCD.throttle[throttle]
-
-
-def hostcache_expire():
+@IRCD.debug_freeze
+def hostcache_expire() -> None:
     current_time = int(time())
     for ip in dict(IRCD.hostcache):
-        timestamp, realhost = IRCD.hostcache[ip]
-        if current_time - timestamp >= 3600:
+        dns_ttl, realhost = IRCD.hostcache[ip]
+        if current_time >= dns_ttl:
             del IRCD.hostcache[ip]
 
 
+@IRCD.debug_freeze
 def remove_delayed_connections():
     for delayed_connection in list(IRCD.delayed_connections):
         client, expire, label = delayed_connection
@@ -204,10 +371,11 @@ def remove_delayed_connections():
             IRCD.remove_delay_client(client, label)
 
 
+@IRCD.debug_freeze
 def send_pings():
     pingfreq = 90
     current_time = time()
-    for client in (c for c in IRCD.local_clients() if c.registered):
+    for client in IRCD.get_clients(local=1, registered=1):
         time_since_last_ping = (current_time * 1000 - client.last_ping_sent) / 1000
         if (current_time - client.local.last_msg_received) >= pingfreq and time_since_last_ping > pingfreq / 3:
             data = f"PING :{IRCD.me.name}" if client.user else f":{IRCD.me.id} PING {IRCD.me.name} {client.name}"
@@ -215,57 +383,63 @@ def send_pings():
             client.last_ping_sent = current_time * 1000
 
 
+@IRCD.debug_freeze
 def find_sock_from_fd(fd: int):
-    listen_sockets = [listen.sock for listen in IRCD.configuration.listen if listen.listening]
-    clients = [client.local.socket for client in Client.table if client.local]
-    for sock in listen_sockets + clients:
+    # Unfortunately no reliable O(1) lookup possible.
+    for sock in (listen.sock for listen in IRCD.configuration.listen if listen.listening):
+        if sock.fileno() == fd:
+            return sock
+
+    for sock in (client.local.socket for client in Client.table if client.local):
         if sock.fileno() == fd:
             return sock
 
 
+def find_listen_obj_from_socket(socket):
+    return next((listen_obj for listen_obj in IRCD.configuration.listen if listen_obj.sock == socket), None)
+
+
+@IRCD.debug_freeze
 def process_client_buffer(client):
     buffer = client.local.temp_recvbuffer
 
     if client.local.socket == IRCD.command_socket:
-        command = buffer
-        logging.debug(f"Received command: {buffer}")
-        if buffer.strip() == "--rehash":
+        command = buffer.strip()
+
+        if command == "REHASH":
             Command.do(IRCD.me, "REHASH")
-        close_socket(client.local.socket)
+        elif command == "RESTART":
+            Command.do(IRCD.me, "RESTART")
+        elif command == "SHUTDOWN":
+            Command.do(IRCD.me, "DIE")
+        IRCD.close_socket(client.local.socket)
         return
 
-    messages = []
-    while 1:
-        delimiter_index = buffer.find('\n')
-        if delimiter_index == -1:
-            # No complete message in buffer yet
-            break
-        # Extract the message (including the delimiter)
-        message = buffer[:delimiter_index + 1]
-        # Remove the message from the buffer
-        buffer = buffer[delimiter_index + 1:]
-        message = message.strip("\r\n")
-        messages.append(message)
-    client.local.temp_recvbuffer = buffer
-    for message in messages:
-        post_sockread(client, message)
+    last_newline = buffer.rfind('\n')
+    if last_newline != -1:
+        complete_data = buffer[:last_newline + 1]
+        messages = [line.strip('\r') for line in complete_data.split('\n') if line]
+        for message in messages:
+            post_sockread(client, message)
+
+    client.local.temp_recvbuffer = buffer[last_newline + 1:]
 
 
-def post_sockread(client, recv):
+@IRCD.debug_freeze
+def post_sockread(client, recv) -> None:
     client.local.bytes_received += len(recv)
     client.local.messages_received += 1
+
     recv_list = recv.split('\n')
+
     IRCD.run_hook(Hook.PACKET, client, IRCD.me, IRCD.me, recv_list)
     IRCD.run_hook(Hook.POST_SOCKREAD, client, recv)
-    recv = '\n'.join(recv_list)
-    if not recv.strip():
-        return 1
 
-    for line in recv.split('\n'):
-        if not line.strip():
+    for line in recv_list:
+        if not (line := line.strip()):
             continue
 
-        debug_in = 0 if client.server else 0
+        debug_in = 0
         if client.registered:
             ignore = ["ping", "pong", "privmsg", "notice", "tagmsg", "id", "identify", "auth", "register", "nickserv", "ns"]
             split_line = line.split()
@@ -306,240 +480,114 @@ def post_sockread(client, recv):
     client.handle_recv()
 
 
-def process_backbuffer():
-    for client in IRCD.local_clients():
+@IRCD.debug_freeze
+def process_backbuffer() -> None:
+    current_time = time()
+
+    for client in IRCD.get_clients(local=1):
         if client.local.recvbuffer:
             client.handle_recv()
 
         if client.user:
-            current_time = time()
-            for buffer in [client.local.backbuffer, client.local.sendq_buffer]:
-                for entry in list(buffer):
-                    tte, _ = entry
-                    if current_time >= tte + 1:
-                        buffer.remove(entry)
+            if client.local.backbuffer:
+                client.local.backbuffer = [entry for entry in client.local.backbuffer if current_time < entry[0] + 1]
+
+            if client.local.sendq_buffer:
+                client.local.sendq_buffer = [entry for entry in client.local.sendq_buffer if current_time < entry[0] + 1]
 
 
-def is_valid_socket(sock):
-    try:
-        return sock and sock.fileno() > 0
-    except Exception:
-        return False
-
-
-def clean_invalid_sockets(listen_sockets, read_clients, write_clients):
-    listen_sockets[:] = [sock for sock in listen_sockets if is_valid_socket(sock)]
-    read_clients[:] = [sock for sock in read_clients if is_valid_socket(sock)]
-    write_clients[:] = [sock for sock in write_clients if is_valid_socket(sock)]
-
-
+@IRCD.debug_freeze
 def get_full_recv(client, sock):
     """
     Return values:
 
-    1:  Data read was OK.
-    0:  No data was read.
-    -1: Closed connection or error.
+    1:  Full data read.
+    0:  No data was read yet. Try again later.
+    -1: Stream incomplete or connection closed.
     """
 
-    while 1:
-        try:
-            part = sock.recv(4096)
-            if not part:
-                return -1
-            client.local.temp_recvbuffer += part.decode()
-        except (SSL.WantReadError, BlockingIOError):
-            if client.local.temp_recvbuffer:
-                return 1
-            else:
-                return 0
-        except:
-            return -1
+    buffer = []
+
+    try:
+        while part := sock.recv(4096):
+            buffer.append(part.decode())
+        client.local.temp_recvbuffer += ''.join(buffer)
+        return -1
+    except (SSL.WantReadError, BlockingIOError) as ex:
+        client.local.temp_recvbuffer += ''.join(buffer)
+        return 1 if client.local.temp_recvbuffer else 0
+
+    except SSL.SysCallError as ex:
+        if ex.args[0] in (10035, 35):
+            logging.error(str(ex))
+            client.local.temp_recvbuffer += ''.join(buffer)
+            return 1 if client.local.temp_recvbuffer else 0
+        return -1
+
+    except (ConnectionResetError, UnicodeDecodeError, SSL.SysCallError, SSL.ZeroReturnError) as ex:
+        """ Connection closed while reading. Client exitted. """
+        return -1
+
+    except Exception as ex:
+        logging.exception(ex)
+        return -1
 
 
 def handle_connections():
-    # try:
-    #     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
-    #         client_socket.connect(("127.0.0.1", 65432))
-    #         command = ' '.join(argv[1:])  # Take arguments as command
-    #         print(f"Command: {command}")
-    #         client_socket.sendall(command.encode())
-    #         response = client_socket.recv(1024).decode()
-    #         print(f"Response from server: {response}")
-    #     exit(0)  # Exit after sending the command
-    #
-    # except ConnectionRefusedError:
-    #     # No server is running, proceed to start a new server instance
-    #     pass
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        server_socket.bind(('', 65432))
+        server_socket.listen(10)
+    except OSError:
+        # Already an instance running.
+        server_socket = None
 
-    server_socket = None
-    # server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    # server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    # server_socket.bind(('', 65432))
-    # server_socket.listen(10)
+    last_periodic_tasks = int(time())
+    task_interval = 1
+
+    periodic_tasks = [
+        send_pings, check_timeouts, process_backbuffer,
+        autoconnect_links, throttle_expire, hostcache_expire,
+        remove_delayed_connections, check_freeze
+    ]
 
     while IRCD.running:
         try:
-            for client in [c for c in list(Client.table) if c.exitted]:
+            for client in [c for c in list(Client.table) if c.has_flag(Flag.CLIENT_EXIT)]:
                 try:
-                    # Rare race condition?
                     Client.table.remove(client)
                 except ValueError:
                     pass
+
             listen_sockets = [listen.sock for listen in IRCD.configuration.listen if listen.listening]
             if server_socket:
                 listen_sockets.append(server_socket)
-            available_clients = [client for client in IRCD.local_clients() if client.local.socket and client.local.socket.fileno() > 0 and not client.exitted]
-            read_clients = [client.local.socket for client in available_clients if client.local.handshake]
-            write_clients = [client.local.socket for client in available_clients if client.local.handshake and client.local.sendbuffer]
 
-            if IRCD.use_poll:
-                fdVsEvent = IRCD.poller.poll(100)
-                for fd, Event in fdVsEvent:
-                    # https://stackoverflow.com/a/42612778
-                    # logging.debug(f"New event on fd {fd}: {Event}")
-                    if Event & select.POLLNVAL:
-                        try:
-                            IRCD.poller.unregister(fd)
-                        except KeyError:
-                            pass
-                        continue
-                    sock = find_sock_from_fd(fd)
-                    if not sock:
-                        try:
-                            IRCD.poller.unregister(fd)
-                        except KeyError:
-                            pass
-                        continue
+            available_clients = [c for c in IRCD.get_clients(local=1)
+                                 if c.local.socket and c.local.socket.fileno() > 0 and not c.has_flag(Flag.CLIENT_EXIT)]
 
-                    if Event & (select.POLLIN | select.POLLPRI | select.EPOLLRDNORM):
-                        # logging.debug(f"POLLIN or POLLPRI or EPOLLRDNORM")
-                        if sock in listen_sockets:
-                            if not (listen_obj := find_listen_obj_from_socket(sock)):
-                                logging.debug(f"Attempting to close socket because no listen_obj found")
-                                close_socket(sock)
-                                continue
-                            accept_socket(sock, listen_obj)
-                            continue
-                        else:
-                            if not (client := find_client_from_socket(sock)):
-                                logging.debug(f"Attempting to close socket because no client object associated with socket")
-                                close_socket(sock)
-                                continue
-                            if not client.local.handshake:
-                                # Handshake not finished yet - waiting.
-                                continue
+            read_clients = []
+            write_clients = []
+            for client in available_clients:
+                if client.local.handshake:
+                    read_clients.append(client.local.socket)
+                    if client.local.sendbuffer:
+                        write_clients.append(client.local.socket)
 
-                            bytes_read = get_full_recv(client, sock)
-                            if bytes_read == -1:
-                                process_client_buffer(client)
-                                client.exit("Connection closed", sock_error=1)
-                                continue
-                            elif bytes_read == 0:
-                                continue
-                            else:
-                                process_client_buffer(client)
-                        continue
+            events = wait_for_events(listen_sockets=listen_sockets, read_sockets=read_clients, write_sockets=write_clients)
+            for event in events:
+                process_event(event, listen_sockets)
 
-                    if Event & (select.POLLOUT | select.EPOLLOUT):
-                        # logging.debug(f"POLLOUT or EPOLLOUT")
-                        if not (client := find_client_from_socket(sock)):
-                            close_socket(sock)
-                            continue
-
-                        sendbuffer = client.local.sendbuffer
-                        if client.direct_send(sendbuffer):
-                            client.local.sendbuffer = ''
-
-                        if client.exitted or sock.fileno() < 0:
-                            continue
-                        IRCD.poller.modify(sock, select.POLLIN | select.POLLPRI | select.POLLHUP | select.POLLERR | select.EPOLLRDNORM | select.EPOLLRDHUP)
-
-                    elif Event & (select.POLLHUP | select.POLLERR | select.EPOLLRDHUP):
-                        if not (client := find_client_from_socket(sock)):
-                            close_socket(sock)
-                            continue
-                        process_client_buffer(client)
-                        error_code = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
-                        if error_code != 0:
-                            client.exit("Read error", sock_error=1)
-                        else:
-                            client.exit("Connection closed", sock_error=1)
-                        continue
-
-            else:
-                try:
-                    clean_invalid_sockets(listen_sockets, read_clients, write_clients)
-                    read, write, error = select.select(listen_sockets + read_clients, write_clients, listen_sockets + read_clients, 0.1)
-                except ValueError as ex:
-                    logging.exception(ex)
-                    continue
-
-                for sock in write:
-                    if not (client := find_client_from_socket(sock)):
-                        close_socket(sock)
-                        continue
-
-                    sendbuffer = client.local.sendbuffer
-                    if client.direct_send(sendbuffer):
-                        client.local.sendbuffer = ''
-
-                for sock in read:
-                    if sock in listen_sockets:
-                        if sock is not server_socket:
-                            if not (listen_obj := find_listen_obj_from_socket(sock)):
-                                close_socket(sock)
-                                continue
-                            accept_socket(sock, listen_obj)
-                        else:
-                            accept_socket(server_socket, listen_obj=None)
-                        continue
-
-                    else:
-                        if not (client := find_client_from_socket(sock)):
-                            close_socket(sock)
-                            continue
-
-                        bytes_read = get_full_recv(client, sock)
-                        if bytes_read == -1:
-                            process_client_buffer(client)
-                            client.exit("Connection closed", sock_error=1)
-                            continue
-                        elif bytes_read == 0:
-                            continue
-                        else:
-                            process_client_buffer(client)
-
-                    continue
-
-                for sock in error:
-                    if not (client := find_client_from_socket(sock)):
-                        close_socket(sock)
-                        continue
-                    process_client_buffer(client)
-                    error_code = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
-                    if error_code != 0:
-                        client.exit("Read error", sock_error=1)
-                    else:
-                        client.exit("Connection closed", sock_error=1)
-                    continue
-
-            send_pings()
-            check_reg_timeouts()
-            process_backbuffer()
-            autoconnect_links()
-            throttle_expire()
-            hostcache_expire()
-            remove_delayed_connections()
-            check_ping_timeouts()
-            check_invalid_clients()
-            check_freeze()
-            IRCD.run_hook(Hook.LOOP)
+            current_time = int(time())
+            if current_time - last_periodic_tasks >= task_interval:
+                last_periodic_tasks = current_time
+                for task in periodic_tasks:
+                    task()
+                IRCD.run_hook(Hook.LOOP)
 
         except KeyboardInterrupt:
             logging.info(f"[KeyboardInterrupt] Shutting down ProvisionIRCd.")
             IRCD.running = 0
-            exit()
-
-    print(f"Loop broke")
-    exit()
+            IRCD.kill_parallel_tasks()
+            sys.exit(0)

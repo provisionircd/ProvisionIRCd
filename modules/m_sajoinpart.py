@@ -13,7 +13,7 @@ def cmd_sajoinpart(client, recv):
     if not client.has_permission(f"sacmds:{cmd}:local") and not client.has_permission(f"sacmds:{cmd}:global"):
         return client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
 
-    if not (target := IRCD.find_user(recv[1])):
+    if not (target := IRCD.find_client(recv[1], user=1)):
         return client.sendnumeric(Numeric.ERR_NOSUCHNICK, recv[1])
 
     if client.local:
@@ -22,7 +22,7 @@ def cmd_sajoinpart(client, recv):
         if not client.has_permission(permission_check) and not client.has_permission(f"sacmds:{cmd}:global"):
             return client.sendnumeric(Numeric.ERR_NOPRIVILEGES)
 
-        if 'S' in target.user.modes or target.ulined or target.is_service:
+        if 'S' in target.user.modes or target.is_uline() or target.is_service():
             return IRCD.server_notice(client, f"*** You cannot use /{cmd.upper()} on services.")
 
         client.local.flood_penalty += 50_000
@@ -47,11 +47,11 @@ def cmd_sajoinpart(client, recv):
         else:
             Command.do(target, "PART", channel.name)
 
-    data = f":{client.id} SA{what.upper()} {target.name} {channel.name}"
-    IRCD.send_to_servers(client, [], data)
+    IRCD.send_to_servers(client, [], f":{client.id} SA{what.upper()} {target.name} {channel.name}")
 
     event = f"{'LOCAL' if target.local else 'REMOTE'}_{cmd.upper()}"
-    msg = f"*** {client.name} ({client.user.username}@{client.user.realhost}) used {cmd.upper()} to make {target.name} {what} {channel.name}"
+    msg = (f"*** {client.name} ({client.user.username}@{client.user.realhost}) used {cmd.upper()} "
+           f"to make {target.name} {what} {channel.name}")
     IRCD.log(client, "info", cmd, event, msg, sync=1 if target.local else 0)
 
     if target.local:

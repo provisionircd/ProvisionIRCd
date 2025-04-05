@@ -21,11 +21,14 @@ class Error:
     SERVER_LINK_NOMATCH = error(), "No matching link configuration"
     SERVER_LINK_NOMATCH_MASK = error(), "Link block mask does not match"
     SERVER_LINK_NOMATCH_CERTFP = error(), "Certificate fingerprints do not match"
+    SERVER_LINK_MISSING_AUTH_CN = error(), "Common-Name authentication requires at least one additional authentication method"
+    SERVER_LINK_AUTH_NO_TLS = error(), "Server authentication failed: one or more TLS authentication methods were used, but client did not connect via TLS"
     SERVER_LINK_NOMATCH_CN = error(), "Certificate Common-Name does not match"
     SERVER_LINK_MAXCLASS = error(), "Maximum instances of link class '{}' reached"
     SERVER_LINK_NOCLASS = error(), "Remote server was unable to found a matching connection class for us"
     SERVER_LINK_NAME_COLLISION = error(), "Server name {} already in use"
     SERVER_LINK_INCORRECT_PASSWORD = error(), "Incorrect password"
+    SERVER_LINK_TS_MISMATCH = error(), "Link denied due to incorrect clocks. Our clocks are {} seconds apart."
 
     USER_UID_ALREADY_IN_USE = error(), "[UID] UID already in use on the network: {}"
     USER_UID_NOT_ENOUGH_PARAMS = error(), "[UID] Not enough parameters for UID from {}: {} != 13"
@@ -35,5 +38,4 @@ class Error:
     def send(error_code, *args):
         error_num, error_string = error_code
         error_string = error_string.format(*args)
-        # logging.error(error_string)
         return error_string

@@ -8,13 +8,11 @@ from handle.core import IRCD, Numeric, Hook
 def account_nickchange(client, newnick):
     if 'r' in client.user.modes and newnick.lower() != client.user.account.lower():
         client.user.modes = client.user.modes.replace('r', '')
-        data = f":{IRCD.me.name} MODE {client.name} -r"
-        client.send([], data)
-        data = f":{client.id} MODE {client.name} -r"
-        IRCD.send_to_servers(client, [], data)
+        client.send([], f":{IRCD.me.name} MODE {client.name} -r")
+        IRCD.send_to_servers(client, [], f":{client.id} MODE {client.name} -r")
 
 
-def account_changed(client):
+def account_changed(client, old_account):
     if client.user.account == '*':
         client.sendnumeric(Numeric.RPL_LOGGEDOUT, client.fullrealhost)
     else:
@@ -28,8 +26,11 @@ def account_whois(client, whois_client, lines):
 
 
 def account_check_connection(client):
-    if IRCD.is_except_client("require", client) or not IRCD.find_command("SASL") or not IRCD.find_command("AUTHENTICATE"):
+    if (IRCD.is_except_client("require", client)
+            or not all(IRCD.find_command(cmd) for cmd in ["SASL", "AUTHENTICATE"])
+            or not IRCD.find_client(IRCD.get_setting("sasl-server"))):
         return Hook.CONTINUE
+
     for require in [r for r in IRCD.configuration.requires if r.what == "authentication"]:
         if require.mask.is_match(client) and client.user.account == '*':
             msg = f"You need to be logged into an account to connect to this server"
@@ -42,6 +43,7 @@ def account_check_connection(client):
             else:
                 IRCD.server_notice(client, msg)
             return Hook.DENY
+
     return Hook.CONTINUE
 
 

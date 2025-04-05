@@ -46,7 +46,7 @@ def cmd_webirc(client, recv):
         return
     client.user.realhost = recv[3] if IRCD.get_setting("resolvehost") else recv[4]
     client.ip = recv[4]
-    client.user.cloakhost = IRCD.get_cloak(client)
+    client.user.cloakhost = client.user.vhost = IRCD.get_cloak(client)
     client.webirc = 1
 
 

@@ -3,59 +3,47 @@
 """
 
 import hashlib
-import time
+from time import time
 
-from handle.core import Command, IRCD, Flag
+from handle.core import IRCD, Command, Flag
+from handle.logger import logging
 
 
 def cmd_netinfo(client, recv):
-    maxglobal = int(recv[1])
-    if maxglobal > IRCD.maxgusers:
-        IRCD.maxgusers = maxglobal
+    if not client.local:
+        return
 
-    remotetime = int(recv[2])
+    maxglobal = int(recv[1])
+    IRCD.maxgusers = max(IRCD.maxgusers, maxglobal)
+    end_of_sync = int(recv[2])
     version = recv[3]
     cloakhash = recv[4]
     creation = int(recv[5])
-    remotename = recv[8][1:]
-    currenttime = int(time.time())
+    remotename = recv[8].removeprefix(':')
+    current_time = int(time())
     remotehost = client.name
 
-    if abs(remotetime - currenttime) > 60:
-        if abs(remotetime - currenttime) > 300 and client.local:
-            err = "ERROR :Link denied due to incorrect clocks. Please make sure both clocks are synced!"
-            client.direct_send(err)
-            client.exit(err)
-            return
-
-        diff = abs(remotetime - currenttime)
-        if remotetime != currenttime:
-            status = "ahead" if remotetime > currenttime else "behind"
-            IRCD.send_snomask(IRCD.me, 's',
-                              f"*** (warning) Remote server {remotehost}'s clock is ~{diff}s {status} on ours, this can cause issues and should be fixed!")
-
     if remotename != IRCD.me.name and client.name == remotename:
-        IRCD.send_snomask(IRCD.me, 's', f"*** Network name mismatch from {client.name} ({remotename} != {IRCD.me.name})")
+        data = f"*** Network name mismatch from {client.name} ({remotename} != {IRCD.me.name}"
+        IRCD.log(IRCD.me, "warn", "link", "NETWORK_NAME_MISMATCH", data, sync=0)
 
-    if version != IRCD.versionnumber.replace('.', '') and not client.ulined and client.name == remotename:
-        IRCD.send_snomask(IRCD.me, 's',
-                          f"*** Remote server {remotehost} is using version {version}, and we are using version {IRCD.versionnumber.replace('.', '')}, but this should not cause issues.")
+    if version != IRCD.versionnumber.replace('.', '') and not client.is_uline() and client.name == remotename:
+        data = (f"*** Remote server {remotehost} is using version {version},"
+                f"and we are using version {IRCD.versionnumber.replace('.', '')}, but this should not cause issues.")
+        IRCD.log(IRCD.me, "warn", "link", "VERSION_MISMATCH", data, sync=0)
 
     if creation:
         client.creationtime = creation
 
-    if not client.server.synced:
-        secure = 1 if client.local and client.local.tls else 0 if client.local else -1
-        prefix = "Secure l" if secure == 1 else "Unsecure l" if secure == 0 else 'L'
-        msg = f"{prefix}ink {client.uplink.name} -> {client.name} successfully established"
-        IRCD.log(client.uplink, "info", "link", "LINK_ESTABLISHED", msg, sync=0)
-
     if cloakhash.split(':')[1] != hashlib.md5(IRCD.get_setting("cloak-key").encode("utf-8")).hexdigest():
         data = "*** (warning) Network wide cloak keys are not the same! This will affect channel bans and must be fixed!"
-        IRCD.log(IRCD.me, "warn", "link", "LINK_NETINFO", data, sync=0)
+        IRCD.log(IRCD.me, "warn", "link", "CLOAK_KEY_MISMATCH", data, sync=0)
 
-    data = f":{client.id} {' '.join(recv)}"
-    IRCD.send_to_servers(client, [], data)
+    if not client.uplink.server.synced:
+        sync_time = current_time - end_of_sync
+        msg = (f"Link {client.uplink.name} -> {client.name} synced [seconds: {sync_time}, "
+               f"recv: {client.local.bytes_received}, sent: {client.local.bytes_sent}]")
+        IRCD.log(client.uplink, "info", "link", "SERVER_SYNCED", msg, sync=0)
 
 
 def init(module):

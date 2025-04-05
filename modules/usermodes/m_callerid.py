@@ -4,7 +4,8 @@ provides usermodes +g and /accept command (callerid)
 
 import time
 
-from handle.core import IRCD, Command, Usermode, MessageTag, Isupport, Numeric, Hook
+from handle.core import IRCD, Command, Usermode, Isupport, Numeric, Hook
+from modules.ircv3.messagetags import MessageTag
 
 
 class CallerIDData:
@@ -14,77 +15,69 @@ class CallerIDData:
 
     @staticmethod
     def add_to_buf(client, entry):
-        if client not in CallerIDData.buffer:
-            CallerIDData.buffer[client] = []
-        CallerIDData.buffer[client].append(entry)
+        CallerIDData.buffer.setdefault(client, []).append(entry)
 
     @staticmethod
     def add_to_accept(client, nickname):
-        if client not in CallerIDData.accept_list:
-            CallerIDData.accept_list[client] = []
-        CallerIDData.accept_list[client].append(nickname)
+        CallerIDData.accept_list.setdefault(client, []).append(nickname)
 
     @staticmethod
     def remove_from_accept(client, nickname):
-        if client not in CallerIDData.accept_list:
-            CallerIDData.accept_list[client] = []
-        if nickname in CallerIDData.accept_list[client]:
+        if nickname in CallerIDData.accept_list.setdefault(client, []):
             CallerIDData.accept_list[client].remove(nickname)
 
     @staticmethod
     def get_acceptlist(client):
-        if client not in CallerIDData.accept_list:
-            CallerIDData.accept_list[client] = []
-        return CallerIDData.accept_list[client]
+        return CallerIDData.accept_list.setdefault(client, [])
 
     @staticmethod
-    def send_notify(client, target):
+    def send_notify(client, target) -> int:
         """
-        client          Client user object
-        target          Target user object
+        :client:          Client user object
+        :target:          Target user object
         """
-        if target not in CallerIDData.last_notify[client]:
-            CallerIDData.last_notify[client][target] = int(time.time())
-            return 1
-        send_notify = (int(time.time()) - CallerIDData.last_notify[client][target]) > 60
+        current_time = int(time.time())
+        last_notify_time = CallerIDData.last_notify[client].get(target, 0)
+        send_notify = current_time - last_notify_time > 60
+
         if send_notify:
-            CallerIDData.last_notify[client][target] = int(time.time())
+            CallerIDData.last_notify[client][target] = current_time
+
         return send_notify
 
     @staticmethod
     def send_buffer(client, nickname):
-        for entry in list([entry for entry in CallerIDData.buffer[client] if entry.sourcenick.lower() == nickname.lower()]):
-            data = ''
-            if entry.mtags:
-                filtered_tags = MessageTag.filter_tags(mtags=entry.mtags, destination=client)
-                data += '@' + ';'.join([t.string for t in filtered_tags]) + ' '
-            data += f":{entry.source} {entry.sendtype} {client.name} :{entry.message}"
-            client.send([], data)
-            CallerIDData.buffer[client].remove(entry)
-            if entry.target in CallerIDData.last_notify[client]:
-                del CallerIDData.last_notify[client][entry.target]
+
+        def send_buffer(client, nickname):
+            nickname_lower = nickname.lower()
+            entries_to_remove = []
+            for entry in CallerIDData.buffer[client]:
+                if entry.sourcenick.lower() == nickname_lower:
+                    tag_part = ''
+                    if entry.mtags:
+                        if filtered_tags := MessageTag.filter_tags(mtags=entry.mtags, destination=client):
+                            tag_part = '@' + ';'.join(t.string for t in filtered_tags) + ' '
+                    client.send([], f"{tag_part}:{entry.source} {entry.sendtype} {client.name} :{entry.message}")
+                    entries_to_remove.append(entry)
+                    if entry.target in CallerIDData.last_notify[client]:
+                        del CallerIDData.last_notify[client][entry.target]
+
+            for entry in entries_to_remove:
+                CallerIDData.buffer[client].remove(entry)
 
     @staticmethod
     def cleanup(client):
-        if client in CallerIDData.buffer:
-            del CallerIDData.buffer[client]
-        if client in CallerIDData.last_notify:
-            del CallerIDData.last_notify[client]
-        if client in CallerIDData.accept_list:
-            del CallerIDData.accept_list[client]
-
-        for c in CallerIDData.last_notify:
-            if client in list(CallerIDData.last_notify[c]):
-                del CallerIDData.last_notify[c][client]
+        CallerIDData.buffer.pop(client, None)
+        CallerIDData.accept_list.pop(client, None)
+        CallerIDData.last_notify.pop(client, None)
+        for other_client_notifs in CallerIDData.last_notify.values():
+            other_client_notifs.pop(client, None)
 
     @staticmethod
     def new_client(client):
-        if client not in CallerIDData.buffer:
-            CallerIDData.buffer[client] = []
-        if client not in CallerIDData.accept_list:
-            CallerIDData.accept_list[client] = []
-        if client not in CallerIDData.last_notify:
-            CallerIDData.last_notify[client] = {}
+        CallerIDData.buffer.setdefault(client, [])
+        CallerIDData.accept_list.setdefault(client, [])
+        CallerIDData.last_notify.setdefault(client, {})
 
 
 class CallerIDEntry:
@@ -99,24 +92,29 @@ class CallerIDEntry:
 
 
 def callerid_can_send_to_user(client, target, msg, sendtype):
-    """
-    If the sender has usermodes +o (IRCop) or +S (service), do not deny.
-    """
-    if 'g' in target.user.modes and (not client.has_modes_any("oS") and not client.is_service and not client.ulined):
-        if client.name.lower() not in [x.lower() for x in CallerIDData.get_acceptlist(target)]:
-            if client.local:
-                client.sendnumeric(Numeric.RPL_TARGUMODEG, target.name)
-                client.sendnumeric(Numeric.RPL_TARGNOTIFY, target.name)
-            if target.local:
-                CallerIDEntry(source=client, target=target, message=msg, sendtype=sendtype)
-                if CallerIDData.send_notify(client, target):
-                    target.sendnumeric(Numeric.RPL_UMODEGMSG, client.name, f"{client.user.username}@{client.user.cloakhost}")
-                return Hook.DENY
-    return Hook.CONTINUE
+    """ If the sender has usermodes +o (IRCop) or +S (service), do not deny. """
+    if 'g' not in target.user.modes or client.has_modes_any("oS") or client.is_service() or client.is_uline():
+        return Hook.CONTINUE
+
+    client_name_lower = client.name.lower()
+    if any(client_name_lower == x.lower() for x in CallerIDData.get_acceptlist(target)):
+        return Hook.CONTINUE
+
+    if client.local:
+        client.sendnumeric(Numeric.RPL_TARGUMODEG, target.name)
+        client.sendnumeric(Numeric.RPL_TARGNOTIFY, target.name)
+
+    if target.local:
+        CallerIDEntry(source=client, target=target, message=msg, sendtype=sendtype)
+        if CallerIDData.send_notify(client, target):
+            target.sendnumeric(Numeric.RPL_UMODEGMSG, client.name, f"{client.user.username}@{client.user.host}")
+
+    return Hook.DENY
 
 
 def cmd_accept(client, recv):
     """Manipulate caller-ID list.
+    This list determines who can private message you.
     -
     Example: ACCEPT CoolGuy420      (Adds to list)
 -            ACCEPT -R00T_UK        (Removes from list)
@@ -128,42 +126,41 @@ def cmd_accept(client, recv):
             client.sendnumeric(Numeric.RPL_ACCEPTLIST, nick)
         return client.sendnumeric(Numeric.RPL_ENDOFACCEPT)
 
+    accept_list_lower = [x.lower() for x in CallerIDData.get_acceptlist(client)]
+
     for entry in recv[1].split(','):
-        continue_loop = 0
-        action = ''
-        nickname = entry
-        if entry[0] == '-':
+        if entry.startswith('-'):
             action = '-'
             nickname = entry[1:]
-        for c in entry.lower():
-            if c.lower() not in IRCD.NICKCHARS or nickname[0].isdigit() and client.local:
-                continue_loop = 1
-                break
-        if continue_loop:
+        else:
+            action = ''
+            nickname = entry
+
+        if client.local and (any(c.lower() not in IRCD.NICKCHARS for c in nickname) or (nickname and nickname[0].isdigit())):
             continue
 
-        accept_lower = [x.lower() for x in CallerIDData.get_acceptlist(client)]
-        if action != '-':
-            if nickname.lower() in accept_lower:
+        nickname_lower = nickname.lower()
+
+        if action == '+':
+            if nickname_lower in accept_list_lower:
                 client.sendnumeric(Numeric.ERR_ACCEPTEXIST, nickname)
                 continue
-        if action == '-':
-            if nickname.lower() not in accept_lower:
+            CallerIDData.add_to_accept(client, nickname)
+            CallerIDData.send_buffer(client, nickname)
+
+        else:
+            if nickname_lower not in accept_list_lower:
                 client.sendnumeric(Numeric.ERR_ACCEPTNOT, nickname)
                 continue
             CallerIDData.remove_from_accept(client, nickname)
-            continue
-        CallerIDData.add_to_accept(client, nickname)
-        CallerIDData.send_buffer(client, nickname)
 
-    data = f":{client.id} {' '.join(recv)}"
-    IRCD.send_to_servers(client, mtags=[], data=data)
+    IRCD.send_to_servers(client, mtags=[], data=f":{client.id} {' '.join(recv)}")
 
 
 def callerid_eos(remote_server):
-    for client in CallerIDData.accept_list:
-        if data := [a for a in CallerIDData.get_acceptlist(client)]:
-            remote_server.send([], f":{client.id} ACCEPT {','.join(data)}")
+    for client, accept_list in CallerIDData.accept_list.items():
+        if accept_list:
+            remote_server.send([], f":{client.id} ACCEPT {','.join(accept_list)}")
 
 
 def callerid_quit(client, reason):

@@ -3,7 +3,8 @@ commands /join and /part
 """
 
 from time import time
-from handle.core import Flag, Numeric, Isupport, Command, IRCD, Capability, Hook
+from handle.core import IRCD, Command, Capability
+from classes.data import Flag, Numeric, Isupport, Hook
 
 
 def cmd_join(client, recv):
@@ -13,25 +14,22 @@ def cmd_join(client, recv):
     """
 
     if recv[1] == '0':
-        for channel in client.channels:
+        for channel in client.channels():
             IRCD.new_message(client)
             channel.do_part(client, reason="Leaving all channels")
         return
 
-    if client.local and len(client.channels) >= 100 and not client.has_permission("channel:override:join:max"):
+    if client.local and len(client.channels()) >= 100 and not client.has_permission("channel:override:join:max"):
         return client.sendnumeric(Numeric.ERR_TOOMANYCHANNELS)
 
     pc = 0
     key = None
-    override = Flag.CLIENT_USER_SAJOIN in client.flags
+    override = client.has_flag(Flag.CLIENT_USER_SAJOIN)
     for chan in recv[1].split(',')[:12]:
         if client.local and int(time()) - client.creationtime > 5:
             client.local.flood_penalty += 10_000
 
         if (channel := IRCD.find_channel(chan)) and channel.find_member(client):
-            """
-            Client is already on that channel.
-            """
             continue
 
         if not IRCD.is_valid_channelname(chan) and (client.local and not channel):
@@ -58,7 +56,7 @@ def cmd_join(client, recv):
 
         if client.local and not override:
             if (error := channel.can_join(client, key)) != 0:
-                if type(error) == tuple:
+                if isinstance(error, tuple):
                     client.sendnumeric(error, channel.name)
                 IRCD.run_hook(Hook.JOIN_FAIL, client, channel, error)
                 continue
@@ -91,6 +89,9 @@ def cmd_part(client, recv):
 
     reason = ' '.join(recv[2:]).rstrip().removeprefix(':') if len(recv) > 2 else ''
 
+    if client.seconds_since_signon() <= 10:
+        reason = client.name
+
     if (static_part := IRCD.get_setting("static-part")) and not client.has_permission("channel:override:staticpart"):
         reason = static_part
 
@@ -118,6 +119,7 @@ def cmd_part(client, recv):
 
 
 def init(module):
+    IRCD.CHANLEN = 32
     Command.add(module, cmd_join, "JOIN", 1, Flag.CMD_USER)
     Command.add(module, cmd_part, "PART", 1, Flag.CMD_USER)
     Isupport.add("CHANTYPES", IRCD.CHANPREFIXES)

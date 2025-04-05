@@ -2,7 +2,8 @@
 provides usermode +B, mark the user as a bot, and adds support for "bot" message tag.
 """
 
-from handle.core import Isupport, Numeric, Usermode, MessageTag, Hook
+from handle.core import Usermode, Isupport, Numeric, Hook
+from modules.ircv3.messagetags import MessageTag
 
 
 class BotTag(MessageTag):
@@ -28,12 +29,12 @@ def bot_whois(client, whois_client, lines):
         lines.append(line)
 
 
-def bot_who_flag(client, user, status):
-    if 'B' in user.modes:
+def bot_who_flag(client, target_client):
+    if 'B' in target_client.user.modes:
         return 'B'
 
 
-def init(module):
+def post_load(module):
     Usermode.add(module, 'B', 1, 0, Usermode.allow_all, "Marks the user as a bot")
     Hook.add(Hook.WHOIS, bot_whois)
     Hook.add(Hook.WHO_STATUS, bot_who_flag)

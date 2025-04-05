@@ -2,7 +2,8 @@
 msgid capability
 """
 
-from handle.core import MessageTag, Hook, Isupport
+from handle.core import Hook, Isupport
+from modules.ircv3.messagetags import MessageTag
 
 import secrets
 import time
@@ -33,7 +34,7 @@ def add_msgid(client):
     client.mtags.append(tag)
 
 
-def init(module):
+def post_load(module):
     Hook.add(Hook.NEW_MESSAGE, add_msgid)
     MessageTag.add(MessageId)
     Isupport.add("MSGREFTYPES", MessageId.name)

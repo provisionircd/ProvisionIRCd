@@ -7,11 +7,17 @@ from handle.core import Numeric, Channelmode, Hook
 
 def chmode_z_is_ok(client, channel, action, mode, param, CHK_TYPE):
     if CHK_TYPE == Channelmode.CHK_ACCESS:
+        if not channel.client_has_membermodes(client, "oaq"):
+            return 0
+
         if 'z' not in client.user.modes and not client.has_permission("channel:override:mode"):
             client.sendnumeric(Numeric.ERR_INVALIDMODEPARAM, channel.name, 'z', '*', "You need to be connected with TLS to set mode +z.")
             """ Don't return 0 here, to hide ERR_CHANOPRIVSNEEDED """
-            return
+            return -1
+
+        """ All checks passed. """
         return 1
+
     return 0
 
 

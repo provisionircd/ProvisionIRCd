@@ -16,7 +16,8 @@ def reg_only_msg(client, channel, message, sendtype):
     if 'M' not in channel.modes:
         return Hook.ALLOW
 
-    if 'r' in client.user.modes or channel.client_has_membermodes(client, "vhoaq") or client.has_permission("channel:override:message:regonly"):
+    if ('r' in client.user.modes or channel.client_has_membermodes(client, "vhoaq")
+            or client.has_permission("channel:override:message:regonly")):
         return Hook.ALLOW
 
     client.sendnumeric(Numeric.ERR_CANNOTSENDTOCHAN, channel.name, "You need a registered nickname to speak in this channel")

@@ -8,7 +8,7 @@ from handle.core import IRCD, Command, Flag
 def cmd_svspartjoin(client, recv):
     if not (part_cmd := Command.find_command(client, "PART")) or not (join_cmd := Command.find_command(client, "JOIN")):
         return
-    if not (target := IRCD.find_user(recv[1])):
+    if not (target := IRCD.find_client(recv[1], user=1)):
         return
 
     match recv[0].lower():

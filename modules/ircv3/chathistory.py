@@ -22,10 +22,13 @@ def parse_history_filter(token: str, param: str, history_filter: HistoryFilter, 
     elif token == "msgid" and filter_name == token:
         setattr(history_filter, attribute_name, filter_value)
         return 1
+    else:
+        return 0
 
 
 def cmd_chathistory(client, recv):
-    if not client.has_capability("draft/chathistory") or not client.has_capability("server-time") or not client.has_capability("message-tags"):
+    if not client.has_capability("draft/chathistory") or not client.has_capability("server-time") or not client.has_capability(
+            "message-tags"):
         return
     target = recv[2]
     if not (channel := IRCD.find_channel(target)):
@@ -39,7 +42,8 @@ def cmd_chathistory(client, recv):
         case "before" | "after":
             history_filter = HistoryFilter()
             history_filter.cmd = ChatHistory.BEFORE if cmd == "before" else ChatHistory.AFTER
-            if not parse_history_filter("timestamp", recv[3], history_filter, "timestamp_1") and not parse_history_filter("msgid", recv[3], history_filter, "msgid_1"):
+            if (not parse_history_filter("timestamp", recv[3], history_filter, "timestamp_1")
+                    and not parse_history_filter("msgid", recv[3], history_filter, "msgid_1")):
                 data = f"FAIL CHATHISTORY INVALID_PARAMS {recv[3]} :Invalid parameter, must be timestamp=xxx or msgid=xxx"
                 return client.send([], data)
             limit = recv[4]
@@ -56,11 +60,13 @@ def cmd_chathistory(client, recv):
                 return client.send([], data)
             history_filter = HistoryFilter()
             history_filter.cmd = ChatHistory.BETWEEN
-            if not parse_history_filter("timestamp", recv[3], history_filter, "timestamp_1") and not parse_history_filter("msgid", recv[3], history_filter, "msgid_1"):
+            if (not parse_history_filter("timestamp", recv[3], history_filter, "timestamp_1")
+                    and not parse_history_filter("msgid", recv[3], history_filter, "msgid_1")):
                 data = f"FAIL CHATHISTORY INVALID_PARAMS {recv[3]} :Invalid parameter, must be timestamp=xxx or msgid=xxx"
                 return client.send([], data)
 
-            if not parse_history_filter("timestamp", recv[4], history_filter, "timestamp_2") and not parse_history_filter("msgid", recv[4], history_filter, "msgid_2"):
+            if (not parse_history_filter("timestamp", recv[4], history_filter, "timestamp_2")
+                    and not parse_history_filter("msgid", recv[4], history_filter, "msgid_2")):
                 data = f"FAIL CHATHISTORY INVALID_PARAMS {recv[4]} :Invalid parameter, must be timestamp=xxx or msgid=xxx"
                 return client.send([], data)
             limit = recv[5]
@@ -81,7 +87,8 @@ def cmd_chathistory(client, recv):
                 results = get_chathistory(channel, history_filter)
                 send_history(client, channel, results)
                 return
-            if not parse_history_filter("timestamp", recv[3], history_filter, "timestamp_1") and not parse_history_filter("msgid", recv[3], history_filter, "msgid_1"):
+            if (not parse_history_filter("timestamp", recv[3], history_filter, "timestamp_1")
+                    and not parse_history_filter("msgid", recv[3], history_filter, "msgid_1")):
                 data = f"FAIL CHATHISTORY INVALID_PARAMS {recv[3]} :Invalid parameter, must be timestamp=xxx or msgid=xxx"
                 return client.send([], data)
             results = get_chathistory(channel, history_filter)

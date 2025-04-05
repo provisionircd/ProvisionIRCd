@@ -3,16 +3,16 @@ ping/pong handler
 """
 
 from time import time
-from handle.core import Flag, Command, IRCD
+from handle.core import IRCD, Command, Flag
 from handle.logger import logging
 
 
 def cmd_ping(client, recv):
     if client.server:
-        if not (ping_from := IRCD.find_server(recv[1])):
+        if not (ping_from := IRCD.find_client(recv[1])):
             logging.error(f"Ping from unknown server: {recv[1]}")
             return
-        if not (ping_to := IRCD.find_server(recv[2])):
+        if not (ping_to := IRCD.find_client(recv[2])):
             logging.error(f"Server {ping_from.name} tries to ping unknown server: {recv[2]}")
             return
         data = f":{ping_to.id} PONG {ping_to.name} {ping_from.name}"

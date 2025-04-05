@@ -2,7 +2,7 @@
 /chgcname command
 """
 
-from handle.core import Command, Capability, IRCD, Flag, Numeric
+from handle.core import IRCD, Command, Capability, Flag, Numeric
 
 
 # https://ircv3.net/specs/extensions/channel-rename
@@ -46,23 +46,20 @@ def cmd_rename(client, recv):
     if client.local:
         IRCD.server_notice(client, f"Channel {channel.name} successfully changed to {name}")
 
-    IRCD.send_to_servers(client, [], f":{client.uid} RENAME {channel.name} {name}")
+    IRCD.send_to_servers(client, [], f":{client.id} RENAME {channel.name} {name}")
 
     old_name = channel.name
     channel.name = name
 
-    for user in [u for u in IRCD.local_users() if channel.find_member(u) and not u.has_capability("draft/channel-rename")]:
-        data = f":{user.fullmask} PART {old_name}"
-        user.send([], data)
-        data = f":{user.fullmask} JOIN {channel.name}"
-        user.send([], data)
+    for user in [u for u in IRCD.get_clients(local=1) if channel.find_member(u) and not u.has_capability("draft/channel-rename")]:
+        user.send([], f":{user.fullmask} PART {old_name}")
+        user.send([], f":{user.fullmask} JOIN {channel.name}")
 
         Command.do(user, "TOPIC", channel.name)
         Command.do(user, "NAMES", channel.name)
 
-    data = f"RENAME {old_name} {channel.name} :{reason}"
-    for user in [u for u in IRCD.local_users() if channel.find_member(u) and u.has_capability("draft/channel-rename")]:
-        user.send([], data)
+    for user in [u for u in IRCD.get_clients(local=1, cap="draft/channel-rename") if channel.find_member(u)]:
+        user.send([], f"RENAME {old_name} {channel.name} :{reason}")
 
     if client.local:
         msg = f"*** {client.name} ({client.user.username}@{client.user.realhost}) used RENAME to change channel name {old_name} to {name}"

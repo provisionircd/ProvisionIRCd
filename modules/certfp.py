@@ -2,7 +2,7 @@
 Client certificate fingerprint support
 """
 
-from handle.core import Numeric, IRCD, Hook
+from handle.core import IRCD, Numeric, Hook
 
 
 def certfp_connect(client):
@@ -30,9 +30,10 @@ def extract_client_san(cert):
 def get_certfp(client):
     if not client.local.tls or client.get_md_value("certfp"):
         return
-    cert = client.local.socket.get_peer_certificate()
-    if not cert:
+
+    if not (cert := client.local.socket.get_peer_certificate()):
         return
+
     if cn := extract_client_cn(cert):
         client.add_md(name="cert_cn", value=cn, sync=0)
 
@@ -53,6 +54,7 @@ def init(module):
     """ Grab certificate first (if any) so that we can work with it. """
     Hook.add(Hook.NEW_CONNECTION, get_certfp, priority=9999)
     Hook.add(Hook.SERVER_LINK_OUT_CONNECTED, get_certfp, priority=9999)
+    # Also call get_certfp() on LOCAL_CONNECT for md.sync()
     Hook.add(Hook.LOCAL_CONNECT, get_certfp, priority=9999)
     Hook.add(Hook.LOCAL_CONNECT, certfp_connect)
     Hook.add(Hook.WHOIS, certfp_whois)

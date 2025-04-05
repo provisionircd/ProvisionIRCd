@@ -12,7 +12,7 @@ def cmd_cycle(client, recv):
             client.sendnumeric(Numeric.ERR_NOSUCHCHANNEL, chan)
             continue
 
-        if not client.channels:
+        if not client.channels():
             client.sendnumeric(Numeric.ERR_NOTONCHANNEL, chan)
             continue
 

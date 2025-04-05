@@ -13,19 +13,19 @@ def cmd_clones(client, recv):
     clones = set()
     foundclones = 0
 
-    for user_client in IRCD.global_users():
+    for user_client in IRCD.get_clients(user=1):
         if user_client.ip not in clones:
             clones.add(user_client.ip)
             logins = [
-                c.name for c in IRCD.global_users()
-                if c.registered and not c.ulined and 'S' not in c.user.modes and c.ip == user_client.ip
+                c.name for c in IRCD.get_clients(user=1)
+                if c.registered and not c.is_uline() and 'S' not in c.user.modes and c.ip == user_client.ip
             ]
             if len(logins) > 1:
                 foundclones = 1
                 client.sendnumeric(Numeric.RPL_CLONES, user_client.name, len(logins), user_client.ip, ' '.join(logins))
 
     if not foundclones:
-        client.sendnumeric(Numeric.RPL_NOCLONES, "server" if not IRCD.global_servers() else "network")
+        client.sendnumeric(Numeric.RPL_NOCLONES, "server" if not any(IRCD.get_clients(server=1)) else "network")
 
 
 def init(module):

@@ -2,7 +2,8 @@
 account-tag capability
 """
 
-from handle.core import Capability, MessageTag, Hook
+from handle.core import Capability, Hook
+from modules.ircv3.messagetags import MessageTag
 
 
 class AccountTag(MessageTag):
@@ -20,7 +21,7 @@ def add_account_tag(client):
         client.mtags.append(AccountTag(value=client.user.account))
 
 
-def init(module):
+def post_load(module):
     Capability.add("account-tag")
     Hook.add(Hook.NEW_MESSAGE, add_account_tag)
     MessageTag.add(AccountTag)

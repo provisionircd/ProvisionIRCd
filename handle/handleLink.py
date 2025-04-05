@@ -1,80 +1,83 @@
 import hashlib
 import socket
-import time
 import select
+from time import time
 
-import OpenSSL
+from OpenSSL import SSL
 
 from classes.errors import Error
 from handle.client import make_client, make_server
-from handle.core import IRCD, Isupport, Client, Channel, Hook, Extban
+from handle.core import IRCD, Isupport, Hook, Flag
+from classes.data import Extban
 from handle.logger import logging
 
 
-def sync_channels(newserver):
-    if newserver.exitted:
+def start_link_negotiation(newserver):
+    if not (link := IRCD.get_link(name=newserver.name)) or newserver.has_flag(Flag.CLIENT_EXIT):
+        newserver.exit("Server exitted abruptly")
         return
 
-    logging.debug(f"Syncing channels to {newserver.name}")
+    IRCD.current_link_sync = newserver
+    logging.debug(f"Starting link negotiation to: {newserver.name}")
+    newserver.send([], f"PASS :{link.password}")
+    isupport_str = ' '.join(isupport.string for isupport in Isupport.table)
+    newserver.send([], f"PROTOCTL EAUTH={IRCD.me.name} SID={IRCD.me.id} BIGLINES")
+    newserver.send([], f"PROTOCTL {isupport_str}")
+    newserver.send([], f"PROTOCTL NOQUIT EAUTH SID CLK SJOIN SJOIN2 UMODE2 VL SJ3 SJSBY "
+                       f"MTAGS NICKIP ESVID NEXTBANS EXTSWHOIS TS={int(time())} BOOTED={IRCD.me.creationtime}")
+    newserver.send([], f"PROTOCTL NICKCHARS=utf8 CHANNELCHARS=utf8")
+    newserver.send([], f"SERVER {IRCD.me.name} 1 :P300B-*-{IRCD.me.id} {IRCD.me.info}")
+
+
+def sync_users(newserver):
+    if newserver.has_flag(Flag.CLIENT_EXIT):
+        return
+
+    for client in [c for c in IRCD.get_clients(user=1, registered=1) if c.direction != newserver]:
+        client.sync(server=newserver, cause="sync_users()")
+
+
+def sync_channels(newserver):
+    if newserver.has_flag(Flag.CLIENT_EXIT):
+        return
 
     try:
         for channel in [c for c in IRCD.get_channels() if c.name[0] != '&']:
-            first_sjoin = 1
-            modeparams = []
-            for mode in channel.modes:
-                if param := channel.get_param(mode):
-                    modeparams.append(param)
+            modeparams = [channel.get_param(mode) for mode in channel.modes if channel.get_param(mode)]
+            modeparams_str = f" {' '.join(modeparams)}" if modeparams else ''
+            mode_string = f"+{channel.modes}{modeparams_str} "
 
-            modeparams = f" {' '.join(modeparams)}" if modeparams else f"{' '.join(modeparams)}"
-            memberlist = []
-
+            members = []
             for client in channel.clients():
-                prefix = ''
-                for cmode in [cmode for cmode in channel.get_membermodes_sorted() if channel.client_has_membermodes(client, cmode.flag)]:
-                    prefix += cmode.sjoin_prefix
-                member = prefix + client.id
-                memberlist.append(member)
-
-            if memberlist:
-                memberlist = ' '.join(memberlist)
+                prefix = ''.join(cmode.sjoin_prefix for cmode in channel.get_membermodes_sorted()
+                                 if channel.client_has_membermodes(client, cmode.flag))
+                members.append(prefix + client.id)
 
             list_entries = []
             for mode in channel.List:
                 cmode = IRCD.get_channelmode_by_flag(mode)
-                sjoin_prefix = cmode.sjoin_prefix
                 for entry in channel.List[mode]:
-                    string = ''
-                    if "SJSBY" in newserver.local.protoctl:
-                        string = f"<{entry.set_time},{entry.set_by}>"
+                    prefix = f"<{entry.set_time},{entry.set_by}>" if "SJSBY" in newserver.local.protoctl else ''
 
                     if entry.mask.startswith(Extban.symbol):
-                        string += sjoin_prefix + Extban.convert_param(entry.mask, convert_to_name=0)
+                        mask = Extban.convert_param(entry.mask, convert_to_name=0)
                     else:
-                        string += sjoin_prefix + entry.mask
+                        mask = entry.mask
 
-                    list_entries.append(string)
+                    list_entries.append(prefix + cmode.sjoin_prefix + mask)
 
-            if list_entries:
-                list_entries = ' '.join(list_entries)
+            sjoin_items = members + list_entries
 
-            sjoin_list = []
-
-            if memberlist:
-                sjoin_list.extend(memberlist.split())
-
-            if list_entries:
-                sjoin_list.extend(list_entries.split())
-
-            for i in range(0, len(sjoin_list), 20):
-                split_sjoin_list = sjoin_list[i:i + 20]
-                sjoin_modes = f"+{channel.modes}{modeparams} " if first_sjoin else ''
-                data = f"{channel.creationtime} {channel.name} {sjoin_modes}:{' '.join(split_sjoin_list)}"
-                newserver.send([], f":{IRCD.me.id} SJOIN {data}")
-                first_sjoin = 0
+            if not sjoin_items:
+                newserver.send([], f":{IRCD.me.id} SJOIN {channel.creationtime} {channel.name} {mode_string}")
+            else:
+                for i in range(0, len(sjoin_items), 20):
+                    batch = sjoin_items[i:i + 20]
+                    modes = mode_string if i == 0 else ''
+                    newserver.send([], f":{IRCD.me.id} SJOIN {channel.creationtime} {channel.name} {modes}:{' '.join(batch)}")
 
             if channel.topic:
-                data = f":{IRCD.me.id} TOPIC {channel.name} {channel.topic_author} {channel.topic_time} :{channel.topic}"
-                newserver.send([], data)
+                newserver.send([], f":{IRCD.me.id} TOPIC {channel.name} {channel.topic_author} {channel.topic_time} :{channel.topic}")
 
             IRCD.run_hook(Hook.SERVER_SJOIN_OUT, newserver, channel)
 
@@ -82,141 +85,99 @@ def sync_channels(newserver):
         logging.exception(ex)
 
 
-def broadcast_network_to_new_server(newserver):
-    if newserver.exitted:
-        return
-
-    logging.debug(f"Broadcasting all our servers to {newserver.name}")
-    for server in [s for s in IRCD.global_servers() if s != newserver and s.name and s.id]:  # and s.server.synced]:
-        logging.debug(f"Syncing server {server.name} to {newserver.name}")
-        data = f":{IRCD.me.id} SID {server.name} {server.hopcount + 1} {server.id} :{server.info}"
-        newserver.send([], data)
-
-
-def broadcast_new_server_to_network(newserver):
-    if newserver.exitted:
-        return
-
-    logging.debug(f"Broadcasting new server ({newserver.name}) to the rest of the network")
-    for server in [c for c in IRCD.local_servers() if c.direction != newserver]:  # and c.server.synced]:
-        logging.debug(f"Syncing new server {newserver.name} to {server.name}")
-        data = f":{IRCD.me.id} SID {newserver.name} 2 {newserver.id} :{newserver.info}"
-        server.send([], data)
-
-
-def start_link_negotiation(newserver):
-    if not (link := next((link for link in IRCD.configuration.links if link.name == newserver.name), 0)) or newserver.exitted:
-        # Server exitted abruptly.
-        newserver.exit("Server exitted abruptly")
-        return
-
-    logging.debug(f"Starting link negotiation to: {newserver.name}")
-    newserver.send([], f"PASS :{link.password}")
-
-    info = []
-    for isupport in Isupport.table:
-        info.append(isupport.string)
-    newserver.send([], f"PROTOCTL EAUTH={IRCD.me.name} SID={IRCD.me.id} {' '.join(info)}")
-    newserver.send([], f"PROTOCTL NOQUIT EAUTH SID CLK SJOIN SJOIN2 UMODE2 VL SJ3 SJSBY MTAGS NICKIP ESVID NEXTBANS EXTSWHOIS TS={int(time.time())} BOOTED={IRCD.boottime}")
-    newserver.send([], f"PROTOCTL NICKCHARS=utf8 CHANNELCHARS=utf8 BIGLINES")
-    newserver.send([], f"SERVER {IRCD.me.name} 1 :P300B-*-{IRCD.me.id} {IRCD.me.info}")
-    IRCD.run_hook(Hook.SERVER_LINK_POST_NEGOTATION, newserver)
-
-
-def sync_users(newserver):
-    if newserver.exitted:
-        return
-
-    logging.debug(f"Syncing all global registered users to {newserver.name}")
-    for client in [c for c in IRCD.global_registered_users() if c.direction != newserver and c.registered]:
-        # logging.debug(f"Syncing user {client.name} (UID: {client.id}) (uplink={client.uplink.name}, direction={client.direction.name}) to {newserver.name}")
-        client.sync(server=newserver, cause="sync_users()")
-
-
 def sync_data(newserver):
-    if newserver.exitted:
+    if newserver.has_flag(Flag.CLIENT_EXIT):
         return
 
-    if Client.table:
-        sync_users(newserver)
+    sync_users(newserver)
+    sync_channels(newserver)
 
-    if Channel.table:
-        sync_channels(newserver)
-
-    cloakhash = IRCD.get_setting("cloak-key")
-    cloakhash = hashlib.md5(cloakhash.encode("utf-8")).hexdigest()
-    data = f":{IRCD.me.id} NETINFO {IRCD.maxgusers} {int(time.time())} {IRCD.versionnumber.replace('.', '')} MD5:{cloakhash} {IRCD.boottime} 0 0 :{IRCD.me.info}"
+    cloakhash = hashlib.md5(IRCD.get_setting("cloak-key").encode("utf-8")).hexdigest()
+    data = (f":{IRCD.me.id} NETINFO {IRCD.maxgusers} {int(time())} {IRCD.versionnumber.replace('.', '')} "
+            f"MD5:{cloakhash} {IRCD.me.creationtime} 0 0 :{IRCD.me.info}")
     newserver.send([], data)
 
     IRCD.run_hook(Hook.SERVER_SYNC, newserver)
-
     logging.debug(f"We ({IRCD.me.name}) are done syncing to {newserver.name}, sending EOS.")
     newserver.send([], f":{IRCD.me.id} EOS")
-    for server_client in [c for c in IRCD.global_servers() if c not in [IRCD.me, newserver] and c.server.synced]:
+    for server_client in [c for c in IRCD.get_clients(server=1) if c not in [IRCD.me, newserver]]:
         newserver.send([], f":{server_client.id} EOS")
+    IRCD.run_hook(Hook.POST_SERVER_CONNECT, newserver)
 
 
 def deny_direct_link(client, error: int, *args):
     message = Error.send(error, *args)
     if IRCD.me.name != '*':
-        data = f":{IRCD.me.id} ERROR :Link with {IRCD.me.name} denied: {message}"
-        client.direct_send(data)
-    IRCD.log(IRCD.me, "error", "link", "LINK_DENIED", f"Link with {client.name} denied: {message}")
+        client.direct_send(f":{IRCD.me.id} ERROR :Link with {IRCD.me.name} denied: {message}")
+    if client.name != '*':
+        IRCD.log(IRCD.me, "error", "link", "LINK_DENIED", f"Link with {client.name} denied: {message}")
     logging.debug(f"[deny_direct_link] {client.name}: {message}")
     client.exit(message)
 
 
-def start_outgoing_link(link, tls=0, auto_connect=0):
-    link.auto_connect = auto_connect
+def start_outgoing_link(link, tls=0, auto_connect=0, starter=None):
     client = None
-    host = link.outgoing["host"]
-    port = int(link.outgoing["port"])
 
     try:
+        host = link.outgoing["host"]
+        port = int(link.outgoing["port"])
+
         if not host.replace('.', '').isdigit():
             host = socket.gethostbyname(host)
 
         client = make_client(direction=None, uplink=IRCD.me)
-        IRCD.current_link_sync = client
         make_server(client)
+
         client.server.link = link
         client.local.socket = socket.socket()
-        client.local.auto_connect = auto_connect
+        client.server.link.auto_connect = auto_connect
         client.name = link.name
         client.ip = host
         client.port = port
 
         if tls and IRCD.default_tls["ctx"]:
             client.local.tls = IRCD.default_tls["ctx"]
-            client.local.socket = OpenSSL.SSL.Connection(IRCD.default_tls["ctx"], socket=client.local.socket)
-            logging.debug(f"Outgoing socket wrapped in TLS")
+            client.local.socket = SSL.Connection(IRCD.default_tls["ctx"], socket=client.local.socket)
+
+        IRCD.client_by_sock[client.local.socket] = client
 
         if IRCD.use_poll:
-            IRCD.poller.register(client.local.socket, select.POLLIN | select.POLLPRI | select.POLLHUP | select.POLLERR)
-        IRCD.run_hook(Hook.SERVER_LINK_OUT, client)
+            IRCD.poller.register(client.local.socket, select.POLLIN | select.POLLPRI | select.POLLHUP | select.POLLERR | select.EPOLLRDHUP)
 
+        IRCD.run_hook(Hook.SERVER_LINK_OUT, client)
         try:
             client.local.socket.connect((host, port))
-            try:
-                client.local.socket.do_handshake()
-            except:
-                pass
-            IRCD.run_hook(Hook.SERVER_LINK_OUT_CONNECTED, client)
+            if tls:
+                try:
+                    client.local.socket.do_handshake()
+                except SSL.WantReadError:
+                    # Possibly denied early @ PROTOCTL.
+                    pass
+                except Exception as ex:
+                    logging.exception(ex)
+
             client.local.handshake = 1
             client.local.socket.setblocking(False)
+            IRCD.run_hook(Hook.SERVER_LINK_OUT_CONNECTED, client)
             logging.debug(f"Succesfully connected out: {host}:{port}")
+            start_link_negotiation(client)
+
         except BlockingIOError:
             # This is normal on non-blocking socket.
             pass
-        except Exception as ex:
-            client.exit(str(ex))
-            IRCD.log(IRCD.me, "error", "link", "LINK_OUT_FAIL", f"Unable to establish outgoing link to {link.name}: {ex}", sync=0)
-            return
 
-        start_link_negotiation(client)
+        except Exception as ex:
+            if not isinstance(ex, (TimeoutError, ConnectionRefusedError, PermissionError, OSError)):
+                logging.exception(ex)
+            elif isinstance(ex, PermissionError):
+                logging.error(f"Unable to connect to {host}:{port}: {str(ex)}. Are you firewalled?")
+            client.exit(str(ex))
+            # if starter.user and not link.auto_connect:
+            #     msg = f"Unable to establish outgoing link to {link.name}: {ex}"
+            #     IRCD.server_notice(starter, msg)
+            return
 
     except Exception as ex:
         logging.exception(ex)
-        # Outgoing link timed out or failed.
         if client:
             client.exit(str(ex))

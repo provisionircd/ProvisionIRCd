@@ -2,27 +2,24 @@
 /eos command (server)
 """
 
-from handle.core import Command, Flag, IRCD, Hook, Batch
+from handle.core import IRCD, Command, Flag, Hook
+from modules.ircv3.batch import Batch
 from handle.logger import logging
 
 
+@logging.client_context
 def cmd_eos(client, recv):
     if IRCD.current_link_sync in [client, client.uplink, client.direction]:
         IRCD.current_link_sync = None
-        # logging.debug(f"current_link_sync for {client.name} unset.")
+
     if client.server.synced:
         return
-
-    IRCD.send_to_servers(client, mtags=[], data=f":{client.id} EOS")
-    logging.debug(f"EOS received by: {client.name} (uplink: {client.uplink.name})")
 
     client.server.synced = 1
     client.add_flag(Flag.CLIENT_REGISTERED)
 
-    # for server_client in [c for c in IRCD.global_servers() if c.direction == client and c != client]:
-    #     server_client.server.synced = 1
-    #     server_client.add_flag(Flag.CLIENT_REGISTERED)
-    #     IRCD.run_hook(Hook.SERVER_SYNCED, server_client)
+    IRCD.send_to_servers(client, mtags=[], data=f":{client.id} EOS")
+    logging.debug(f"EOS received. Uplink: {client.uplink.name})")
 
     """ We can now process other servers' recv buffer """
     IRCD.do_delayed_process()
@@ -31,7 +28,6 @@ def cmd_eos(client, recv):
     if client in IRCD.send_after_eos:
         logging.debug(f"Now sending previously held back server data to {client.name}")
         for mtags, data in IRCD.send_after_eos[client]:
-            # logging.debug(f"Delayed data: {data.rstrip()}")
             IRCD.send_to_one_server(client, mtags, data)
         del IRCD.send_after_eos[client]
 

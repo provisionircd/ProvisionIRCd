@@ -10,7 +10,9 @@ def cmd_user(client, recv):
         return client.sendnumeric(Numeric.ERR_ALREADYREGISTRED)
 
     if client.server:
-        return client.exit(f"This port is for servers only.")
+        client.direct_send("ERROR :This port is for servers only")
+        client.exit(f"This port is for servers only.")
+        return
 
     if not client.user:
         return
@@ -34,4 +36,4 @@ def cmd_user(client, recv):
 
 
 def init(module):
-    Command.add(module, cmd_user, "USER", 4, Flag.CMD_USER, Flag.CMD_UNKNOWN, Flag.CMD_SERVER)
+    Command.add(module, cmd_user, "USER", 4, Flag.CMD_UNKNOWN)

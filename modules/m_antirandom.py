@@ -460,47 +460,43 @@ stringdict = {
 
 def randomness(string, strict=True):
     rnd = 0
-    for i in range(0, len(string), 1):
-        first = string[i:i + 2]
-        try:
-            n = string[i + 2]
-        except IndexError:
-            # End of string.
-            break
-        if first in stringdict and n in stringdict[first]:
-            # If the string is short, be more strict.
-            rnd += 1 if len(string) > 6 or not strict else 2
+    str_lower = string.lower()
+    len_str = len(str_lower)
+
+    for i in range(len_str - 2):
+        if (first := str_lower[i:i + 2]) in stringdict and str_lower[i + 2] in stringdict[first]:
+            # If the string is short, be more strict
+            rnd += 2 if len_str <= 6 and strict else 1
 
     # Randomness of 2 or higher is recommended.
     return rnd
 
 
-def antirandom_check(client):
-    if client.name:
-        nick = client.name
-        score = randomness(nick.lower())
-        if score >= max_score:
-            client.exit("Please provide a valid nickname")
-            IRCD.send_snomask(client, 's', f"*** Randomness match for {client.name}[{client.ip}] with score {score} (/nick)")
-            return Hook.DENY
+def check_aleatory(name, min_length):
+    """Check if string starts with a letter followed by only digits."""
+    return name[0].isalpha() and name[1:].isdigit() and len(name) > min_length
 
-        if nick[0].isalpha() and nick[1:].isdigit() and len(nick) > 3:
-            client.exit("Please provide a valid nickname")
-            IRCD.send_snomask(client, 's', f"*** Aleatory match for {nick}[{client.ip}]")
-            return Hook.DENY
 
-    if client.user.username:
-        ident = client.user.username
-        score = randomness(ident.lower())
-        if score >= max_score + 1:  # Less strict for idents.
-            client.exit("Please provide a valid ident")
-            IRCD.send_snomask(client, 's', f"*** Randomness match for {client.name}[{client.ip}] with score {score} (/user)")
-            return Hook.DENY
+def validate_client_identifier(client, identifier, identifier_type, max_score_value, min_length) -> int:
+    if (score := randomness(identifier.lower())) >= max_score_value:
+        client.exit(f"Please provide a valid {identifier_type}")
+        IRCD.send_snomask(client, 's', f"*** Randomness match for {client.name}[{client.ip}] with score {score} (/{identifier_type})")
+        return 0
 
-        if ident[0].isalpha() and ident[1:].isdigit() and len(ident) > 4:
-            client.exit("Please provide a valid ident")
-            IRCD.send_snomask(client, 's', f"*** Aleatory ident match for {client.name}[{client.ip}]")
-            return Hook.DENY
+    if check_aleatory(identifier, min_length):
+        client.exit(f"Please provide a valid {identifier_type}")
+        IRCD.send_snomask(client, 's', f"*** Aleatory {identifier_type} match for {client.name}[{client.ip}]")
+        return 0
+
+    return 1
+
+
+def antirandom_check(client) -> Hook:
+    if client.name and not validate_client_identifier(client, client.name, "nick", max_score, 3):
+        return Hook.DENY
+
+    if client.user.username and not validate_client_identifier(client, client.user.username, "ident", max_score + 1, 4):
+        return Hook.DENY
 
     return Hook.CONTINUE
 

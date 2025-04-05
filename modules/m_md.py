@@ -3,7 +3,8 @@
 Exchange mod data between servers.
 """
 
-from handle.core import IRCD, Command, Flag, MessageTag
+from handle.core import IRCD, Command, Flag
+from modules.ircv3.messagetags import MessageTag
 
 
 class S2sMd(MessageTag):
@@ -18,7 +19,7 @@ class S2sMd(MessageTag):
 
 def cmd_md(client, recv):
     if recv[1] == "client":
-        if not (md_client := IRCD.find_user(recv[2])) and not (md_client := IRCD.find_server(recv[2])):
+        if not (md_client := IRCD.find_client(recv[2])) and not (md_client := IRCD.find_client(recv[2])):
             # Closed early. Killed.
             return
 
@@ -28,6 +29,6 @@ def cmd_md(client, recv):
             md_client.del_md(recv[3])
 
 
-def init(module):
+def post_load(module):
     Command.add(module, cmd_md, "MD", 3, Flag.CMD_SERVER)
     MessageTag.add(S2sMd)

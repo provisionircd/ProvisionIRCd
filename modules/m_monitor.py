@@ -12,23 +12,23 @@ MAXMONITOR = 200
 
 
 class Monitor:
+    monlist = {}
+
+
+def cmd_monitor(client, recv):
     """
     Maintain your MONITOR list. You will be notified when a nickname on your MONITOR list
     connects or disconnects, even if you don't share a channel.
     Your watchlist will be cleared when you disconnect.
     -
-    Add a nickname:             /MONITOR + nickname1[,nickname2]
-    Remove a nickname:          /MONITOR - nickname1[,nickname2]
-    View monitor list:          /MONITOR <param>
+    Add a nickname:             MONITOR + nickname1[,nickname2]
+    Remove a nickname:          MONITOR - nickname1[,nickname2]
+    View monitor list:          MONITOR <param>
     Param C:                    Clears your monitor list.
     Param L:                    Displays your entire monitor list.
     Param S:                    Displays entire monitor list, with status.
     """
 
-    monlist = {}
-
-
-def cmd_monitor(client, recv):
     if client.seconds_since_signon() > 5:
         client.local.flood_penalty += 10_000
     try:
@@ -41,33 +41,31 @@ def cmd_monitor(client, recv):
         if recv[1] == '+':
             currently_online = []
             for target in recv[2].split(','):
-                skip_target = 0
                 if target.lower() in monlist_lower:
                     continue
                 if len(Monitor.monlist[client]) >= MAXMONITOR:
                     return client.sendnumeric(Numeric.RPL_MONLISTFULL)
-                for c in target:
-                    if c.lower() not in IRCD.NICKCHARS:
-                        skip_target = 1
-                if skip_target:
+                if any(c.lower() not in IRCD.NICKCHARS for c in target):
                     continue
+
                 Monitor.monlist[client].append(target)
-                if is_online := next((u.fullmask for u in IRCD.global_clients() if u.name.lower() == target.lower()), 0):
+
+                if is_online := next((u.fullmask for u in IRCD.get_clients(user=1) if u.name.lower() == target.lower()), 0):
                     currently_online.append(is_online)
 
             buffer = []
             if currently_online:
                 prefix = f":{IRCD.me.name} {Numeric.RPL_MONONLINE[0]} {client.name} :"
-                prefix_len = len(prefix)
-                max_len = 510 - prefix_len
+                max_len = 510 - len(prefix)
+
                 for user in currently_online:
-                    len_now = len(','.join(buffer))
-                    len_next = len_now + (len(user) + 1)  # Including separating comma.
-                    if len_next >= max_len:
-                        client.sendnumeric(Numeric.RPL_MONONLINE, ','.join(buffer))
+                    buffer_str = ','.join(buffer)
+                    if buffer and len(buffer_str) + len(user) + 1 >= max_len:
+                        client.sendnumeric(Numeric.RPL_MONONLINE, buffer_str)
                         buffer = [user]
-                        continue
-                    buffer.append(user)
+                    else:
+                        buffer.append(user)
+
                 if buffer:
                     client.sendnumeric(Numeric.RPL_MONONLINE, ','.join(buffer))
 
@@ -82,57 +80,76 @@ def cmd_monitor(client, recv):
 
         elif recv[1] == 'L':
             buffer = []
+            buffer_size = 0
+            max_size = 400
+
             for target in Monitor.monlist[client]:
-                buffer.append(target)
-                if len(' '.join(buffer)) >= 400:
+                target_size = len(target) + (1 if buffer else 0)
+
+                if buffer_size + target_size >= max_size:
                     client.sendnumeric(Numeric.RPL_MONLIST, ' '.join(buffer))
-                    buffer.clear()
+                    buffer = [target]
+                    buffer_size = len(target)
+                else:
+                    buffer.append(target)
+                    buffer_size += target_size
+
             if buffer:
                 client.sendnumeric(Numeric.RPL_MONLIST, ' '.join(buffer))
             client.sendnumeric(Numeric.RPL_ENDOFMONLIST)
 
         elif recv[1] == 'S':
             online_buffer, offline_buffer = [], []
+
             for target in Monitor.monlist[client]:
-                target_client = IRCD.find_user(target)
-                buffer, numeric = (
-                    (online_buffer, Numeric.RPL_MONONLINE) if target_client else
-                    (offline_buffer, Numeric.RPL_MONOFFLINE)
-                )
-                buffer.append(target_client.fullmask if target_client else target)
+                target_client = IRCD.find_client(target)
+
+                if target_client:
+                    buffer = online_buffer
+                    numeric = Numeric.RPL_MONONLINE
+                    value = target_client.fullmask
+                else:
+                    buffer = offline_buffer
+                    numeric = Numeric.RPL_MONOFFLINE
+                    value = target
+
+                buffer.append(value)
+
                 if len(' '.join(buffer)) >= 400:
                     client.sendnumeric(numeric, ' '.join(buffer))
                     buffer.clear()
-            if online_buffer:
-                client.sendnumeric(Numeric.RPL_MONONLINE, ' '.join(online_buffer))
-            if offline_buffer:
-                client.sendnumeric(Numeric.RPL_MONOFFLINE, ' '.join(offline_buffer))
+
+            for buffer, numeric in [(online_buffer, Numeric.RPL_MONONLINE), (offline_buffer, Numeric.RPL_MONOFFLINE)]:
+                if buffer:
+                    client.sendnumeric(numeric, ' '.join(buffer))
 
     except Exception as ex:
         logging.exception(ex)
 
 
 def mon_connect(client):
-    mon_notify = [u for u in IRCD.local_users() if u in Monitor.monlist and client.name.lower() in [x.lower() for x in Monitor.monlist[u]]]
-    for user in mon_notify:
-        user.sendnumeric(Numeric.RPL_MONONLINE, client.fullmask)
+    for user in IRCD.get_clients(user=1):
+        if user in Monitor.monlist and any(target.lower() == client.name.lower() for target in Monitor.monlist[user]):
+            user.sendnumeric(Numeric.RPL_MONONLINE, client.fullmask)
 
 
 def mon_quit(client, reason):
-    mon_notify = [u for u in IRCD.local_users() if u in Monitor.monlist and client.name.lower() in [x.lower() for x in Monitor.monlist[u]]]
-    for user in mon_notify:
-        user.sendnumeric(Numeric.RPL_MONOFFLINE, client.fullmask)
+    for user in IRCD.get_clients(user=1):
+        if user in Monitor.monlist and any(target.lower() == client.name.lower() for target in Monitor.monlist[user]):
+            user.sendnumeric(Numeric.RPL_MONOFFLINE, client.fullmask)
+
     if client in Monitor.monlist:
         del Monitor.monlist[client]
 
 
 def mon_nickchange(client, newnick):
-    mon_notify_on = [u for u in IRCD.local_users() if u in Monitor.monlist and newnick.lower() in [x.lower() for x in Monitor.monlist[u]]]
-    mon_notify_off = [u for u in IRCD.local_users() if u in Monitor.monlist and client.name.lower() in [x.lower() for x in Monitor.monlist[u]]]
-    for user in mon_notify_on:
-        user.sendnumeric(Numeric.RPL_MONONLINE, f"{newnick}!{client.user.username}@{client.user.cloakhost}")
-    for user in mon_notify_off:
-        user.sendnumeric(Numeric.RPL_MONOFFLINE, client.fullmask)
+    for user in IRCD.get_clients(user=1, local=1):
+        if not (monlist := Monitor.monlist.get(user)):
+            continue
+        if any(n.lower() == newnick.lower() for n in monlist):
+            user.sendnumeric(Numeric.RPL_MONONLINE, f"{newnick}!{client.user.username}@{client.user.host}")
+        if any(n.lower() == client.name.lower() for n in monlist):
+            user.sendnumeric(Numeric.RPL_MONOFFLINE, client.fullmask)
 
 
 def monitor_event(client, monitor_type, new_ident=None, new_host=None):
@@ -143,27 +160,29 @@ def monitor_event(client, monitor_type, new_ident=None, new_host=None):
         "setname": "setname"
     }
 
+    format_map = {
+        "away": lambda: f":{client.fullmask} AWAY {':' + client.user.away if client.user.away else ''}",
+        "account": lambda: f":{client.fullmask} ACCOUNT {client.user.account}",
+        "chghost": lambda: f":{client.fullmask} CHGHOST {new_ident} {new_host}",
+        "setname": lambda: f":{client.fullmask} SETNAME :{client.info}"
+    }
+
     cap = cap_map[monitor_type]
-    data = ''
+    data = format_map[monitor_type]()
 
-    for c in [c for c in IRCD.local_users(cap=cap) if not IRCD.common_channels(client, c) and c.has_capability("extended-monitor")]:
-        if monitor_type == "away":
-            data = f":{client.fullmask} AWAY {':' + client.user.away if client.user.away else ''}"
-        elif monitor_type == "account":
-            data = f":{client.fullmask} ACCOUNT {client.user.account}"
-        elif monitor_type == "chghost":
-            data = f":{client.fullmask} CHGHOST {new_ident} {new_host}"
-        elif monitor_type == "setname":
-            data = f":{client.fullmask} SETNAME :{client.info}"
-
-        c.send([], data)
+    for c in (r for r in IRCD.get_clients(local=1, user=1, cap=cap) if r != client):
+        monlist = Monitor.monlist.get(c)
+        is_monitoring_client = monlist and any(n.lower() == client.name.lower() for n in monlist)
+        meets_send_condition = not IRCD.common_channels(client, c) and c.has_capability("extended-monitor")
+        if is_monitoring_client and meets_send_condition:
+            c.send([], data)
 
 
 def monitor_away(client, awaymsg):
     monitor_event(client, "away")
 
 
-def monitor_account(client):
+def monitor_account(client, old_account):
     monitor_event(client, "account")
 
 

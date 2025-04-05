@@ -5,7 +5,9 @@ https://ircv3.net/specs/extensions/labeled-response.html
 
 import re
 
-from handle.core import MessageTag, Capability, Hook, IRCD, Batch
+from handle.core import IRCD, Capability, Hook
+from modules.ircv3.messagetags import MessageTag
+from modules.ircv3.batch import Batch
 from handle.logger import logging
 
 
@@ -26,7 +28,10 @@ class LabelTag(MessageTag):
         self.client = None
 
     def is_visible_to(self, to_client):
-        return (super().is_visible_to(to_client) or (to_client.has_capability("labeled-response")) and to_client.has_capability("batch")) and to_client == self.client
+        return ((super().is_visible_to(to_client)
+                 or (to_client.has_capability("labeled-response"))
+                 and to_client.has_capability("batch"))
+                and to_client == self.client)
 
 
 def ircv3_label_packet(from_client, to_client, intended_to, data: list):
@@ -35,6 +40,7 @@ def ircv3_label_packet(from_client, to_client, intended_to, data: list):
         del data[:]
 
 
+@logging.client_context
 def ircv3_label_pre_command(client, recv):
     for tag in client.recv_mtags:
         if tag.name == LabelTag.name and tag.value:
@@ -63,15 +69,13 @@ def ircv3_label_post_command(client, trigger, recv):
             data = f":{IRCD.me.name} ACK"
             client.send([Currentcmd.labeltag], data)
         else:
-            if len(Currentcmd.buffer) > 1 and client.has_capability("batch"):
-                batch = Batch.create_new(started_by=client, batch_type="labeled-response")
-                batch.announce_to(client)
+            if len(Currentcmd.buffer) > 1:
+                if client.has_capability("batch"):
+                    batch = Batch.create_new(started_by=client, batch_type="labeled-response")
+                    batch.announce_to(client)
+                    client.mtags.append(batch.tag)
                 """ Now send the rest as batch, and remove label tag. """
-                for tag in client.mtags:
-                    if tag.name == LabelTag.name and tag.value == Currentcmd.label:
-                        client.mtags.remove(tag)
-                        break
-                client.mtags.append(batch.tag)
+                client.mtags = [tag for tag in client.mtags if not (tag.name == LabelTag.name and tag.value == Currentcmd.label)]
 
             for line in Currentcmd.buffer:
                 client.send(client.mtags, line, call_hook=0)
@@ -83,7 +87,7 @@ def ircv3_label_post_command(client, trigger, recv):
         Currentcmd.buffer = []
 
 
-def init(module):
+def post_load(module):
     Capability.add("labeled-response")
     Hook.add(Hook.POST_COMMAND, ircv3_label_post_command)
     Hook.add(Hook.PRE_COMMAND, ircv3_label_pre_command)

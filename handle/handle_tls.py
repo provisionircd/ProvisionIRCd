@@ -2,20 +2,49 @@
 
 import os
 
+from cryptography import x509
+from cryptography.x509.oid import ExtensionOID
+
 from OpenSSL import SSL, crypto
 from handle.logger import logging
 from handle.core import IRCD
 
 
+def validate_file_path(path, base_dir="tls"):
+    abs_base = os.path.abspath(base_dir)
+    abs_path = os.path.abspath(path)
+
+    if not os.path.exists(abs_base):
+        try:
+            os.makedirs(abs_base, mode=0o755, exist_ok=True)
+        except Exception as e:
+            raise ValueError(f"Cannot create base directory {base_dir}: {e}")
+
+    # Check if the path is within the base directory
+    if not abs_path.startswith(abs_base):
+        raise ValueError(f"Path {path} is outside allowed directory {base_dir}")
+
+    return abs_path
+
+
 def ssl_verify_callback(*args):
-    return 1
+    return True
 
 
 def create_ctx(cert, key, name=None):
     try:
-        if not os.path.exists("tls"):
-            os.mkdir("tls")
+
+        os.makedirs("tls", mode=0o755, exist_ok=True)
+
+        try:
+            cert = validate_file_path(cert, "tls")
+            key = validate_file_path(key, "tls")
+        except ValueError as e:
+            logging.error(f"Invalid certificate or key path: {e}")
+            return None
+
         missing = 0
+
         if not os.path.isfile(cert):
             logging.error(f"Unable to find certificate file: {cert}")
             missing = 1
@@ -41,9 +70,16 @@ def create_ctx(cert, key, name=None):
         IRCD.default_tls["keyfile"] = key
         IRCD.default_tls["certfile"] = cert
         return tlsctx
+
+    except (SSL.Error, crypto.Error) as ex:
+        logging.error(f"SSL/TLS configuration error: {ex}")
+        raise
+    except FileNotFoundError as ex:
+        logging.error(f"Certificate or key file not found: {ex}")
+        raise
     except Exception as ex:
-        logging.exception(ex)
-        exit()
+        logging.error(f"Unexpected error in TLS setup: {ex}")
+        raise
 
 
 def wrap_socket(listen_obj):
@@ -53,6 +89,14 @@ def wrap_socket(listen_obj):
 def generate_cert(key_out, cert_out, name):
     if not name:
         logging.error(f"Missing name in generate_cert()")
+        exit()
+
+    # Validate output paths before proceeding
+    try:
+        key_out = validate_file_path(key_out, "tls")
+        cert_out = validate_file_path(cert_out, "tls")
+    except ValueError as e:
+        logging.error(f"Invalid certificate or key path: {e}")
         exit()
 
     k = crypto.PKey()
@@ -90,21 +134,45 @@ def generate_cert(key_out, cert_out, name):
     cert.set_serial_number(1000)
     cert.gmtime_adj_notBefore(0)
     cert.gmtime_adj_notAfter(10 * 365 * 24 * 60 * 60)
+
+    basic_constraints = x509.Extension(
+        ExtensionOID.BASIC_CONSTRAINTS,
+        critical=True,
+        value=x509.BasicConstraints(ca=False, path_length=None)
+    )
+
+    key_usage = x509.Extension(
+        ExtensionOID.KEY_USAGE,
+        critical=True,
+        value=x509.KeyUsage(digital_signature=True, content_commitment=False, key_encipherment=True, data_encipherment=False,
+                            key_agreement=False, key_cert_sign=False, crl_sign=False, encipher_only=False, decipher_only=False)
+    )
+
+    extended_key_usage = x509.Extension(
+        ExtensionOID.EXTENDED_KEY_USAGE,
+        critical=False,
+        value=x509.ExtendedKeyUsage([x509.ObjectIdentifier("1.3.6.1.5.5.7.3.1")])
+    )
+
+    cert._extensions = [basic_constraints, key_usage, extended_key_usage]
+
     cert.set_issuer(cert.get_subject())
     cert.set_pubkey(k)
     cert.sign(k, "sha256")
 
     dirname = os.path.dirname(cert_out)
-    if not os.path.exists(dirname):
-        os.mkdir(dirname)
+    os.makedirs(dirname, mode=0o755, exist_ok=True)
 
     dirname = os.path.dirname(key_out)
-    if not os.path.exists(dirname):
-        os.mkdir(dirname)
+    os.makedirs(dirname, mode=0o755, exist_ok=True)
 
     with open(cert_out, "wb+") as cert_f:
         cert_f.write(crypto.dump_certificate(crypto.FILETYPE_PEM, cert))
+
     with open(key_out, "wb+") as key_f:
         key_f.write(crypto.dump_privatekey(crypto.FILETYPE_PEM, k))
+
+    if os.name == "posix":
+        os.chmod(key_out, 0o600)
 
     print("Ok.")

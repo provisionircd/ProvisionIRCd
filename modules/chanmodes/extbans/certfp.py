@@ -5,7 +5,7 @@ certfp bans/exceptions/invex
 
 import re
 
-from handle.core import Extban
+from classes.data import Extban
 
 
 def certfp_is_valid(client, channel, action, mode, param):

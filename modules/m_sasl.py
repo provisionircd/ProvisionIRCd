@@ -4,7 +4,7 @@ SASL support
 
 from time import time
 
-from handle.core import Numeric, IRCD, Flag, Command, Capability, Hook
+from handle.core import IRCD, Command, Numeric, Flag, Capability, Hook
 from handle.logger import logging
 from handle.validate_conf import conf_error
 
@@ -54,15 +54,16 @@ def cmd_authenticate(client, recv):
         return client.sendnumeric(Numeric.ERR_SASLFAIL)
 
     if not (saslrequest := SaslRequest.get_from_id(client.id)):
+        supported_mechs = SaslInfo.server.get_md_value("saslmechlist").split(',')
+        if not any(mech == recv[1] for mech in supported_mechs):
+            return client.sendnumeric(Numeric.RPL_SASLMECHS, ','.join(supported_mechs))
         saslrequest = SaslRequest(client=client, user_id=client.id)
         saslrequest.mech = recv[1]
+
         data = f":{IRCD.me.id} SASL {SaslInfo.server.name} {client.id} H {client.ip} {client.ip}"
-        # TODO: Sending to one server directly should not cause issues.
-        # IRCD.send_to_servers(client, [], data)
         IRCD.send_to_one_server(SaslInfo.server, [], data)
 
         data = f":{IRCD.me.id} SASL {SaslInfo.server.name} {client.id} S {recv[1]}"
-        # IRCD.send_to_servers(client, [], data)
         IRCD.send_to_one_server(SaslInfo.server, [], data)
         return
 
@@ -75,7 +76,7 @@ def cmd_authenticate(client, recv):
 
 def cmd_sasl(client, recv):
     # logging.debug(f"SASL from client {client.name}: {recv}")
-    SaslInfo.server = IRCD.find_server(IRCD.get_setting("sasl-server"))
+    SaslInfo.server = IRCD.find_client(IRCD.get_setting("sasl-server"))
     if not SaslInfo.server:
         logging.debug(f"SASL request received but SASL server is offline")
         return
@@ -85,8 +86,9 @@ def cmd_sasl(client, recv):
 
     if recv[1] in [IRCD.me.name, IRCD.me.id]:
         # :00B SASL dev.provisionweb.org <C|D> [...]
-        if not (target_client := IRCD.find_user(recv[2])):
+        if not (target_client := IRCD.find_client(recv[2])) or target_client.user.account != '*':
             return
+
         if recv[3] == 'C':
             target_client.send([], f"AUTHENTICATE {recv[4]}")
 
@@ -103,40 +105,39 @@ def cmd_sasl(client, recv):
                     target_client.exit("Too many SASL authentication failures")
         return
 
-    data = f":{client.name} {' '.join(recv)}"
-    sasl_direction = IRCD.find_server(recv[1])
-    IRCD.send_to_one_server(sasl_direction, [], data)
+    sasl_direction = IRCD.find_client(recv[1])
+    IRCD.send_to_one_server(sasl_direction, [], f":{client.name} {' '.join(recv)}")
 
 
 def cmd_svslogin(client, recv):
     # :00B SVSLOGIN dev.provisionweb.org 001GUS2CA Sirius
-    if auth_client := IRCD.find_user(recv[2]):
+    if auth_client := IRCD.find_client(recv[2]):
         account = recv[3]
         # auth_client.sendnumeric(Numeric.RPL_LOGGEDIN, account)
         # auth_client.sendnumeric(Numeric.RPL_SASLSUCCESS)
         curr_account = auth_client.user.account
         auth_client.user.account = account
         if account != curr_account:
-            IRCD.run_hook(Hook.ACCOUNT_LOGIN, auth_client)
+            IRCD.run_hook(Hook.ACCOUNT_LOGIN, auth_client, curr_account)
 
     data = f":{client.id} {' '.join(recv)}"
     IRCD.send_to_servers(client, [], data)
 
 
 def check_sasl_timeout():
-    if not (sasl_server := IRCD.find_server(IRCD.get_setting('sasl-server'))):
+    if not (sasl_server := IRCD.find_client(IRCD.get_setting('sasl-server'))):
         SaslInfo.server = None
-    elif sasl_server.server.synced and not sasl_server.exitted:
+    elif sasl_server.server.synced and not sasl_server.has_flag(Flag.CLIENT_EXIT):
         SaslInfo.server = sasl_server
-        if not not Capability.find_cap("sasl"):
-            mech = SaslInfo.server.get_md_value("saslmechlist")
+        if not not Capability.find_cap("sasl") and (mech := SaslInfo.server.get_md_value("saslmechlist")):
             Capability.add("sasl", mech)
 
     # Checking for SASL timeouts on clients.
     for client_id in list([r for r in SaslInfo.request_init if int(time()) - SaslInfo.request_init[r] > 2]):
         # logging.debug(f"SASL auth timed out for {client.name}")
-        if client := IRCD.find_user(client_id):
-            IRCD.server_notice(client, "SASL request timed out (server or client misbehaving) -- aborting SASL and continuing connection...")
+        if client := IRCD.find_client(client_id):
+            IRCD.server_notice(client, "SASL request timed out (server or client misbehaving) --"
+                                       "aborting SASL and continuing connection...")
             client.sendnumeric(Numeric.ERR_SASLABORTED)
         del SaslInfo.request_init[client_id]
 
@@ -147,12 +148,13 @@ def sasl_cleanup(client, reason):
         SaslRequest.table.remove(authrequest)
 
 
+@logging.client_context
 def sasl_server_online(client):
     if client.name == IRCD.get_setting("sasl-server"):
         SaslInfo.server = client
-        logging.debug(f"Registered SASL server: {client.name}")
-        mech = SaslInfo.server.get_md_value("saslmechlist")
-        Capability.add("sasl", mech)
+        logging.debug(f"Registered as SASL server.")
+        if mech := SaslInfo.server.get_md_value("saslmechlist"):
+            Capability.add("sasl", mech)
 
 
 def sasl_server_offline(client):
@@ -161,16 +163,16 @@ def sasl_server_offline(client):
 
 
 def post_load(module):
-    if not IRCD.get_setting("sasl-server"):
+    if not (sasl_server := IRCD.get_setting("sasl-server")):
         conf_error("[m_sasl] Missing requirement in conf: settings::sasl-server must be a valid server")
-    SaslInfo.server = IRCD.find_server(IRCD.get_setting("sasl-server"))
+        return
+    SaslInfo.server = IRCD.find_client(sasl_server)
 
 
 def init(module):
     # Only add SASL capability if the SASL server is currently online.
     # No use in advertising SASL support without the SASL server.
-    if SaslInfo.server:
-        mech = SaslInfo.server.get_md_value("saslmechlist")
+    if SaslInfo.server and (mech := SaslInfo.server.get_md_value("saslmechlist")):
         Capability.add("sasl", mech)
 
     Hook.add(Hook.LOOP, check_sasl_timeout)
@@ -178,6 +180,6 @@ def init(module):
     Hook.add(Hook.REMOTE_QUIT, sasl_cleanup)
     Hook.add(Hook.SERVER_SYNCED, sasl_server_online)
     Hook.add(Hook.SERVER_DISCONNECT, sasl_server_offline)
-    Command.add(module, cmd_sasl, "SASL", 2, Flag.CMD_UNKNOWN)
+    Command.add(module, cmd_sasl, "SASL", 4, Flag.CMD_SERVER)
     Command.add(module, cmd_authenticate, "AUTHENTICATE", 1, Flag.CMD_UNKNOWN)
     Command.add(module, cmd_svslogin, "SVSLOGIN", 2, Flag.CMD_SERVER)

@@ -2,7 +2,20 @@
 /names command
 """
 
-from handle.core import Numeric, Command, IRCD, Capability, Isupport
+from handle.core import IRCD, Command, Numeric, Capability, Isupport
+
+
+def format_name(client, channel, user):
+    prefix = channel.get_membermodes_sorted(client=user, prefix=1, reverse=1)
+    if prefix and not client.has_capability("multi-prefix"):
+        prefix = prefix[0]
+
+    formatted = prefix + user.name
+
+    if client.has_capability("userhost-in-names"):
+        formatted += f"!{user.user.username}@{user.user.host}"
+
+    return formatted
 
 
 def cmd_names(client, recv):
@@ -14,7 +27,9 @@ def cmd_names(client, recv):
 
     users = []
     for names_client in channel.member_by_client:
-        if 'i' in names_client.user.modes and (not channel.find_member(client) and not client.has_permission("channel:see:names:invisible")):
+        if ('i' in names_client.user.modes and
+                (not channel.find_member(client)
+                 and not client.has_permission("channel:see:names:invisible"))):
             continue
 
         if not channel.user_can_see_member(client, names_client):
@@ -23,21 +38,11 @@ def cmd_names(client, recv):
         if names_client not in channel.seen_dict[client]:
             channel.seen_dict[client].append(names_client)
 
-        prefix = channel.get_prefix_sorted_str(names_client)
-        if not client.has_capability("multi-prefix") and prefix:
-            prefix = prefix[0]
-
-        string = prefix + names_client.name
-
-        if client.has_capability("userhost-in-names"):
-            string += f"!{names_client.user.username}@{names_client.user.cloakhost}"
-
-        users.append(string)
+        users.append(format_name(client, channel, names_client))
 
         if len(users) >= 24:
             client.sendnumeric(Numeric.RPL_NAMEREPLY, channel.name, ' '.join(users))
             users = []
-            continue
 
     if users:
         client.sendnumeric(Numeric.RPL_NAMEREPLY, channel.name, ' '.join(users))
