@@ -73,7 +73,8 @@ def cmd_join(client, recv):
             if channel.topic_time != 0:
                 Command.do(client, "TOPIC", channel.name)
 
-            Command.do(client, "NAMES", channel.name)
+            if not client.has_capability("draft/no-implicit-names"):
+                Command.do(client, "NAMES", channel.name)
 
         hook = Hook.LOCAL_JOIN if client.local else Hook.REMOTE_JOIN
         IRCD.run_hook(hook, client, channel)
