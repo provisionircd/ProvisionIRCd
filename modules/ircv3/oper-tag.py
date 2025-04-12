@@ -2,7 +2,7 @@
 oper-tag capability
 """
 
-from handle.core import IRCD, Hook
+from handle.core import IRCD, Hook, Capability
 from modules.ircv3.messagetags import MessageTag
 
 
@@ -10,7 +10,7 @@ class OperTag(MessageTag):
     name = "oper"
 
     def __init__(self, value):
-        super().__init__(name=f"{IRCD.me.name}/{OperTag.name}", value=value)
+        super().__init__(name=f"provisionircd/{OperTag.name}", value=value)
 
     def filter_value(self, target) -> MessageTag | None:
         if target.user and 'o' not in target.user.modes:
@@ -26,5 +26,6 @@ def add_opertag(client):
 
 
 def post_load(module):
+    Capability.add("provisionircd/oper-tag")
     Hook.add(Hook.NEW_MESSAGE, add_opertag)
     MessageTag.add(OperTag)

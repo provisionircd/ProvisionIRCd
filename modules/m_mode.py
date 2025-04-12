@@ -473,7 +473,7 @@ def cmd_channelmode(client, recv):
                 if returned_param := handle_mode_list(client, channel, action, mode, mask_param):
                     prevaction = add_to_buff(modebuf, parambuf, action, prevaction, mode, returned_param)
 
-            if action == '-' and (target_client := IRCD.find_client(param)):
+            if action == '-' and (target_client := IRCD.find_client(param, user=1)):
                 for entry in list(channel.List[mode]):
                     if channel.check_match(target_client, mode, mask=entry.mask):
                         do_list_mode(entry.mask)
@@ -533,7 +533,7 @@ def cmd_channelmode(client, recv):
         elif mode in param_modes_unset:
             if cmode.type == cmode.MEMBER:
                 if do_channel_member_mode(client, channel, action, mode, param):
-                    nick = IRCD.find_client(param).name
+                    nick = IRCD.find_client(param, user=1).name
                     prevaction = add_to_buff(modebuf, parambuf, action, prevaction, mode, param=nick)
                 continue
 

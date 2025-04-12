@@ -92,7 +92,6 @@ class ClientContextManager:
         return self._clear_context
 
 
-# Function to add to logging module
 def client_context(client=None):
     """
     Add client context to logs.

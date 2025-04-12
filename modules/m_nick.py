@@ -164,9 +164,10 @@ def set_s2s_md(server, client):
 
 
 def nick_collision(client, nick, remote_time):
-    for c in (c for c in IRCD.get_clients(local=1, user=1) if c.name.lower() == nick.lower()):
-        if int(remote_time) <= int(c.creationtime) or client.is_uline():
-            c.kill("Nick Collision")
+    for local_client in (c for c in IRCD.get_clients(local=1, user=1) if c.name.lower() == nick.lower()):
+        if int(remote_time) <= int(local_client.creationtime) or client.is_uline():
+            local_client.add_flag(Flag.CLIENT_NICK_COLLISION)
+            local_client.kill("Nick Collision")
         else:
             return 1
     return 0

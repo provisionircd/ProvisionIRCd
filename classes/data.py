@@ -39,6 +39,8 @@ class Flag(IntFlag):
     CLIENT_USER_SANICK = 1 << 11  # 2048
     CLIENT_EXIT = 1 << 12  # 4096
     CLIENT_TLS_FIRST_READ = 1 << 13
+    CLIENT_PENDING_CLEANUP = 1 << 14
+    CLIENT_NICK_COLLISION = 1 << 15
 
 
 class Numeric:

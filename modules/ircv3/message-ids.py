@@ -2,12 +2,12 @@
 msgid capability
 """
 
-from handle.core import Hook, Isupport
-from modules.ircv3.messagetags import MessageTag
-
 import secrets
 import time
 import base64
+
+from handle.core import Hook, Isupport
+from modules.ircv3.messagetags import MessageTag
 
 
 class MessageId(MessageTag):

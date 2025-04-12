@@ -126,9 +126,6 @@ def process_event(event, listen_sockets):
 
 @IRCD.debug_freeze
 def wrap_socket(client, starttls=0):
-    while client.local.sendbuffer:
-        continue
-
     tlsctx = client.local.listen.tlsctx or IRCD.default_tls["ctx"]
     tls_sock = SSL.Connection(tlsctx, client.local.conn)
     tls_sock.set_accept_state()
@@ -145,7 +142,7 @@ def wrap_socket(client, starttls=0):
             client.sendnumeric(Numeric.ERR_STARTTLS, "STARTTLS failed.")
         client.direct_send(f"ERROR :{msg}")
         client.exit(msg)
-        tls_sock.close()
+        IRCD.close_socket(tls_sock)
         return 0
 
     # Remove plain sock from table.
@@ -280,12 +277,16 @@ def check_timeouts():
                 logging.warning(f"[check_timeouts()] Client was still in Client.table after .exit().")
 
     for sock, timestamp in list(IRCD.kill_socks.items()):
+        if sock.fileno() < 0:
+            IRCD.kill_socks.pop(sock, None)
+            continue
+
         if current_time - timestamp >= 1:
             try:
                 sock.close()
             except OSError:
                 pass
-            IRCD.kill_socks.pop(sock)
+            IRCD.kill_socks.pop(sock, None)
 
 
 @IRCD.debug_freeze
