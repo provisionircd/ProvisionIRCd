@@ -463,9 +463,6 @@ class Client:
             hook = Hook.LOCAL_QUIT if self.local else Hook.REMOTE_QUIT
             IRCD.run_hook(hook, self, reason)
 
-        gc.collect()
-        del self
-
     @IRCD.debug_freeze
     def close_socket(self, reason: str) -> None:
         if self.websocket and IRCD.websocketbridge:

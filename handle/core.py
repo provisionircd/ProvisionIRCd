@@ -1010,7 +1010,6 @@ class IRCD:
     @staticmethod
     @debug_freeze
     def close_socket(sock, client=None, reason: str = '') -> None:
-        kill = 0
         if client and client.websocket and IRCD.websocketbridge:
             IRCD.websocketbridge.exit_client(client)
             return
@@ -1025,20 +1024,28 @@ class IRCD:
         try:
             sock.setblocking(0)
             if isinstance(sock, SSL.Connection):
-                sock.shutdown()
+                try:
+                    sock.shutdown()
+                except SSL.Error:
+                    pass
+
             else:
                 sock.shutdown(socket.SHUT_WR)
 
-        except (OSError, SSL.Error, SSL.SysCallError) as ex:
-            kill = 1
+        except (OSError, SSL.Error, SSL.SysCallError):
+            pass
         except Exception as ex:
-            kill = 1
             logging.exception(ex)
 
         IRCD.client_by_sock.pop(sock, None)
 
-        if kill:
+        if sock.fileno() >= 0:
             IRCD.kill_socks[sock] = int(time())
+        else:
+            try:
+                sock.close()
+            except Exception as ex:
+                pass
 
 
 @dataclass

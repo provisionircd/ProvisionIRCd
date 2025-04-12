@@ -25,14 +25,11 @@ class MessageTag:
 
     def is_visible_to(self, to_client):
         if (tag := MessageTag.find_tag(self.name)) and (tag.local or self.local) and to_client.server:
-            # logging.debug(f"Not relaying local tag {self} to server {self.name}")
             return 0
         return to_client.has_capability("message-tags")
 
     def filter_value(self, target):
-        """
-        Do nothing by default.
-        """
+        """ Do nothing by default. """
         pass
 
     def value_is_ok(self, value):
