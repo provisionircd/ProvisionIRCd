@@ -1,7 +1,7 @@
 import re
 import time
 import socket
-import select
+import selectors
 import ipaddress
 import importlib
 
@@ -212,18 +212,16 @@ class Listen:
                     client_type = "servers" if "servers" in self.options else "clients"
                     logging.info(f"Listening on {self.ip}:{self.port} :: {'TLS' if is_tls else 'unsecure'} ({client_type})")
 
-                if IRCD.use_poll:
-                    IRCD.poller.register(self.sock, select.POLLIN)
+                IRCD.selector.register(self.sock, selectors.EVENT_READ, data=self)
 
         except Exception as ex:
             logging.exception(ex)
 
     def stop_listening(self):
-        if IRCD.use_poll:
-            try:
-                IRCD.poller.unregister(self.sock)
-            except KeyError:
-                pass
+        try:
+            IRCD.selector.unregister(self.sock)
+        except KeyError:
+            pass
         self.listening = 0
         try:
             if isinstance(self.sock, OpenSSL.SSL.Connection):

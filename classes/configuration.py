@@ -1,6 +1,5 @@
 import os
 import sys
-import select
 
 from handle.logger import logging, IRCDLogger
 from handle.core import IRCD, Usermode, Command, Snomask, Stat, init_core_classes
@@ -46,16 +45,6 @@ class ConfigBuild:
         IRCD.conf_path = self.conf_path
         self.rehash = rehash
         self.current_conf = None
-
-    def _check_poll_support(self):
-        if IRCD.use_poll and not hasattr(select, "poll"):
-            if sys.platform.startswith("win32"):
-                logging.warning("Windows does not support select.poll(), using select.select() instead.")
-            else:
-                logging.warning("This system does not support select.poll(), using select.select() instead.")
-            IRCD.use_poll = 0
-        elif IRCD.use_poll:
-            IRCD.poller = select.poll()
 
     def _save_last_config_state(self):
         from modules.ircv3.messagetags import MessageTag
@@ -147,7 +136,6 @@ class ConfigBuild:
             IRCD.configuration = Configuration()
             IRCD.me = Server()
             IRCD.logger.view_logging_info()
-            self._check_poll_support()
 
         last_state = self._save_last_config_state()
         our_ports = IRCD.configuration.our_ports

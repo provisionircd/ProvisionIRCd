@@ -13,6 +13,7 @@ import threading
 import time
 import sys
 import socket
+import selectors
 from collections import defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor
 
@@ -69,13 +70,6 @@ class Command:
 
         if Flag.CMD_UNKNOWN not in self.flags and not client == IRCD.me and not client.registered and client.local and not client.server:
             return Numeric.ERR_NOTREGISTERED,
-
-        # if Flag.CMD_USER in self.flags and Flag.CMD_SERVER not in self.flags and not client.user:
-        #     logging.debug(f"Flags: {self.flags}")
-        #     logging.debug(f"Trigger: {self.trigger}")
-        #     client.direct_send(f"ERROR :This port is for servers only")
-        #     client.exit(f"This port is for servers only")
-        #     return 0,
 
         if Flag.CMD_OPER in self.flags and client.user and 'o' not in client.user.modes and client.local:
             return Numeric.ERR_NOPRIVILEGES,
@@ -289,7 +283,6 @@ class IRCD:
     client_by_name: ClassVar[dict[str, "Client"]] = {}
     client_by_sock: ClassVar[dict[socket, "Client"]] = {}
     channel_by_name: ClassVar[dict[str, "Channel"]] = {}
-    kill_socks: ClassVar[dict] = {}
     maxusers: int = 0
     maxgusers: int = 0
     local_user_count: int = 0
@@ -312,9 +305,9 @@ class IRCD:
     delayed_connections: ClassVar[list] = []
     versionnumber: str = "3.0"
     version: str = f"ProvisionIRCd-{versionnumber}-beta"
-    use_poll: int = 1
     running: int = 0
     poller = None
+    selector = selectors.DefaultSelector()
     last_activity: int = 0
     uid_iter = None
     websocketbridge = None
@@ -474,7 +467,6 @@ class IRCD:
 
     @staticmethod
     def write_to_file(file: str, text: str) -> int:
-        """ Write text to a file. Newline automatically added """
         try:
             os.makedirs(os.path.dirname(file) or '.', exist_ok=True)
             with open(file, 'a') as f:
@@ -486,7 +478,6 @@ class IRCD:
 
     @staticmethod
     def read_from_file(file: str) -> str:
-        """ Read data from a file and return its contents as a string """
         return open(file, 'r').read() if os.path.exists(file) else ''
 
     @staticmethod
@@ -522,10 +513,7 @@ class IRCD:
 
     @staticmethod
     def strip_format(string: str) -> str:
-        """
-        Strips all colors, bold, underlines, italics etc. from a string, and then returns it.
-        """
-
+        """ Strips all colors, bold, underlines, italics etc. from a string, and then returns it. """
         regex = re.compile(r"\x1d|\x1f|\x02|\x12|\x0f|\x16|\x03(?:\d{1,2}(?:,\d{1,2})?)?", re.UNICODE)
         stripped = regex.sub('', string).strip()
         return stripped
@@ -552,6 +540,9 @@ class IRCD:
                 continue
 
             if tag_class.local and not self.is_local_user():
+                continue
+
+            if new_tag.is_client_tag() and not new_tag.can_send(self):
                 continue
 
             if not new_tag.value_is_ok(value) or (tag_class.value_required and not value):
@@ -615,7 +606,7 @@ class IRCD:
         if hasattr(IRCD.executor, "_work_items"):
             for future_id in list(IRCD.executor._work_items.keys()):  # noqa
                 IRCD.executor._work_items[future_id].future.cancel()  # noqa
-        IRCD.executor.shutdown(wait=False)
+        IRCD.executor.shutdown(wait=False, cancel_futures=True)
 
     @staticmethod
     def initialise_uid_generator():
@@ -1006,46 +997,6 @@ class IRCD:
             return wrapper
 
         return decorator(func) if func is not None and not isinstance(func, (int, float)) else decorator
-
-    @staticmethod
-    @debug_freeze
-    def close_socket(sock, client=None, reason: str = '') -> None:
-        if client and client.websocket and IRCD.websocketbridge:
-            IRCD.websocketbridge.exit_client(client)
-            return
-
-        if IRCD.use_poll:
-            try:
-                IRCD.poller.unregister(sock)
-            except KeyError:
-                # Already unregistered.
-                pass
-
-        try:
-            sock.setblocking(0)
-            if isinstance(sock, SSL.Connection):
-                try:
-                    sock.shutdown()
-                except SSL.Error:
-                    pass
-
-            else:
-                sock.shutdown(socket.SHUT_WR)
-
-        except (OSError, SSL.Error, SSL.SysCallError):
-            pass
-        except Exception as ex:
-            logging.exception(ex)
-
-        IRCD.client_by_sock.pop(sock, None)
-
-        if sock.fileno() >= 0:
-            IRCD.kill_socks[sock] = int(time())
-        else:
-            try:
-                sock.close()
-            except Exception as ex:
-                pass
 
 
 @dataclass

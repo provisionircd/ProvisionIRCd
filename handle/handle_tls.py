@@ -17,12 +17,9 @@ def validate_file_path(path, base_dir="tls"):
     if not os.path.exists(abs_base):
         try:
             os.makedirs(abs_base, mode=0o755, exist_ok=True)
-        except Exception as e:
-            raise ValueError(f"Cannot create base directory {base_dir}: {e}")
-
-    # Check if the path is within the base directory
-    if not abs_path.startswith(abs_base):
-        raise ValueError(f"Path {path} is outside allowed directory {base_dir}")
+        except Exception as ex:
+            logging.error(str(ex))
+            exit(1)
 
     return abs_path
 

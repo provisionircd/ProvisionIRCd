@@ -1,6 +1,6 @@
 import hashlib
 import socket
-import select
+import selectors
 from time import time
 
 from OpenSSL import SSL
@@ -141,9 +141,6 @@ def start_outgoing_link(link, tls=0, auto_connect=0, starter=None):
 
         IRCD.client_by_sock[client.local.socket] = client
 
-        if IRCD.use_poll:
-            IRCD.poller.register(client.local.socket, select.POLLIN | select.POLLPRI | select.POLLHUP | select.POLLERR | select.EPOLLRDHUP)
-
         IRCD.run_hook(Hook.SERVER_LINK_OUT, client)
         try:
             client.local.socket.connect((host, port))
@@ -156,6 +153,7 @@ def start_outgoing_link(link, tls=0, auto_connect=0, starter=None):
                 except Exception as ex:
                     logging.exception(ex)
 
+            IRCD.selector.register(client.local.socket, selectors.EVENT_READ, data=client)
             client.local.handshake = 1
             client.local.socket.setblocking(False)
             IRCD.run_hook(Hook.SERVER_LINK_OUT_CONNECTED, client)

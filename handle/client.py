@@ -3,7 +3,7 @@ import ipaddress
 import random
 import string
 import socket
-import select
+import selectors
 from time import time
 from typing import ClassVar
 from dataclasses import dataclass, field
@@ -29,7 +29,8 @@ class ClientList(list):
     def remove(self, client):
         super().remove(client)
         IRCD.client_by_id.pop(client.id.lower(), None)
-        IRCD.client_by_name.pop(client.name.lower(), None)
+        if not client.has_flag(Flag.CLIENT_NICK_COLLISION):
+            IRCD.client_by_name.pop(client.name.lower(), None)
 
 
 @dataclass
@@ -124,6 +125,8 @@ class Client:
     webirc: int = 0
     websocket: int = 0
     remember = dict(host='', cloakhost='', vhost='', ident='', nick='')
+    hostname_future: concurrent.futures.Future = None
+    hostname_future_submit_time: int = 1
 
     @property
     def name(self) -> str:
@@ -211,12 +214,18 @@ class Client:
     def handshake_finished(self) -> int:
         if self.has_flag(Flag.CLIENT_EXIT):
             return 0
+
         for delay in IRCD.delayed_connections:
             if delay[0] == self:
                 return 0
+
+        if not self.has_flag(Flag.CLIENT_HOST_DONE):
+            return 0
+
         for result, callback in Hook.call(Hook.IS_HANDSHAKE_FINISHED, args=(self,)):
             if result == 0:
                 return 0
+
         return 1 if self.user and self.name != '*' and self.user.username != '' and self.local.nospoof == 0 else 0
 
     def set_capability(self, capname) -> int:
@@ -349,8 +358,7 @@ class Client:
         if not self.uplink.server.squit:
             IRCD.new_message(self)
 
-        IRCD.send_to_local_common_chans(self, self.mtags, client_cap=None,
-                                        data=f":{self.name}!{self.user.username}@{self.user.host} QUIT :{reason}")
+        IRCD.send_to_local_common_chans(self, self.mtags, client_cap=None, data=f":{self.name}!{self.user.username}@{self.user.host} QUIT :{reason}")
 
         for channel in list(Channel.table):
             if channel.find_member(self):
@@ -374,7 +382,7 @@ class Client:
         # End the netjoin batch if it hasn't been ended by EOS due to sudden connection drop.
         do_end_batch("netjoin")
 
-        if self.server.synced:
+        if self.server.authed:
             if self.local:
                 IRCD.log(self.uplink, "error", "link", "LINK_LOST", f"Lost connection to server {self.name}: {reason}", sync=0)
         else:
@@ -417,7 +425,7 @@ class Client:
         killed_by = killed_by or IRCD.me
         event = "LOCAL_KILL" if self.local else "GLOBAL_KILL"
         IRCD.log(self, "info", "kill", event,
-                 f"*** Received kill msg for {self.name} ({self.user.username}@{self.user.realhost})"
+                 f"*** Received kill msg for {self.name} ({self.user.username}@{self.user.realhost}) "
                  f"Path {killed_by.name} ({reason})", sync=0)
 
         if self.local:
@@ -436,7 +444,6 @@ class Client:
         if self not in Client.table or self.has_flag(Flag.CLIENT_EXIT):
             return
 
-        Client.table.remove(self)
         self.add_flag(Flag.CLIENT_EXIT)
 
         if self.server and server_exit:
@@ -457,22 +464,38 @@ class Client:
             if reason and self.user and self.local.handshake and not sock_error:
                 self.direct_send(f"ERROR :Closing link: {self.name}[{self.user.realhost or self.ip}] {reason}")
 
-            self.close_socket(reason=reason)
+            try:
+                IRCD.selector.unregister(self.local.socket)
+            except KeyError:
+                pass
+
+            IRCD.client_by_sock.pop(self.local.socket, None)
+            try:
+                if isinstance(self.local.socket, OpenSSL.SSL.Connection):
+                    try:
+                        self.local.socket.shutdown()
+                    except OpenSSL.SSL.Error:
+                        pass
+                else:
+                    self.local.socket.shutdown(socket.SHUT_RDWR)
+
+            except (OSError, OpenSSL.SSL.Error, OpenSSL.SSL.SysCallError):
+                pass
+            except Exception as ex:
+                logging.exception(ex)
 
         if self.registered and self.user:
             hook = Hook.LOCAL_QUIT if self.local else Hook.REMOTE_QUIT
             IRCD.run_hook(hook, self, reason)
 
-    @IRCD.debug_freeze
-    def close_socket(self, reason: str) -> None:
-        if self.websocket and IRCD.websocketbridge:
-            IRCD.websocketbridge.exit_client(self)
+        self.add_flag(Flag.CLIENT_PENDING_CLEANUP)
+
+    def cleanup(self):
+        Client.table.remove(self)
+        if not self.local:
             return
 
-        if not self.local or not self.local.socket:
-            return
-
-        IRCD.close_socket(self.local.socket, client=self, reason=reason)
+        self.local.socket.close()
 
     def is_killed(self):
         return self.has_flag(Flag.CLIENT_KILLED)
@@ -491,9 +514,6 @@ class Client:
 
     def has_flag(self, flag):
         return bool(self.flags & flag)
-
-    def toggle_flag(self, flag):
-        self.flags ^= flag
 
     def add_swhois(self, line: str, tag: str, remove_on_deoper: int = 0):
         Swhois.add_to_client(self, line, tag=tag, remove_on_deoper=remove_on_deoper)
@@ -608,27 +628,13 @@ class Client:
                 realhost, cache_info = cached[1], " [cached]"
 
             else:
-                try:
-                    future = IRCD.executor.submit(socket.gethostbyaddr, self.ip)
-
-                    try:
-                        result = future.result(timeout=1)  # Host resolution timeout.
-                        if resolved := result[0]:
-                            realhost = resolved
-                            if realhost == "localhost" and not ipaddress.IPv4Address(self.ip).is_private:
-                                realhost = self.ip
-                            IRCD.hostcache[self.ip] = int(time()) + 36, realhost
-                    except concurrent.futures.TimeoutError:
-                        raise socket.timeout("Host resolution timed out")
-
-                except Exception as ex:
-                    if not isinstance(ex, socket.error):
-                        logging.exception(ex)
-                    IRCD.server_notice(self, "*** Couldn't resolve your hostname, using IP address instead")
-                    self.user.realhost = realhost
-                    self.user.cloakhost = self.user.vhost = IRCD.get_cloak(self)
-                    self.remember["cloakhost"] = self.user.cloakhost
-                    return
+                self.hostname_future = IRCD.executor.submit(socket.gethostbyaddr, self.ip)
+                self.hostname_future_submit_time = int(time())
+                self.user.realhost = realhost
+                self.user.cloakhost = self.user.vhost = IRCD.get_cloak(self)
+                self.remember["cloakhost"] = self.user.cloakhost
+                IRCD.server_notice(self, "*** Looking up your hostname...")
+                return
 
         else:
             IRCD.server_notice(self, "*** Host resolution disabled, using IP address instead")
@@ -639,6 +645,7 @@ class Client:
         self.user.realhost = realhost
         self.user.cloakhost = self.user.vhost = IRCD.get_cloak(self)
         self.remember["cloakhost"] = self.user.cloakhost
+        self.add_flag(Flag.CLIENT_HOST_DONE)
 
     def add_user_modes(self, modes):
         if not self.local:
@@ -811,7 +818,7 @@ class Client:
                     if self.server:
                         found_client = IRCD.find_client(source_id)
                         if not found_client and self.server.authed:
-                            logging.warning(f"Unknown server message from {self.id}: {recv}")
+                            logging.warning(f"Unknown server message from {source_id}: {recv}")
                             continue
 
                         source_client = found_client or self
@@ -876,10 +883,18 @@ class Client:
             if mtags := MessageTag.filter_tags(destination=self, mtags=mtags):
                 data = f"@" + ';'.join([t.string for t in mtags]) + ' ' + data
 
-        if IRCD.use_poll and not self.websocket:
-            IRCD.poller.modify(self.local.socket, select.POLLOUT)
-
         if not self.websocket:
+            try:
+                key = IRCD.selector.get_key(self.local.socket)
+                current_events = key.events
+                IRCD.selector.modify(self.local.socket, current_events | selectors.EVENT_WRITE, data=self)
+            except KeyError as ex:
+                IRCD.selector.register(client.local.socket, selectors.EVENT_READ | selectors.EVENT_WRITE, data=client)
+            except (ValueError, OSError) as ex:
+                logging.exception(ex)
+                self.exit(f"Write error: {str(ex)}")
+                return
+
             if self.local.handshake:
                 self.local.sendbuffer += data + "\r\n"
             else:
@@ -897,7 +912,54 @@ class Client:
             return
 
     @IRCD.debug_freeze
-    def direct_send(self, data: str) -> int:
+    def direct_send(self, data: str) -> None:
+        """ Directly sends data to a socket. """
+        debug_out = 0
+        lines = [line for line in data.split('\n') if line.strip()]
+        lines_sent = 0
+
+        try:
+            for line in lines:
+                if self.websocket and IRCD.websocketbridge:
+                    IRCD.websocketbridge.send_to_client(self, line)
+                    lines_sent += 1
+                    continue
+
+                try:
+                    sent = self.local.socket.send(bytes(line + "\r\n", "utf-8"))
+                    self.local.bytes_sent += sent
+                    self.local.messages_sent += 1
+
+                    if self.user:
+                        self.add_flood_penalty(100)
+
+                    ignore_commands = ["ping", "pong", "privmsg", "notice", "tagmsg"]
+                    if self.registered:
+                        split_line = line.split()
+                        for i in range(min(3, len(split_line))):
+                            if split_line[i].lower() in ignore_commands:
+                                debug_out = 0
+                                break
+
+                    if debug_out:
+                        logging.debug(f"[OUT] {self.name}[{self.ip}] < {line}")
+
+                    lines_sent += 1
+
+                except (OpenSSL.SSL.WantReadError, OpenSSL.SSL.SysCallError, OpenSSL.SSL.Error, BrokenPipeError, Exception) as ex:
+                    break
+
+        except (OpenSSL.SSL.SysCallError, OpenSSL.SSL.Error, BrokenPipeError, Exception) as ex:
+            self.exit(f"Write error: {str(ex)}")
+            return
+
+        if lines_sent > 0:
+            if lines_sent == len(lines):
+                self.local.sendbuffer = ''
+            else:
+                self.local.sendbuffer = '\n'.join(lines[lines_sent:])
+
+    def direct_send_old(self, data):
         """ Directly sends data to a socket. """
 
         debug_out = 0
@@ -911,8 +973,6 @@ class Client:
                 sent = self.local.socket.send(bytes(line + "\r\n", "utf-8"))
                 self.local.bytes_sent += sent
                 self.local.messages_sent += 1
-                if self.user:
-                    self.add_flood_penalty(100)
 
                 ignore_commands = ["ping", "pong", "privmsg", "notice", "tagmsg"]
                 if self.registered:
@@ -929,8 +989,9 @@ class Client:
             """ Not ready to write yet. """
             return 0
 
-        except (OpenSSL.SSL.SysCallError, OpenSSL.SSL.Error, BrokenPipeError, Exception) as ex:
-            self.exit(f"Write error: {str(ex)}")
+        except (OpenSSL.SSL.WantReadError, OpenSSL.SSL.SysCallError, OpenSSL.SSL.Error, BrokenPipeError, Exception) as ex:
+            error_message = f"Write error: {str(ex)}"
+            self.exit(error_message)
 
         return 1
 
@@ -1002,7 +1063,7 @@ def make_server(client: Client):
 
 def cookie_helper(client):
     if client.local.nospoof:
-        IRCD.server_notice(client, f"*** If you have registration timeouts,"
+        IRCD.server_notice(client, f"*** If you have registration timeouts, "
                                    f"use /quote PONG {client.local.nospoof} or /raw PONG {client.local.nospoof}")
 
 

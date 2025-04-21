@@ -12,7 +12,7 @@ try:
 except ImportError:
     psutil = None
 
-import select
+import selectors
 from OpenSSL import SSL
 
 from handle.client import make_client, make_server, make_user
@@ -37,46 +37,26 @@ def wait_for_events(listen_sockets=None, read_sockets=None, write_sockets=None):
     events = []
     timeout = 100  # Timeout in ms.
 
-    if IRCD.poller:
-        try:
-            for fd, event in IRCD.poller.poll(timeout):
-                if not (sock := find_sock_from_fd(fd)):
-                    try:
-                        IRCD.poller.unregister(fd)
-                    except KeyError:
-                        """ Already unregistered. """
-                        pass
-                    except Exception as ex:
-                        logging.exception(ex)
-                    continue
+    try:
+        ready_keys = IRCD.selector.select(timeout=timeout / 1000.0)
 
-                event_type = 0
-                if event & (select.POLLIN | select.POLLPRI):
-                    event_type |= SocketEvent.READ
-                if event & select.POLLOUT:
-                    event_type |= SocketEvent.WRITE
-                if event & (select.POLLHUP | select.POLLERR | select.POLLNVAL | select.EPOLLRDHUP):
-                    event_type |= SocketEvent.ERROR
+        for key, mask in ready_keys:
+            sock = key.fileobj  # key.fileobj is the socket object originally registered
+            event_type = 0
+            if mask & selectors.EVENT_READ:
+                event_type |= SocketEvent.READ
+            if mask & selectors.EVENT_WRITE:
+                event_type |= SocketEvent.WRITE
 
+            if event_type:
                 events.append(SocketEvent(sock, event_type))
-        except Exception as ex:
-            logging.exception(ex)
-    else:
-        listen_sockets = listen_sockets or []
-        read_sockets = read_sockets or []
-        write_sockets = write_sockets or []
 
-        try:
-            reads, writes, errors = select.select(listen_sockets + read_sockets,
-                                                  write_sockets,
-                                                  listen_sockets + read_sockets + write_sockets,
-                                                  timeout / 1000.0)
+    except Exception as ex:
+        logging.exception(ex)
 
-            events.extend(SocketEvent(sock, SocketEvent.READ) for sock in reads)
-            events.extend(SocketEvent(sock, SocketEvent.WRITE) for sock in writes)
-            events.extend(SocketEvent(sock, SocketEvent.ERROR) for sock in errors)
-        except Exception as ex:
-            logging.exception(ex)
+    for client in list(IRCD.get_clients()):
+        if client.has_flag(Flag.CLIENT_PENDING_CLEANUP):
+            client.cleanup()
 
     return events
 
@@ -84,6 +64,34 @@ def wait_for_events(listen_sockets=None, read_sockets=None, write_sockets=None):
 def process_event(event, listen_sockets):
     sock = event.socket
     client = None if sock in listen_sockets else IRCD.find_client(sock)
+
+    if client and client.has_flag(Flag.CLIENT_TLS_HANDSHAKE_PENDING):
+        # logging.debug(f"process_event: Handling event for pending TLS client {client.name}")
+        if event.has_error:
+            logging.warning(f"Socket error during pending TLS handshake for {client.name}. Closing.")
+            client.del_flag(Flag.CLIENT_TLS_HANDSHAKE_PENDING)
+            client.exit("Socket error during TLS handshake", sock_error=1)
+            return
+
+        if event.can_read or event.can_write:
+            wrap_result = wrap_socket(client)
+
+            if wrap_result == 0:
+                return
+
+            if client.has_flag(Flag.CLIENT_TLS_HANDSHAKE_COMPLETE):
+                #  logging.debug(f"TLS handshake completed for {client.name} via process_event. Finalizing setup.")
+                client.local.socket.setblocking(0)
+                listen_obj = client.local.listen
+                if not listen_obj:
+                    logging.error(f"Cannot complete post-TLS setup for {client.name}: Missing listen object.")
+                    client.exit("Internal server configuration error")
+                    return
+
+                # logging.debug(f"Completed deferred setup")
+                client_setup_finished(client, listen_obj)
+
+        return
 
     if event.can_read:
         if sock in listen_sockets:
@@ -103,38 +111,80 @@ def process_event(event, listen_sockets):
                     client.exit("Connection closed", sock_error=1)
 
     elif event.can_write and client:
-        if client.direct_send(client.local.sendbuffer):
-            client.local.sendbuffer = ''
-
-        if IRCD.use_poll and not client.has_flag(Flag.CLIENT_EXIT) and sock.fileno() > 0:
-            IRCD.poller.modify(sock, select.POLLIN | select.POLLPRI | select.POLLHUP | select.POLLERR | select.EPOLLRDHUP)
-
-    if event.has_error:
-        process_client_buffer(client)
-        message = "Connection closed"
-        try:
-            if sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR):
-                message = "Read error"
-        except OSError:
-            message = "Bad file descriptor"
-        except Exception as ex:
-            message = f"Socket error: {repr(ex)}"
-
-        client.exit(message, sock_error=1)
-        return
+        client.direct_send(client.local.sendbuffer)
+        if not client.has_flag(Flag.CLIENT_EXIT) and sock.fileno() > 0 and not client.local.sendbuffer:
+            try:
+                key = IRCD.selector.get_key(client.local.socket)
+                current_events = key.events
+                # Modify back to only read if we were previously watching write
+                if key.events & selectors.EVENT_WRITE:
+                    IRCD.selector.modify(client.local.socket, selectors.EVENT_READ, data=client)
+            except (KeyError, AttributeError, OSError):
+                pass
+            except Exception as ex:
+                logging.exception(f"Unexpected error modifying socket to read-only for {client.name}: {ex}")
 
 
 @IRCD.debug_freeze
-def wrap_socket(client, starttls=0):
-    tlsctx = client.local.listen.tlsctx or IRCD.default_tls["ctx"]
-    tls_sock = SSL.Connection(tlsctx, client.local.conn)
-    tls_sock.set_accept_state()
+def wrap_socket(client: Client, starttls=0) -> int:
+    """
+    Initiates or continues a non-blocking TLS handshake using flags.
+
+    Returns:
+        1: Handshake succeeded OR is pending.
+        0: Handshake failed immediately and client was exited.
+    """
+
+    client.local.conn.setblocking(0)
+
+    if not client.has_flag(Flag.CLIENT_TLS_HANDSHAKE_PENDING):
+        try:
+            tlsctx = client.local.listen.tlsctx if client.local.listen else IRCD.default_tls["ctx"]
+            tls_sock = SSL.Connection(tlsctx, client.local.conn)
+            tls_sock.set_accept_state()
+            tls_sock.setblocking(0)
+            try:
+                IRCD.selector.unregister(client.local.conn)
+            except (KeyError, ValueError, OSError):
+                pass
+        except TypeError:
+            return 1
+
+        client.local.socket = tls_sock
+        IRCD.client_by_sock.pop(client.local.conn, None)
+        IRCD.client_by_sock[client.local.socket] = client
+        client.local.tls = tlsctx
+        client.add_flag(Flag.CLIENT_TLS_HANDSHAKE_PENDING)
 
     try:
-        tls_sock.setblocking(1)
-        tls_sock.do_handshake()
-    except Exception as ex:
-        client.local.handshake = 1
+        client.local.socket.do_handshake()
+        client.del_flag(Flag.CLIENT_TLS_HANDSHAKE_PENDING)
+        client.add_flag(Flag.CLIENT_TLS_HANDSHAKE_COMPLETE)
+        client.add_flag(Flag.CLIENT_TLS_FIRST_READ)
+
+        try:
+            IRCD.selector.modify(client.local.socket, selectors.EVENT_READ, data=client)
+        except (KeyError, ValueError, OSError):
+            IRCD.selector.register(client.local.socket, selectors.EVENT_READ, data=client)
+        return 1
+
+    except (SSL.WantReadError, SSL.WantWriteError) as ex:
+        if isinstance(ex, SSL.WantReadError):
+            event = selectors.EVENT_READ
+            what = "read"
+        else:
+            event = selectors.EVENT_WRITE
+            what = "write"
+        # logging.debug(f"TLS handshake for {client.name} wants {what}.")
+        client.add_flag(Flag.CLIENT_TLS_HANDSHAKE_PENDING)
+        try:
+            IRCD.selector.modify(client.local.socket, event, data=client)
+        except (KeyError, ValueError, OSError):
+            IRCD.selector.register(client.local.socket, event, data=client)
+        return 1
+
+    except (SSL.Error, Exception) as ex:
+        client.local.socket = client.local.conn
         client.local.socket.setblocking(0)
         msg = "This port is for TLS connections only" if not starttls else f"STARTTLS failed: {str(ex) or 'unknown error'}"
         if starttls:
@@ -142,61 +192,18 @@ def wrap_socket(client, starttls=0):
             client.sendnumeric(Numeric.ERR_STARTTLS, "STARTTLS failed.")
         client.direct_send(f"ERROR :{msg}")
         client.exit(msg)
-        IRCD.close_socket(tls_sock)
         return 0
-
-    # Remove plain sock from table.
-    old_sock = client.local.socket
-    IRCD.client_by_sock.pop(old_sock, None)
-
-    client.local.socket = tls_sock
-    sock = client.local.socket
-    IRCD.client_by_sock[sock] = client
-
-    client.local.tls = tlsctx
-    client.local.socket.setblocking(0)
-    client.local.handshake = 1
-    client.add_flag(Flag.CLIENT_TLS_FIRST_READ)
-    return 1
 
 
 @IRCD.debug_freeze
-def post_accept(client, listen_obj):
-    if IRCD.use_poll and client.local.socket and client.local.socket.fileno() > 0:
-        try:
-            IRCD.poller.register(client.local.socket,
-                                 select.POLLIN | select.POLLPRI | select.POLLHUP | select.POLLERR |
-                                 select.EPOLLRDNORM | select.EPOLLRDHUP)
-        except Exception as ex:
-            logging.error(f"Failed to register socket with poller: {ex}")
-            client.exit("Socket registration error")
-            return
-
-    if listen_obj.tls and not wrap_socket(client):
-        return
-
-    """ Set to non-blocking after handshake """
-    client.local.socket.setblocking(0)
+def client_setup_finished(client, listen_obj):
     client.local.handshake = 1
 
-    if "servers" in listen_obj.options:
+    if listen_obj and "servers" in listen_obj.options:
         if IRCD.current_link_sync and IRCD.current_link_sync != client:
-            logging.error(f"Denying new incoming link because we are already processing another link.")
+            logging.error(f"Denying new incoming link {client.name} during sync.")
             client.exit(f"Already processing a link, try again.")
-
-            data = (f"New server client incoming ({client.ip}:{listen_obj.port})but we are currently already "
-                    f"processing an incoming server.")
-            if (IRCD.current_link_sync
-                    and IRCD.current_link_sync.ip == client.ip
-                    and IRCD.current_link_sync.port in [int(lis.port) for lis in IRCD.configuration.listen]
-                    and int(time()) == IRCD.current_link_sync.creationtime):
-                data += (f" Are you connecting to yourself? Make sure the outgoing IP is correct "
-                         f"in the '{IRCD.current_link_sync.name}' link block.")
-
-                IRCD.log(IRCD.me, "warn", "link", "LINK_IN_FAIL", data, sync=0)
-                logging.warning(data)
             return
-
         make_server(client)
     else:
         make_user(client)
@@ -204,12 +211,50 @@ def post_accept(client, listen_obj):
     IRCD.run_hook(Hook.NEW_CONNECTION, client)
 
     if client.local.socket.fileno() == -1:
-        client.exit("Invalid socket")
-        IRCD.close_socket(client.local.socket)
-        logging.warning(f"Discarded invalid socket with fileno: {client.local.socket.fileno()}")
+        client.exit("Invalid FD")
         return
 
-    logging.debug(f"Accepted new socket on {listen_obj.port}: {client.ip} -- fd: {client.local.socket.fileno()}")
+    logging.debug(f"Accepted socket on {listen_obj.port}: {client.ip} -- fd: {client.local.socket.fileno()}")
+
+
+@IRCD.debug_freeze
+def post_accept(client, listen_obj):
+    if client.local.conn:
+        client.local.conn.setblocking(0)
+    else:
+        logging.error(f"post_accept: client.local.conn is None for {client.name}")
+        client.exit("Internal server error (no connection object)")
+        return
+
+    if listen_obj and listen_obj.tls:
+        wrap_result = wrap_socket(client)
+
+        if wrap_result == 0:
+            return
+
+        if client.has_flag(Flag.CLIENT_TLS_HANDSHAKE_PENDING):
+            # logging.debug(f"TLS handshake pending for {client.name}. Deferring rest of setup.")
+            return
+
+    if not (listen_obj and listen_obj.tls):
+        try:
+            client.local.socket.setblocking(0)
+            IRCD.selector.register(client.local.socket, selectors.EVENT_READ, data=client)
+        except (KeyError, ValueError, OSError) as ex:
+            logging.error(f"Failed register plain socket for {client.name}: {ex}")
+            client.exit("Socket registration error")
+            return
+        except Exception as ex:
+            logging.exception(f"Unexpected error registering plain socket for {client.name}: {ex}")
+            client.exit("Socket registration error")
+            return
+
+    try:
+        client.local.socket.setblocking(0)
+    except Exception:
+        pass
+
+    client_setup_finished(client, listen_obj)
 
 
 @IRCD.debug_freeze
@@ -220,7 +265,7 @@ def accept_socket(sock, listen_obj):
     sock.setblocking(0)
     try:
         conn, addr = sock.accept()
-        conn.settimeout(1)
+        # conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
     except BlockingIOError:
         return
     except OSError as ex:
@@ -243,11 +288,11 @@ def accept_socket(sock, listen_obj):
 
     if not listen_obj and not ipaddress.ip_address(client.ip).is_private:
         client.exit("Connection reset")
-        IRCD.close_socket(sock)
         return
 
     if listen_obj:
-        IRCD.run_parallel_function(post_accept, args=(client, listen_obj))
+        post_accept(client, listen_obj)
+        # IRCD.run_parallel_function(post_accept, args=(client, listen_obj))
     else:
         client.local.handshake = 1
         IRCD.command_socket = client.local.socket
@@ -276,18 +321,6 @@ def check_timeouts():
                 Client.table.remove(client)
                 logging.warning(f"[check_timeouts()] Client was still in Client.table after .exit().")
 
-    for sock, timestamp in list(IRCD.kill_socks.items()):
-        if sock.fileno() < 0:
-            IRCD.kill_socks.pop(sock, None)
-            continue
-
-        if current_time - timestamp >= 1:
-            try:
-                sock.close()
-            except OSError:
-                pass
-            IRCD.kill_socks.pop(sock, None)
-
 
 @IRCD.debug_freeze
 def check_freeze():
@@ -296,31 +329,6 @@ def check_freeze():
     if IRCD.last_activity and since_last_activity > 2:
         logging.warning(f"IRCd froze for {since_last_activity} seconds. Check logs above for possible cause.")
     IRCD.last_activity = now
-
-
-@IRCD.debug_freeze
-@IRCD.parallel
-def manage_close_wait_sockets():
-    """ Close inactive sockets in CLOSE_WAIT state using psutil. """
-    try:
-        psutil_instance: typing.Any = psutil
-        if not (proc := psutil_instance.Process(IRCD.pid)):
-            return
-
-        for conn in list([c for c in proc.connections(kind="inet") if c.fd >= 0 and c.status == "CLOSE_WAIT"]):
-            try:
-                if conn.raddr:
-                    continue
-
-                os.close(conn.fd)
-                logging.warning(f"Closed orphaned CLOSE_WAIT socket: FD {conn.fd}")
-            except Exception as ex:
-                logging.error(f"Error handling socket FD {conn.fd}: {ex}")
-    except NameError:
-        # psutil not installed.
-        return
-    except Exception as ex:
-        logging.exception(ex)
 
 
 @IRCD.debug_freeze
@@ -385,6 +393,52 @@ def send_pings():
 
 
 @IRCD.debug_freeze
+def check_hostname_futures():
+    def apply_host(client, realhost):
+        client.hostname_future = None
+        client.user.realhost = realhost
+        client.user.cloakhost = client.user.vhost = IRCD.get_cloak(client)
+        client.remember["cloakhost"] = client.user.cloakhost
+        client.add_flag(Flag.CLIENT_HOST_DONE)
+        if client.handshake_finished():
+            client.register_user()
+
+    current_time = int(time())
+    for client in list(IRCD.get_clients(local=1)):
+        if client.hostname_future:
+            future = client.hostname_future
+            elapsed_time = current_time - client.hostname_future_submit_time
+            realhost = client.ip
+
+            if future.done():
+                client.hostname_future = None
+                cache_info = ''
+                client.hostname_future_submit_time = 0
+                try:
+                    result = future.result()
+                    resolved = result[0]
+                    if resolved:
+                        realhost = resolved
+                        if realhost == "localhost" and not ipaddress.ip_address(client.ip).is_private:
+                            realhost = client.ip
+                        else:
+                            IRCD.hostcache[client.ip] = (int(time()) + 3600, realhost)
+                            cache_info = ''
+
+                    IRCD.server_notice(client, f"*** Found your hostname: {realhost}{cache_info}")
+                    apply_host(client, realhost)
+
+                except Exception as ex:
+                    IRCD.server_notice(client, "*** Couldn't resolve your hostname, using IP address instead.")
+                    apply_host(client, realhost)
+
+            elif elapsed_time >= 1:
+                future.cancel()
+                IRCD.server_notice(client, "*** Couldn't resolve your hostname, using IP address instead.")
+                apply_host(client, realhost)
+
+
+@IRCD.debug_freeze
 def find_sock_from_fd(fd: int):
     # Unfortunately no reliable O(1) lookup possible.
     for sock in (listen.sock for listen in IRCD.configuration.listen if listen.listening):
@@ -413,7 +467,7 @@ def process_client_buffer(client):
             Command.do(IRCD.me, "RESTART")
         elif command == "SHUTDOWN":
             Command.do(IRCD.me, "DIE")
-        IRCD.close_socket(client.local.socket)
+        client.local.socket.close()
         return
 
     last_newline = buffer.rfind('\n')
@@ -513,7 +567,7 @@ def get_full_recv(client, sock):
         while part := sock.recv(4096):
             buffer.append(part.decode())
         client.local.temp_recvbuffer += ''.join(buffer)
-        return -1
+        return 1
     except (SSL.WantReadError, BlockingIOError) as ex:
         client.local.temp_recvbuffer += ''.join(buffer)
         return 1 if client.local.temp_recvbuffer else 0
@@ -550,17 +604,11 @@ def handle_connections():
     periodic_tasks = [
         send_pings, check_timeouts, process_backbuffer,
         autoconnect_links, throttle_expire, hostcache_expire,
-        remove_delayed_connections, check_freeze
+        remove_delayed_connections, check_freeze, check_hostname_futures
     ]
 
     while IRCD.running:
         try:
-            for client in [c for c in list(Client.table) if c.has_flag(Flag.CLIENT_EXIT)]:
-                try:
-                    Client.table.remove(client)
-                except ValueError:
-                    pass
-
             listen_sockets = [listen.sock for listen in IRCD.configuration.listen if listen.listening]
             if server_socket:
                 listen_sockets.append(server_socket)
@@ -590,5 +638,6 @@ def handle_connections():
         except KeyboardInterrupt:
             logging.info(f"[KeyboardInterrupt] Shutting down ProvisionIRCd.")
             IRCD.running = 0
+            IRCD.selector.close()
             IRCD.kill_parallel_tasks()
             sys.exit(0)
