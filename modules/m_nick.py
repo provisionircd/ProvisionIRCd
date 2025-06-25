@@ -168,6 +168,7 @@ def nick_collision(client, nick, remote_time):
         if int(remote_time) <= int(local_client.creationtime) or client.is_uline():
             local_client.add_flag(Flag.CLIENT_NICK_COLLISION)
             local_client.kill("Nick Collision")
+            local_client.del_flag(Flag.CLIENT_NICK_COLLISION)
         else:
             return 1
     return 0
@@ -184,28 +185,23 @@ def cmd_uid(client, recv):
     if (new_client := create_user_from_uid(client, recv)) and isinstance(new_client, Client):
         if client.recv_mtags:
             set_s2s_md(client, new_client)
+
         IRCD.global_user_count += 1
-        if IRCD.global_user_count > IRCD.maxgusers:
-            IRCD.maxgusers = IRCD.global_user_count
+        IRCD.maxgusers = max(IRCD.maxgusers, IRCD.global_user_count)
         new_client.sync(cause="cmd_uid()")
 
     else:
-        error_messages = {
-            Error.USER_UID_NOT_ENOUGH_PARAMS: Error.send(new_client, client.name, len(recv)),
-            Error.USER_UID_ALREADY_IN_USE: Error.send(new_client, recv[6]),
-            Error.USER_UID_SIGNON_NO_DIGIT: Error.send(new_client, signon),
+        """ `new_client` now holds an `Error` object returned by `create_user_from_uid()` """
+        err_handlers = {
+            Error.USER_UID_NOT_ENOUGH_PARAMS: lambda: Error.send(new_client, client.name, len(recv)),
+            Error.USER_UID_ALREADY_IN_USE: lambda: Error.send(new_client, recv[6]),
+            Error.USER_UID_SIGNON_NO_DIGIT: lambda: Error.send(new_client, signon),
         }
-        errmsg = error_messages.get(new_client, f"Unknown error: {new_client}")
-
-        if errmsg:
-            IRCD.send_to_one_server(client, [], f"SQUIT {IRCD.me.id} {errmsg}")
+        handler = err_handlers.get(new_client, lambda: f"Unknown error: {new_client}")
+        if errmsg := handler():
+            client.direct_send(f"ERROR :Critical link failure: {errmsg}")
             client.exit(errmsg)
-            data = f"Unable to link with {client.name}: {errmsg}"
-            IRCD.log(client, "error", "link", "LINK_FAILED_UID", data, sync=1)
         return
-
-    # logging.debug(f"[UID] Remote client {client.name} server synced: {client.server.synced}")
-    # logging.debug(f"Remote client server: {client.uplink.name} (synced: {client.server.synced})")
 
     if client.server.synced and not client.is_uline():
         msg = (f"*** Client connecting: {new_client.name} ({new_client.user.username}@{new_client.user.realhost}) [{new_client.ip}] "

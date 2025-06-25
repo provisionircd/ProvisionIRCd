@@ -10,20 +10,6 @@ from handle.logger import logging
 from handle.core import IRCD
 
 
-def validate_file_path(path, base_dir="tls"):
-    abs_base = os.path.abspath(base_dir)
-    abs_path = os.path.abspath(path)
-
-    if not os.path.exists(abs_base):
-        try:
-            os.makedirs(abs_base, mode=0o755, exist_ok=True)
-        except Exception as ex:
-            logging.error(str(ex))
-            exit(1)
-
-    return abs_path
-
-
 def ssl_verify_callback(*args):
     return True
 
@@ -32,14 +18,6 @@ def create_ctx(cert, key, name=None):
     try:
 
         os.makedirs("tls", mode=0o755, exist_ok=True)
-
-        try:
-            cert = validate_file_path(cert, "tls")
-            key = validate_file_path(key, "tls")
-        except ValueError as e:
-            logging.error(f"Invalid certificate or key path: {e}")
-            return None
-
         missing = 0
 
         if not os.path.isfile(cert):
@@ -79,21 +57,9 @@ def create_ctx(cert, key, name=None):
         raise
 
 
-def wrap_socket(listen_obj):
-    return SSL.Connection(listen_obj.tlsctx, listen_obj.sock)
-
-
 def generate_cert(key_out, cert_out, name):
     if not name:
         logging.error(f"Missing name in generate_cert()")
-        exit()
-
-    # Validate output paths before proceeding
-    try:
-        key_out = validate_file_path(key_out, "tls")
-        cert_out = validate_file_path(cert_out, "tls")
-    except ValueError as e:
-        logging.error(f"Invalid certificate or key path: {e}")
         exit()
 
     k = crypto.PKey()

@@ -127,6 +127,7 @@ class Client:
     remember = dict(host='', cloakhost='', vhost='', ident='', nick='')
     hostname_future: concurrent.futures.Future = None
     hostname_future_submit_time: int = 1
+    exit_time: float = 0
 
     @property
     def name(self) -> str:
@@ -379,7 +380,7 @@ class Client:
         # noinspection PyPep8Naming
         Batch = IRCD.get_attribute_from_module("Batch", package="modules.ircv3.batch")
         netsplit_reason = f"{self.name} {self.uplink.name}"
-        # End the netjoin batch if it hasn't been ended by EOS due to sudden connection drop.
+        # End the netjoin batch if it hasn't been ended by EOS due to a sudden connection drop.
         do_end_batch("netjoin")
 
         if self.server.authed:
@@ -418,7 +419,7 @@ class Client:
             return logging.error(f"Cannot use kill() on server! Reason given: {reason}")
 
         if self.local:
-            self.local.recvbuffer = []
+            self.local.recvbuffer.clear()
 
         self.add_flag(Flag.CLIENT_KILLED)
 
@@ -445,6 +446,7 @@ class Client:
             return
 
         self.add_flag(Flag.CLIENT_EXIT)
+        self.exit_time = time()
 
         if self.server and server_exit:
             self.server_exit(reason)
@@ -455,11 +457,18 @@ class Client:
         if self.local:
             if self.local.sendbuffer:
                 self.direct_send(self.local.sendbuffer)
-                self.local.sendbuffer = ''
 
             IRCD.local_client_count -= 1
             IRCD.remove_delay_client(self)
+
             self.local.recvbuffer.clear()
+            self.local.backbuffer.clear()
+            self.local.sendq_buffer.clear()
+            self.local.sendbuffer = ''
+            self.local.temp_recvbuffer = ''
+            if self.hostname_future and not self.hostname_future.done():
+                self.hostname_future.cancel()
+            self.hostname_future = None
 
             if reason and self.user and self.local.handshake and not sock_error:
                 self.direct_send(f"ERROR :Closing link: {self.name}[{self.user.realhost or self.ip}] {reason}")
@@ -492,10 +501,11 @@ class Client:
 
     def cleanup(self):
         Client.table.remove(self)
-        if not self.local:
-            return
+        if self.local:
+            self.local.socket.close()
 
-        self.local.socket.close()
+        gc.collect()
+        # IRCD.ref_counts(self)
 
     def is_killed(self):
         return self.has_flag(Flag.CLIENT_KILLED)
@@ -552,7 +562,7 @@ class Client:
 
     def check_flood(self):
         if self.is_flood_safe():
-            self.local.sendq_buffer = []
+            self.local.sendq_buffer.clear()
             return
 
         if not self.local or not self.user:
@@ -680,12 +690,12 @@ class Client:
                 logging.debug(f"Skipping non-existing class '{allow.connectclass_name}' in allow-block.")
                 continue
 
-            ip_count = len([c for c in IRCD.get_clients(local=1) if c.class_ == connectclass and c.ip == self.ip])
+            ip_count = sum(1 for c in IRCD.get_clients(local=1) if c.class_ == connectclass and c.ip == self.ip)
             if ip_count > allow.maxperip:
                 self.exit("Maximum connections from this IP reached for this class.")
                 return 0
 
-            class_count = len([c for c in IRCD.get_clients(local=1) if c.class_ == connectclass])
+            class_count = sum(1 for c in IRCD.get_clients(local=1) if c.class_ == connectclass)
             if class_count > connectclass.max:
                 self.exit("Maximum connections for this class reached")
                 return 0
@@ -888,8 +898,6 @@ class Client:
                 key = IRCD.selector.get_key(self.local.socket)
                 current_events = key.events
                 IRCD.selector.modify(self.local.socket, current_events | selectors.EVENT_WRITE, data=self)
-            except KeyError as ex:
-                IRCD.selector.register(client.local.socket, selectors.EVENT_READ | selectors.EVENT_WRITE, data=client)
             except (ValueError, OSError) as ex:
                 logging.exception(ex)
                 self.exit(f"Write error: {str(ex)}")
