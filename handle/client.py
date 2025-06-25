@@ -379,7 +379,7 @@ class Client:
         # noinspection PyPep8Naming
         Batch = IRCD.get_attribute_from_module("Batch", package="modules.ircv3.batch")
         netsplit_reason = f"{self.name} {self.uplink.name}"
-        # End the netjoin batch if it hasn't been ended by EOS due to sudden connection drop.
+        # End the netjoin batch if it hasn't been ended by EOS due to a sudden connection drop.
         do_end_batch("netjoin")
 
         if self.server.authed:
@@ -418,7 +418,7 @@ class Client:
             return logging.error(f"Cannot use kill() on server! Reason given: {reason}")
 
         if self.local:
-            self.local.recvbuffer = []
+            self.local.recvbuffer.clear()
 
         self.add_flag(Flag.CLIENT_KILLED)
 
@@ -552,7 +552,7 @@ class Client:
 
     def check_flood(self):
         if self.is_flood_safe():
-            self.local.sendq_buffer = []
+            self.local.sendq_buffer.clear()
             return
 
         if not self.local or not self.user:
@@ -888,8 +888,6 @@ class Client:
                 key = IRCD.selector.get_key(self.local.socket)
                 current_events = key.events
                 IRCD.selector.modify(self.local.socket, current_events | selectors.EVENT_WRITE, data=self)
-            except KeyError as ex:
-                IRCD.selector.register(client.local.socket, selectors.EVENT_READ | selectors.EVENT_WRITE, data=client)
             except (ValueError, OSError) as ex:
                 logging.exception(ex)
                 self.exit(f"Write error: {str(ex)}")
