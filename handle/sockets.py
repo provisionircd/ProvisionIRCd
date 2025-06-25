@@ -54,10 +54,6 @@ def wait_for_events(listen_sockets=None, read_sockets=None, write_sockets=None):
     except Exception as ex:
         logging.exception(ex)
 
-    for client in list(IRCD.get_clients()):
-        if client.has_flag(Flag.CLIENT_PENDING_CLEANUP):
-            client.cleanup()
-
     return events
 
 
@@ -132,7 +128,7 @@ def wrap_socket(client: Client, starttls=0) -> int:
 
     Returns:
         1: Handshake succeeded OR is pending.
-        0: Handshake failed immediately and client was exited.
+        0: Handshake failed immediately and the client was exited.
     """
 
     client.local.conn.setblocking(0)
@@ -148,42 +144,28 @@ def wrap_socket(client: Client, starttls=0) -> int:
             except (KeyError, ValueError, OSError):
                 pass
         except TypeError:
+            # TLS handshake still in progress.
             return 1
 
         client.local.socket = tls_sock
-        IRCD.client_by_sock.pop(client.local.conn, None)
-        IRCD.client_by_sock[client.local.socket] = client
         client.local.tls = tlsctx
         client.add_flag(Flag.CLIENT_TLS_HANDSHAKE_PENDING)
 
+    event = None
     try:
         client.local.socket.do_handshake()
         client.del_flag(Flag.CLIENT_TLS_HANDSHAKE_PENDING)
         client.add_flag(Flag.CLIENT_TLS_HANDSHAKE_COMPLETE)
         client.add_flag(Flag.CLIENT_TLS_FIRST_READ)
-
-        try:
-            IRCD.selector.modify(client.local.socket, selectors.EVENT_READ, data=client)
-        except (KeyError, ValueError, OSError):
-            IRCD.selector.register(client.local.socket, selectors.EVENT_READ, data=client)
-        return 1
+        event = selectors.EVENT_READ
 
     except (SSL.WantReadError, SSL.WantWriteError) as ex:
-        if isinstance(ex, SSL.WantReadError):
-            event = selectors.EVENT_READ
-            what = "read"
-        else:
-            event = selectors.EVENT_WRITE
-            what = "write"
-        # logging.debug(f"TLS handshake for {client.name} wants {what}.")
+        # .add_flag() is redunant here, but keeping it as a safety net anyway.
         client.add_flag(Flag.CLIENT_TLS_HANDSHAKE_PENDING)
-        try:
-            IRCD.selector.modify(client.local.socket, event, data=client)
-        except (KeyError, ValueError, OSError):
-            IRCD.selector.register(client.local.socket, event, data=client)
-        return 1
+        event = selectors.EVENT_READ if isinstance(ex, SSL.WantReadError) else selectors.EVENT_WRITE
 
-    except (SSL.Error, Exception) as ex:
+    except SSL.Error:
+        IRCD.client_by_sock.pop(client.local.socket, None)
         client.local.socket = client.local.conn
         client.local.socket.setblocking(0)
         msg = "This port is for TLS connections only" if not starttls else f"STARTTLS failed: {str(ex) or 'unknown error'}"
@@ -193,6 +175,18 @@ def wrap_socket(client: Client, starttls=0) -> int:
         client.direct_send(f"ERROR :{msg}")
         client.exit(msg)
         return 0
+
+    try:
+        key = IRCD.selector.get_key(client.local.socket)
+        if key.events != event:
+            IRCD.selector.modify(client.local.socket, event, data=client)
+    except KeyError:
+        # Not yet registered. Doing now.
+        IRCD.client_by_sock[client.local.socket] = client
+        IRCD.selector.register(client.local.socket, event, data=client)
+
+    # TLS handshake OK.
+    return 1
 
 
 @IRCD.debug_freeze
@@ -236,9 +230,11 @@ def post_accept(client, listen_obj):
             # logging.debug(f"TLS handshake pending for {client.name}. Deferring rest of setup.")
             return
 
+    # Non-TLS connection.
     if not (listen_obj and listen_obj.tls):
         try:
             client.local.socket.setblocking(0)
+            IRCD.client_by_sock[client.local.socket] = client
             IRCD.selector.register(client.local.socket, selectors.EVENT_READ, data=client)
         except (KeyError, ValueError, OSError) as ex:
             logging.error(f"Failed register plain socket for {client.name}: {ex}")
@@ -277,7 +273,6 @@ def accept_socket(sock, listen_obj):
 
     client = make_client(direction=None, uplink=IRCD.me)
     client.local.socket = client.local.conn = conn
-    IRCD.client_by_sock[client.local.socket] = client
     client.local.listen = listen_obj
     client.local.incoming = 1
     client.ip, client.port = addr
@@ -300,7 +295,8 @@ def accept_socket(sock, listen_obj):
 
 @IRCD.debug_freeze
 def check_timeouts():
-    current_time = int(time())
+    float_time = time()
+    current_time = int(float_time)
 
     for client in IRCD.get_clients(local=1):
         timeout_seconds = current_time - client.local.last_msg_received
@@ -309,7 +305,7 @@ def check_timeouts():
 
     if reg_timeout := IRCD.get_setting("regtimeout"):
         reg_timeout = int(reg_timeout)
-        for client in [c for c in IRCD.get_clients(local=1, registered=0)]:
+        for client in IRCD.get_clients(local=1, registered=0):
             if current_time - client.local.creationtime >= reg_timeout:
                 client.exit("Registration timed out")
 
@@ -319,7 +315,13 @@ def check_timeouts():
             client.exit("Invalid user")
             if client in Client.table:
                 Client.table.remove(client)
-                logging.warning(f"[check_timeouts()] Client was still in Client.table after .exit().")
+                logging.error(f"[check_timeouts()] Client was still in Client.table after .exit().")
+
+    pending_clients = IRCD.pending_close_clients
+    for i in range(len(pending_clients) - 1, -1, -1):
+        client = pending_clients[i]
+        if current_time - client.exit_time >= 0.2:
+            client.cleanup()
 
 
 @IRCD.debug_freeze
@@ -337,10 +339,10 @@ def autoconnect_links() -> None:
         return
 
     current_time = int(time())
-    for link in [link for link in IRCD.configuration.links if (link.outgoing
+    for link in (link for link in IRCD.configuration.links if (link.outgoing
                                                                and "autoconnect" in link.outgoing_options
                                                                and not IRCD.find_client(link.name)
-                                                               and link.name.lower() != IRCD.me.name.lower())]:
+                                                               and link.name.lower() != IRCD.me.name.lower())):
 
         seconds_since_last_attempt = current_time - link.last_connect_attempt
         if seconds_since_last_attempt >= 10:
@@ -387,8 +389,7 @@ def send_pings():
     for client in IRCD.get_clients(local=1, registered=1):
         time_since_last_ping = (current_time * 1000 - client.last_ping_sent) / 1000
         if (current_time - client.local.last_msg_received) >= pingfreq and time_since_last_ping > pingfreq / 3:
-            data = f"PING :{IRCD.me.name}" if client.user else f":{IRCD.me.id} PING {IRCD.me.name} {client.name}"
-            client.send([], data)
+            client.send([], f"PING :{IRCD.me.name}" if client.user else f":{IRCD.me.id} PING {IRCD.me.name} {client.name}")
             client.last_ping_sent = current_time * 1000
 
 
@@ -544,11 +545,13 @@ def process_backbuffer() -> None:
             client.handle_recv()
 
         if client.user:
-            if client.local.backbuffer:
-                client.local.backbuffer = [entry for entry in client.local.backbuffer if current_time < entry[0] + 1]
+            bb = client.local.backbuffer
+            while bb and not (current_time < bb[0][0] + 1):
+                bb.pop(0)
 
-            if client.local.sendq_buffer:
-                client.local.sendq_buffer = [entry for entry in client.local.sendq_buffer if current_time < entry[0] + 1]
+            sq = client.local.sendq_buffer
+            while sq and not (current_time < sq[0][0] + 1):
+                sq.pop(0)
 
 
 @IRCD.debug_freeze

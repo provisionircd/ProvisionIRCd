@@ -73,7 +73,6 @@ def ircv3_label_post_command(client, trigger, recv):
                 if client.has_capability("batch"):
                     batch = Batch.create_new(started_by=client, batch_type="labeled-response")
                     batch.announce_to(client)
-                    client.mtags.append(batch.tag)
                 """ Now send the rest as batch, and remove label tag. """
                 client.mtags = [tag for tag in client.mtags if not (tag.name == LabelTag.name and tag.value == Currentcmd.label)]
 

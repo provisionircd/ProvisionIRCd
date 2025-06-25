@@ -1,7 +1,7 @@
 """
 batch message tag
 """
-
+import logging
 import random
 import string
 
@@ -22,7 +22,8 @@ class Batch:
         self.batch_type = batch_type
         self.additional_data = additional_data
         self.users = []
-        self.start()
+        Batch.pool.append(self)
+        # self.start()
 
     @staticmethod
     def create_new(started_by, batch_type=None, additional_data=''):
@@ -45,13 +46,12 @@ class Batch:
                 if target_client not in batch.users:
                     batch.announce_to(target_client)
 
-    def start(self, batch_id=None):
-        # TODO: Maybe start/end BATCH with an internal ID?
-        for user in [u for u in self.users if u.has_capability("batch")]:
-            data = (f":{IRCD.me.name} BATCH +{self.label}{' ' + self.batch_type if self.batch_type else ''} "
-                    f"{' ' + self.additional_data if self.additional_data else ''}")
-            user.send([], data)
-        Batch.pool.append(self)
+    # def start(self, batch_id=None):
+    #     for user in [u for u in self.users if u.has_capability("batch")]:
+    #         data = (f":{IRCD.me.name} BATCH +{self.label}{' ' + self.batch_type if self.batch_type else ''} "
+    #                 f"{' ' + self.additional_data if self.additional_data else ''}")
+    #         user.send([], data)
+    #     Batch.pool.append(self)
 
     def end(self, batch_id=None):
         if self in Batch.pool:
@@ -60,6 +60,9 @@ class Batch:
             user.send([], f":{IRCD.me.name} BATCH -{self.label}")
         for client in IRCD.get_clients():
             for tag in list(client.mtags):
+                if not isinstance(tag, MessageTag):
+                    logging.exception(f"Tag object must be MessageTag, not {type(tag)}")
+                    continue
                 if tag.name == "batch" and tag.value == self.label:
                     client.mtags.remove(tag)
         self.users = []
@@ -71,6 +74,7 @@ class Batch:
             data = f":{IRCD.me.name} BATCH +{self.label} {self.batch_type}{' ' + self.additional_data if self.additional_data else ''}"
             client.send([tag for tag in client.mtags if tag.name == "label"], data)
             self.users.append(client)
+            client.mtags.append(self.tag)
 
     @staticmethod
     def find_batch_by(started_by):

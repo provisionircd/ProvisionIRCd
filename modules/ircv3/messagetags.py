@@ -55,6 +55,8 @@ class MessageTag:
 
     @staticmethod
     def filter_tags(mtags, destination):
+        seen = []
+        mtags = [tag for tag in mtags if not any(tag == s for s in seen) and not seen.append(tag)]
         return_tags = list(mtags)
 
         for index, tag in enumerate(mtags):

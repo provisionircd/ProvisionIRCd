@@ -67,6 +67,7 @@ def cmd_join(client, recv):
 
         IRCD.new_message(client)
         channel.do_join(client.mtags, client)
+        client.mtags = []
 
         if client.local:
             IRCD.run_hook(Hook.PRE_LOCAL_JOIN, client, channel)
@@ -78,8 +79,6 @@ def cmd_join(client, recv):
 
         hook = Hook.LOCAL_JOIN if client.local else Hook.REMOTE_JOIN
         IRCD.run_hook(hook, client, channel)
-
-    client.mtags = []
 
 
 def cmd_part(client, recv):
@@ -112,11 +111,10 @@ def cmd_part(client, recv):
 
         IRCD.new_message(client)
         channel.do_part(client, reason)
+        client.mtags.clear()
 
         hook = Hook.LOCAL_PART if client.local else Hook.REMOTE_PART
         IRCD.run_hook(hook, client, channel, reason)
-
-    client.mtags = []
 
 
 def init(module):

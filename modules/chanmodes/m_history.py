@@ -162,9 +162,8 @@ def send_history(client, channel, results: list) -> None:
                 filtered_mtags.append(MessageTag.find_tag("batch")(value=batch.label))
 
             filtered_mtags.extend(MessageTag.filter_tags(history_obj.mtags, client))
-            prefix = f"@{';'.join(t.string for t in filtered_mtags)} " if filtered_mtags else ""
-            data = f"{prefix}:{history_obj.sender} {history_obj.sendtype} {channel.name} :{history_obj.data}"
-            client.send([], data)
+            prefix = f"@{';'.join(t.string for t in filtered_mtags)} " if filtered_mtags else ''
+            client.send([], f"{prefix}:{history_obj.sender} {history_obj.sendtype} {channel.name} :{history_obj.data}")
 
     if batch:
         client.send([], f":{IRCD.me.name} BATCH -{batch.label}")

@@ -14,6 +14,7 @@ import time
 import sys
 import socket
 import selectors
+import inspect
 from collections import defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor
 
@@ -23,7 +24,7 @@ from threading import Event
 from time import time
 from datetime import datetime, timezone
 from dataclasses import dataclass
-from typing import ClassVar, Optional
+from typing import ClassVar, Optional, Dict
 from collections.abc import Callable
 
 from OpenSSL import SSL
@@ -56,6 +57,10 @@ class Command:
     def add(module, func: Callable, trigger: str, params: int = 0, *flags: Flag):
         if not flags:
             flags = Flag.CMD_USER,
+
+        if not isinstance(trigger, str):
+            logging.error(f"Error loading module {module}: trigger must be a string, not {type(trigger)}")
+            return
         cmd = Command(module=module, func=func, trigger=trigger, parameters=params, flags=flags)
         Command.table.append(cmd)
 
@@ -279,10 +284,10 @@ class IRCD:
     isupport: ClassVar[list] = []
     throttle: ClassVar[dict[str, deque]] = defaultdict(lambda: deque(maxlen=100))
     hostcache: ClassVar[dict[str, tuple[int, str]]] = {}
-    client_by_id: ClassVar[dict[str, "Client"]] = {}
-    client_by_name: ClassVar[dict[str, "Client"]] = {}
-    client_by_sock: ClassVar[dict[socket, "Client"]] = {}
-    channel_by_name: ClassVar[dict[str, "Channel"]] = {}
+    client_by_id: ClassVar[Dict[str, "Client"]] = {}
+    client_by_name: ClassVar[Dict[str, "Client"]] = {}
+    client_by_sock: ClassVar[Dict[socket, "Client"]] = {}
+    channel_by_name: ClassVar[Dict[str, "Channel"]] = {}
     maxusers: int = 0
     maxgusers: int = 0
     local_user_count: int = 0
@@ -303,6 +308,7 @@ class IRCD:
     # we will save it and send it after we receive their EOS.
     send_after_eos: ClassVar[dict] = {}
     delayed_connections: ClassVar[list] = []
+    pending_close_clients: ClassVar[list] = []
     versionnumber: str = "3.0"
     version: str = f"ProvisionIRCd-{versionnumber}-beta"
     running: int = 0
@@ -997,6 +1003,85 @@ class IRCD:
             return wrapper
 
         return decorator(func) if func is not None and not isinstance(func, (int, float)) else decorator
+
+    @staticmethod
+    def ref_counts(target_obj, show_local: bool = False):
+        """
+        Finds and logs only the IDENTIFIABLE, named referrers to a given object.
+
+        Any referrer for which a name cannot be found (e.g., a temporary list or
+        an internal artifact) is treated as a local reference and ignored by default.
+
+        Args:
+            target_obj: The object to investigate.
+            show_local: If True, will also show referrers for which no name could be
+                        found, labeling them as "Unnamed". Defaults to False.
+        """
+
+        obj_repr = repr(target_obj)
+        logging.debug(f"--- Analyzing referrers for {obj_repr[:200]} ---")
+
+        gc.collect()
+        all_referrers = gc.get_referrers(target_obj)
+        internal_locals_id = id(locals())
+        external_referrers = [r for r in all_referrers if id(r) != internal_locals_id]
+        identified_referrers = []
+        caller_frame = None
+
+        try:
+            caller_frame = inspect.currentframe().f_back
+        except Exception:
+            pass
+
+        for referrer in external_referrers:
+            found_locations = []
+            if caller_frame:
+                for name, obj in caller_frame.f_locals.items():
+                    if obj is referrer:
+                        found_locations.append(f"Caller's local variable: '{name}'")
+                for name, obj in caller_frame.f_globals.items():
+                    if obj is referrer and f"Caller's local variable: '{name}'" not in found_locations:
+                        found_locations.append(f"Global variable: '{name}'")
+
+            if not found_locations:
+                gc.collect()
+                for container_obj in gc.get_objects():
+                    if hasattr(container_obj, '__dict__'):
+                        for attr_name, attr_value in container_obj.__dict__.items():
+                            if attr_value is referrer:
+                                container_repr = f"<{type(container_obj).__name__} at {id(container_obj):#x}>"
+                                found_locations.append(f"Attribute '{attr_name}' on object {container_repr}")
+
+            identified_referrers.append((referrer, sorted(list(set(found_locations)))))
+
+        final_results = []
+        for referrer, locations in identified_referrers:
+            if locations:
+                final_results.append((referrer, locations))
+            elif show_local:
+                final_results.append((referrer, ["Unnamed (likely a temporary or internal object)"]))
+
+        if not final_results:
+            logging.debug("Object has no identifiable external referrers.")
+            logging.debug("--- End of analysis ---")
+            return
+
+        logging.debug(f"Found {len(final_results)} identifiable referrer(s):")
+
+        for i, (referrer, locations) in enumerate(final_results, 1):
+            is_last = (i == len(final_results))
+            prefix = '└──' if is_last else '├──'
+
+            referrer_preview = repr(referrer)
+            if len(referrer_preview) > 150:
+                referrer_preview = referrer_preview[:150] + "..."
+            logging.debug(f"{prefix} Referrer: a {type(referrer).__name__} | Content: {referrer_preview}")
+
+            name_prefix = '   ' if is_last else '│  '
+            for location in locations:
+                logging.debug(f"{name_prefix}└── Location: {location}")
+
+        logging.debug("--- End of analysis ---")
 
 
 @dataclass

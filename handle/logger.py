@@ -219,9 +219,12 @@ class EnhancedRotatingFileHandler(logging.handlers.TimedRotatingFileHandler):
             if self.backupExpire and (time.time() - os.path.getmtime(fn)) > self.backupExpire:
                 os.remove(fn)
 
-        oldest = sorted(files, key=os.path.getmtime)
-        for fn in oldest[:-self.backupCount]:
-            os.remove(fn)
+        try:
+            oldest = sorted(files, key=os.path.getmtime)
+            for fn in oldest[:-self.backupCount]:
+                os.remove(fn)
+        except FileNotFoundError:
+            pass
 
 
 if not os.path.exists("logs"):

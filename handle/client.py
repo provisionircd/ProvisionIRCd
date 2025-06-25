@@ -127,6 +127,7 @@ class Client:
     remember = dict(host='', cloakhost='', vhost='', ident='', nick='')
     hostname_future: concurrent.futures.Future = None
     hostname_future_submit_time: int = 1
+    exit_time: float = 0
 
     @property
     def name(self) -> str:
@@ -256,7 +257,7 @@ class Client:
     def sendnumeric(self, replycode: int, *args: str) -> None:
         if self.is_local_user():
             reply_num, reply_string = replycode
-            self.send(mtags=[], data=f":{IRCD.me.name} {str(reply_num).rjust(3, '0')} {self.name} {reply_string.format(*args)}")
+            self.send(mtags=self.mtags, data=f":{IRCD.me.name} {str(reply_num).rjust(3, '0')} {self.name} {reply_string.format(*args)}")
 
     def set_class_obj(self, client_class_obj):
         self.class_ = client_class_obj
@@ -267,12 +268,11 @@ class Client:
             logging.error(f"Incorrect type received in setinfo(): {change_type}")
             return 0
 
-        if not (clean_info := ''.join(c for c in info if c.lower() in IRCD.HOSTCHARS)):
-            return 0
-        info = clean_info
-
         try:
             if change_type in ["host", "ident"]:
+                if not (clean_info := ''.join(c for c in info if c.lower() in IRCD.HOSTCHARS)):
+                    return 0
+                info = clean_info
                 if change_type == "host":
                     self.set_host(host=info)
                 else:
@@ -280,7 +280,9 @@ class Client:
 
             # Handle gecos/realname changes
             else:
-                self.info = info
+                if not (clean_info := ''.join(c for c in info if c.lower() in IRCD.HOSTCHARS + ' ')):
+                    return 0
+                self.info = clean_info
                 if self.local:
                     IRCD.server_notice(self, f"*** Your realname is now \"{self.info}\"")
                     self.has_capability("setname") and self.send([], f":{self.fullmask} SETNAME :{self.info}")
@@ -379,7 +381,7 @@ class Client:
         # noinspection PyPep8Naming
         Batch = IRCD.get_attribute_from_module("Batch", package="modules.ircv3.batch")
         netsplit_reason = f"{self.name} {self.uplink.name}"
-        # End the netjoin batch if it hasn't been ended by EOS due to sudden connection drop.
+        # End the netjoin batch if it hasn't been ended by EOS due to a sudden connection drop.
         do_end_batch("netjoin")
 
         if self.server.authed:
@@ -418,7 +420,7 @@ class Client:
             return logging.error(f"Cannot use kill() on server! Reason given: {reason}")
 
         if self.local:
-            self.local.recvbuffer = []
+            self.local.recvbuffer.clear()
 
         self.add_flag(Flag.CLIENT_KILLED)
 
@@ -444,7 +446,9 @@ class Client:
         if self not in Client.table or self.has_flag(Flag.CLIENT_EXIT):
             return
 
+        Client.table.remove(self)
         self.add_flag(Flag.CLIENT_EXIT)
+        self.exit_time = time()
 
         if self.server and server_exit:
             self.server_exit(reason)
@@ -455,11 +459,18 @@ class Client:
         if self.local:
             if self.local.sendbuffer:
                 self.direct_send(self.local.sendbuffer)
-                self.local.sendbuffer = ''
 
             IRCD.local_client_count -= 1
             IRCD.remove_delay_client(self)
+
             self.local.recvbuffer.clear()
+            self.local.backbuffer.clear()
+            self.local.sendq_buffer.clear()
+            self.local.sendbuffer = ''
+            self.local.temp_recvbuffer = ''
+            if self.hostname_future and not self.hostname_future.done():
+                self.hostname_future.cancel()
+            self.hostname_future = None
 
             if reason and self.user and self.local.handshake and not sock_error:
                 self.direct_send(f"ERROR :Closing link: {self.name}[{self.user.realhost or self.ip}] {reason}")
@@ -471,31 +482,30 @@ class Client:
 
             IRCD.client_by_sock.pop(self.local.socket, None)
             try:
-                if isinstance(self.local.socket, OpenSSL.SSL.Connection):
+                if not isinstance(self.local.socket, OpenSSL.SSL.Connection):
+                    self.local.socket.shutdown(socket.SHUT_WR)
+                else:
                     try:
                         self.local.socket.shutdown()
                     except OpenSSL.SSL.Error:
                         pass
-                else:
-                    self.local.socket.shutdown(socket.SHUT_RDWR)
 
             except (OSError, OpenSSL.SSL.Error, OpenSSL.SSL.SysCallError):
                 pass
             except Exception as ex:
                 logging.exception(ex)
 
+            IRCD.pending_close_clients.append(self)
+
         if self.registered and self.user:
             hook = Hook.LOCAL_QUIT if self.local else Hook.REMOTE_QUIT
             IRCD.run_hook(hook, self, reason)
 
-        self.add_flag(Flag.CLIENT_PENDING_CLEANUP)
-
     def cleanup(self):
-        Client.table.remove(self)
-        if not self.local:
-            return
-
+        IRCD.pending_close_clients.remove(self)
         self.local.socket.close()
+        gc.collect()
+        # IRCD.ref_counts(self)
 
     def is_killed(self):
         return self.has_flag(Flag.CLIENT_KILLED)
@@ -552,7 +562,7 @@ class Client:
 
     def check_flood(self):
         if self.is_flood_safe():
-            self.local.sendq_buffer = []
+            self.local.sendq_buffer.clear()
             return
 
         if not self.local or not self.user:
@@ -680,12 +690,12 @@ class Client:
                 logging.debug(f"Skipping non-existing class '{allow.connectclass_name}' in allow-block.")
                 continue
 
-            ip_count = len([c for c in IRCD.get_clients(local=1) if c.class_ == connectclass and c.ip == self.ip])
+            ip_count = sum(1 for c in IRCD.get_clients(local=1) if c.class_ == connectclass and c.ip == self.ip)
             if ip_count > allow.maxperip:
                 self.exit("Maximum connections from this IP reached for this class.")
                 return 0
 
-            class_count = len([c for c in IRCD.get_clients(local=1) if c.class_ == connectclass])
+            class_count = sum(1 for c in IRCD.get_clients(local=1) if c.class_ == connectclass)
             if class_count > connectclass.max:
                 self.exit("Maximum connections for this class reached")
                 return 0
@@ -888,8 +898,6 @@ class Client:
                 key = IRCD.selector.get_key(self.local.socket)
                 current_events = key.events
                 IRCD.selector.modify(self.local.socket, current_events | selectors.EVENT_WRITE, data=self)
-            except KeyError as ex:
-                IRCD.selector.register(client.local.socket, selectors.EVENT_READ | selectors.EVENT_WRITE, data=client)
             except (ValueError, OSError) as ex:
                 logging.exception(ex)
                 self.exit(f"Write error: {str(ex)}")

@@ -277,7 +277,7 @@ class Channel:
         if member := self.find_member(client):
             self.member_by_client.pop(member.client, None)
         else:
-            logging.debug(f"Unable to remove {client.name} (uplink={client.uplink.name}) from channel {self.name}: member not found")
+            logging.error(f"Unable to remove {client.name} (uplink={client.uplink.name}) from channel {self.name}: member not found")
 
         for c in self.seen_dict:
             if client in self.seen_dict[c]:
