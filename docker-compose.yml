@@ -1,0 +1,10 @@
+version: '3.8'
+services:
+  ircd:
+    build: .
+    ports:
+      - "6667:6667"
+      - "6697:6697"
+    volumes:
+      - ./conf:/usr/src/app/conf
+      - ./logs:/usr/src/app/logs

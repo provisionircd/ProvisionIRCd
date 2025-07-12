@@ -6,11 +6,20 @@ Massive code overhaul, so there might still be some issues.
 
 ## Installation
 
+### Without Docker
+
 Install the required packages:
 ```pip3 install -r requirements.txt```
 
 Edit <b>conf/examples/ircd.example.conf</b> and save it to <b>conf/ircd.conf</b>.<br>
 When you are done editting the configuration files, you can start ProvisionIRCd by running ```python3 ircd.py```
+
+### With Docker
+
+1. Make sure you have Docker and Docker Compose installed.
+2. Copy `conf/examples/ircd.example.conf` to `conf/ircd.conf` and edit it to your liking.
+3. Run `docker-compose up -d`.
+4. To stop the server, run `docker-compose down`.
 
 ## Features
 
