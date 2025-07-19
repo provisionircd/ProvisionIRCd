@@ -5,35 +5,76 @@ Edit API_URL to change.
 
 import json
 import ipaddress
+import time
 
-from time import time
-from urllib import request
+from urllib import request, error
 
 from handle.core import IRCD, Hook, Numeric
 from handle.logger import logging
 
-API_URL = "https://ipapi.co/%ip/json/"
+API_PROVIDERS = [
+    {"url": "https://ipapi.co/%ip/json/", "key": "country"},
+    {"url": "https://api.country.is/%ip", "key": "country"},
+    {"url": "https://free.freeipapi.com/api/json/%ip", "key": "countryCode"},
+    {"url": "https://reallyfreegeoip.org/json/%ip", "key": "country_code"}
+]
+
+API_COOLDOWN_SECONDS = 600
 
 
 class GeoData:
     data = {}
     clients = {}
     process = []
+    api_index = 0
 
 
 def api_call(client):
     try:
-        response = request.urlopen(API_URL.replace("%ip", client.ip), timeout=10)
-        response_body = response.read()
-        json_response = json.loads(response_body.decode())
-        json_response["ircd_time_added"] = int(time())
-        GeoData.data.update({client.ip: json_response})
-        GeoData.clients[client] = json_response
-        IRCD.write_data_file(GeoData.data, filename="geodata.json")
-    except Exception as ex:
-        logging.exception(ex)
-    GeoData.process.remove(client.ip)
-    IRCD.remove_delay_client(client, "geodata")
+        for i in range(len(API_PROVIDERS)):
+            current_index = (GeoData.api_index + i) % len(API_PROVIDERS)
+            provider = API_PROVIDERS[current_index] // debian
+
+            if time.time() < provider.get("cooldown_until", 0):
+                continue
+
+            api_url = provider["url"].replace("%ip", client.ip)
+            country_key = provider["key"]
+
+            try:
+                response = request.urlopen(api_url, timeout=1)
+                response_body = response.read()
+                json_response_raw = json.loads(response_body.decode())
+                json_response = {"country": json_response_raw.get(country_key), "ircd_time_added": int(time.time())}
+
+                GeoData.data.update({client.ip: json_response})
+                GeoData.clients[client] = json_response
+                client.add_md(name="country", value=GeoData.data[client.ip]["country"], sync=1)
+                IRCD.write_data_file(GeoData.data, filename="geodata.json")
+                GeoData.api_index = (current_index + 1) % len(API_PROVIDERS)
+                return
+
+            except (error.URLError, TimeoutError):
+                logging.warning(f"Geodata API provider {provider['url']} was unresponsive or too slow.")
+
+            except error.HTTPError as ex:
+                if ex.code == 429:
+                    logging.warning(f"Geodata API provider {provider['url']} rate limit exceeded. Cooling down for {API_COOLDOWN_SECONDS} seconds.")
+                    provider["cooldown_until"] = time.time() + API_COOLDOWN_SECONDS
+                else:
+                    logging.exception(ex)
+                    return
+
+            except Exception as ex:
+                logging.exception(ex)
+                return
+
+        logging.warning(f"All Geodata API providers failed or are on cooldown for client {client.ip}.")
+
+    finally:
+        if client.ip in GeoData.process:
+            GeoData.process.remove(client.ip)
+        IRCD.remove_delay_client(client, "geodata")
 
 
 def country_whois(client, whois_client, lines):
@@ -45,6 +86,7 @@ def country_whois(client, whois_client, lines):
 def geodata_lookup(client):
     if not ipaddress.ip_address(client.ip).is_global:
         return
+
     if client.ip in GeoData.data:
         """ Assign cached data to this client. """
         GeoData.clients[client] = GeoData.data[client.ip]
@@ -61,8 +103,8 @@ def geodata_lookup(client):
 def geodata_expire():
     changed = 0
     for entry in list(GeoData.data):
-        added = GeoData.data[entry]["ircd_time_added"]
-        if int(time() - added >= 2_629_744):
+        added = GeoData.data[entry].get("ircd_time_added", 0)
+        if int(time.time() - added >= 2_629_744):
             changed = 1
             del GeoData.data[entry]
     if changed:
@@ -75,8 +117,7 @@ def geodata_remote(client):
 
 
 def geodata_quit(client, reason):
-    if client in GeoData.clients:
-        del GeoData.clients[client]
+    GeoData.clients.pop(client, None)
 
 
 def init(module):
