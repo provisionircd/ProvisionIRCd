@@ -2,6 +2,8 @@
 /who command
 """
 
+from time import time
+
 from handle.core import IRCD, Command, Isupport, Numeric, Hook
 from handle.functions import is_match
 
@@ -73,9 +75,9 @@ def who_can_see_channel(client, channel, who_target):
     return 1
 
 
-def send_who_reply(client, who_data_list, mask):
+def send_who_reply(client, who_data_list, mask, whox):
     for data in who_data_list:
-        if any(data.fields):
+        if whox:
             reply_string = ' '.join(str(field) for field in data.fields if field)
             client.sendnumeric(Numeric.RPL_WHOSPCRPL, reply_string)
         else:
@@ -99,33 +101,41 @@ def send_who_reply(client, who_data_list, mask):
 
 
 def filter_clients(clients, flag, flag_match, flag_true, client=None):
-    if flag == 'n':  # Nickname filter
-        matches = (c for c in IRCD.get_clients(user=1, registered=1) if is_match(flag_match.lower(), c.name.lower()))
-    elif flag == 'u':  # Username filter
-        matches = (c for c in IRCD.get_clients(user=1, registered=1) if is_match(flag_match.lower(), c.user.username.lower()))
-    elif flag == 'h' and client and 'o' in client.user.modes:  # Host filter (operators only)
-        matches = (c for c in IRCD.get_clients(user=1, registered=1) if is_match(flag_match.lower(), c.user.realhost.lower()))
-    elif flag == 'i' and client and 'o' in client.user.modes:  # IP filter (operators only)
-        matches = (c for c in IRCD.get_clients(user=1, registered=1) if is_match(flag_match, c.ip))
-    elif flag == 's' and client and 'o' in client.user.modes:  # Server filter (operators only)
-        matches = (c for c in IRCD.get_clients(user=1, registered=1) if is_match(flag_match.lower(), c.uplink.name.lower()))
-    elif flag == 'r':  # Realname filter
-        matches = (c for c in IRCD.get_clients(user=1, registered=1) if is_match(flag_match.lower(), c.info.lower()))
-    elif flag == 'a':  # Account filter
-        matches = (c for c in IRCD.get_clients(user=1, registered=1) if is_match(flag_match.lower(), c.user.account.lower()))
+    initial_clients = list(clients)
+    filtered_matches = initial_clients
+
+    if flag == 'n':
+        filtered_matches = (c for c in initial_clients if is_match(flag_match.lower(), c.name.lower()))
+    elif flag == 'u':
+        filtered_matches = (c for c in initial_clients if is_match(flag_match.lower(), c.user.username.lower()))
+    elif flag == 'h' and client and 'o' in client.user.modes:
+        filtered_matches = (c for c in initial_clients if is_match(flag_match.lower(), c.user.realhost.lower()))
+    elif flag == 'i' and client and 'o' in client.user.modes:
+        filtered_matches = (c for c in initial_clients if is_match(flag_match, c.ip))
+    elif flag == 's' and client and 'o' in client.user.modes:
+        filtered_matches = (c for c in initial_clients if is_match(flag_match.lower(), c.uplink.name.lower()))
+    elif flag == 'r':
+        filtered_matches = (c for c in initial_clients if is_match(flag_match.lower(), c.info.lower()))
+    elif flag == 'a':
+        filtered_matches = (c for c in initial_clients if is_match(flag_match.lower(), c.user.account.lower()))
+    elif flag == 'o':
+        filtered_matches = (c for c in initial_clients if 'o' in c.user.modes)
     else:
-        return clients
+        return initial_clients
 
     if flag_true:
-        return matches
+        final_list = list(filtered_matches)
+        return final_list
     else:
-        matches = set(matches)
-        return (c for c in clients if c not in matches)
+        matches_to_exclude = set(filtered_matches)
+        final_list = [c for c in initial_clients if c not in matches_to_exclude]
+        return final_list
 
 
 def process_whox_field(data, flag, token, mask, client):
     """ Process a single WHOX field for a client. """
     who_client = data.who_client
+    current_time = int(time())
 
     if flag == 't' and token:
         data.fields[0] = token
@@ -147,17 +157,35 @@ def process_whox_field(data, flag, token, mask, client):
     elif flag == 'd':
         data.fields[8] = str(who_client.hopcount)
     elif flag == 'l':
-        data.fields[9] = str(who_client.idle_since)
+        data.fields[9] = str(current_time - who_client.idle_since)
     elif flag == 'a':
         account = who_client.user.account
         data.fields[10] = account if account != '*' else '0'
+
     elif flag == 'o':
-        if who_channel := IRCD.find_channel(mask):
-            status = ''.join(m.prefix for m in who_channel.get_membermodes_sorted()
-                             if who_channel.client_has_membermodes(who_client, m.flag))
+        channel_context = (IRCD.find_channel(mask) or next((c for c in who_client.channels() if c.find_member(client)), None))
+        if not channel_context and 'o' in client.user.modes and who_client.channels():
+            channel_context = who_client.channels()[0]
+        if channel_context:
+            status = ''.join(m.prefix for m in channel_context.get_membermodes_sorted() if channel_context.client_has_membermodes(who_client, m.flag))
             data.fields[11] = status
+        else:
+            data.fields[11] = ''
+
     elif flag == 'r':
         data.fields[12] = ':' + who_client.info
+
+
+def matches_who_mask(client, mask, c):
+    lowered_mask = mask.lower()
+    fields_to_check = [c.name.lower(), c.user.vhost.lower()]
+    if 'o' in client.user.modes:
+        fields_to_check.extend([c.ip, c.user.realhost.lower()])
+    return any(is_match(lowered_mask, field) for field in fields_to_check)
+
+
+def is_client_visible(client, c):
+    return 'i' not in c.user.modes or IRCD.common_channels(client, c) or client.has_permission("channel:see:who:invisible") or c == client
 
 
 def find_matching_clients(client, mask):
@@ -171,103 +199,128 @@ def find_matching_clients(client, mask):
     if (user := IRCD.find_client(mask)) and user.registered:
         return [user]
 
-    return (c for c in IRCD.get_clients(user=1, registered=1) if is_match(mask, c.ip)
-            and ('i' not in c.user.modes or IRCD.common_channels(client, c)
-                 or client.has_permission("channel:see:who:invisible") or c == client))
+    return (c for c in IRCD.get_clients(user=1, registered=1) if is_client_visible(client, c) and matches_who_mask(client, mask, c))
 
 
 def cmd_who(client, recv):
     """
     View information about users on the server.
     -
-    Syntax: WHO <target> [flags]
+    Syntax: WHO <target[,target2,...]> [flags] [params...]
+    Syntax: WHO <target[,target2,...]> [%<fields>[,<token>]]
     -
-    Wildcards are accepted in <target>, so * matches all channels on the network.
-    Flags are optional, and can be used to filter the output.
-    They work similar to modes, + for positive and - for negative.
+    The WHO command can be used to get information about users on the network.
+    Multiple targets can be specified in a comma-separated list.
+    Wildcards (*, ?) are accepted in the target mask.
     -
-     a <name>       = Match on account name.
-     n <nickname>   = Match on nickname.
-     h <host>       = User has <host> in the hostname.
-     o              = Show only IRC operators.
-     r <realname>   = Filter by realname.
-     s <server      = Filter by server.
+    The command has two modes of operation: Legacy and WHOX.
+    ---------------------------------------------------------------------
+    Legacy Filtering Flags (+/-)
+    ---------------------------------------------------------------------
+    Legacy mode uses flags to filter the result list. Flags can be prefixed
+    with '+' to include matches or '-' to exclude them. A parameter with
+    spaces must be the final argument.
+    -
+     o              = Filter for global IRC Operators.
+     n <nickname>   = Filter by nickname.
      u <ident>      = Filter by username/ident.
-    """
+     h <host>       = Filter by hostname (operator only).
+     r <realname>   = Filter by real name.
+     s <server>     = Filter by server name (operator only).
+    ---------------------------------------------------------------------
+    WHOX Extension (%fields)
+    ---------------------------------------------------------------------
+    WHOX mode is triggered by using the '%' character. It allows for a
+    completely customized reply containing only the fields you request.
+    An optional numeric token (max 3 digits) can be provided for tracking.
+    -
+     %<fields>[,<token>]
+    -
+    WHOX Fields:
+     t = The client-specified <token>.
+     c = A channel the user is in.
+     u = Username (ident).
+     i = IP address.
+     h = Hostname.
+     s = Server name.
+     n = Nickname.
+     f = Flags (H/G, *, @, +, etc.).
+     d = Hop count.
+     l = Idle time in seconds.
+     o = Channel operator level
+     r = Real name.
+    ---------------------------------------------------------------------
+    Examples
+    ---------------------------------------------------------------------
+    Legacy:     WHO #gaming -n guest*
+    -           Shows all users in #gaming, excluding any whose nickname begins with 'guest'.
 
+    Legacy:     WHO * +h staff.example.org
+    -           Shows all users on the server with the hostname 'staff.example.org'.
+
+    WHOX:       WHO Coder %uhs
+    -           Gets the username, hostname, and server name for the user 'Coder'.
+
+    WHOX:       WHO #support %nf
+    -           For everyone in #support, shows their nickname and status flags.
+    """
     client.add_flood_penalty(10_000)
     who_mask = '*' if len(recv) <= 1 or recv[1] == '*' else recv[1]
 
-    flags = ''
-    flag_true = 1
-    flag_matches = []
-    token = ''
     whox = False
+    fields_str = ''
+    token = ''
+
+    unique_matches = set()
+    for mask in who_mask.split(','):
+        unique_matches.update(find_matching_clients(client, mask))
+    who_matches = list(unique_matches)
 
     if len(recv) > 2:
-        flag_arg = recv[2]
-        if flag_arg.startswith('+'):
-            flags = flag_arg[1:]
-        elif flag_arg.startswith('-'):
-            flag_true = 0
-            flags = flag_arg[1:]
-        else:
-            flags = flag_arg
-
-        # Handle WHOX format
-        if '%' in flags:
+        if '%' in recv[2]:
             whox = True
-            if ',' in flags:
-                token = flags.split(',', 1)[1]
+            params = recv[2].split('%', 1)[1]
+            if ',' in params:
+                fields_str, token = params.split(',', 1)
+                if not token.isdigit() or len(token) > 3:
+                    token = ''
+            else:
+                fields_str = params
 
-    if len(recv) > 3:
-        flag_matches = recv[3:]
+        else:
+            args = recv[2:]
+            arg_idx = 0
 
-    for mask in who_mask.split(','):
-        who_matches = find_matching_clients(client, mask)
+            while arg_idx < len(args):
+                arg = args[arg_idx]
+                if arg.startswith(('+', '-')):
+                    is_positive = arg[0] == '+'
+                    flags_in_arg = arg[1:]
 
-        flag_match_idx = -1
-        for char in flags:
-            # Skip WHOX indicator
-            if char == '%':
-                continue
+                    for flag in flags_in_arg:
+                        param = ''
+                        if flag in 'nhsru':
+                            arg_idx += 1
+                            if arg_idx < len(args):
+                                param = ' '.join(args[arg_idx:])
+                                arg_idx = len(args)
 
-            flag_match_idx += 1
-            flag_match = flag_matches[flag_match_idx] if flag_match_idx < len(flag_matches) else ''
+                        who_matches = list(filter_clients(who_matches, flag, param, is_positive, client))
+                arg_idx += 1
 
-            if char == 'm' and 'o' in client.user.modes:
-                condition = '-' if mask.startswith('-') else '+'
-                mode_mask = mask[1:] if condition == '-' else mask
+    who_data_list = []
+    for who_client in who_matches:
+        data = WhoData(who_client)
+        data.make(client)
+        if whox:
+            for char in fields_str:
+                process_whox_field(data, char, token, who_mask, client)
+        else:
+            data.flags = ''  # No longer used, but kept for object compatibility.
 
-                filtered = []
-                for mode in mode_mask:
-                    for c in IRCD.get_clients(user=1, registered=1):
-                        if (((condition == '+' and mode in c.user.modes)
-                             or (condition == '-' and mode not in c.user.modes))
-                                and c not in filtered):
-                            filtered.append(c)
+        who_data_list.append(data)
 
-                who_matches = filtered if flag_true else [c for c in who_matches if c not in filtered]
-
-            elif char == 'd' and mask.isdigit():
-                who_matches = (c for c in IRCD.get_clients(user=1, registered=1) if c.hopcount == int(mask))
-
-            elif not whox:
-                who_matches = filter_clients(who_matches, char, flag_match, flag_true, client)
-
-        who_data_list = []
-        for who_client in who_matches:
-            data = WhoData(who_client)
-            data.flags = flags
-            data.make(client)
-
-            if whox:
-                for char in flags:
-                    process_whox_field(data, char, token, mask, client)
-
-            who_data_list.append(data)
-
-        send_who_reply(client, who_data_list, mask)
+    send_who_reply(client, who_data_list, who_mask, whox)
 
 
 def init(module):
