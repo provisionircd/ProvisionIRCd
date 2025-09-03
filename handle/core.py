@@ -286,7 +286,7 @@ class IRCD:
     hostcache: ClassVar[dict[str, tuple[int, str]]] = {}
     client_by_id: ClassVar[Dict[str, "Client"]] = {}
     client_by_name: ClassVar[Dict[str, "Client"]] = {}
-    client_by_sock: ClassVar[Dict[socket, "Client"]] = {}
+    client_by_sock: ClassVar[Dict[socket.socket, "Client"]] = {}
     channel_by_name: ClassVar[Dict[str, "Channel"]] = {}
     maxusers: int = 0
     maxgusers: int = 0
