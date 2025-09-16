@@ -20,6 +20,10 @@ def broadcast_network_to_new_server(client):
         logging.debug(f"Syncing server {s_client.name} to {client.name}")
         client.send([], f":{s_client.uplink.id} SID {s_client.name} {s_client.hopcount + 1} {s_client.id} :{s_client.info}")
 
+        for _, md in s_client.moddata.items():
+            logging.debug(f"Syncing server {s_client.name} MD data: {md.name} {md.value}")
+            client.send([], f":{s_client.uplink.id} MD client {s_client.id} {md.name} :{md.value}")
+
 
 def broadcast_new_server_to_network(client):
     if client.has_flag(Flag.CLIENT_EXIT):

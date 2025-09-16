@@ -19,7 +19,7 @@ class S2sMd(MessageTag):
 
 def cmd_md(client, recv):
     if recv[1] == "client":
-        if not (md_client := IRCD.find_client(recv[2])) and not (md_client := IRCD.find_client(recv[2])):
+        if not (md_client := IRCD.find_client(recv[2])):
             # Closed early. Killed.
             return
 

@@ -1101,7 +1101,8 @@ class ModData:
             client.moddata[name] = md
         elif md.value != value:
             md.value = value
-        if md.sync and client.id and client.registered:
+
+        if md.sync and client.id:
             IRCD.send_to_servers(client, mtags=[], data=f":{client.uplink.id} MD client {client.id} {md.name} :{md.value}")
 
     @staticmethod

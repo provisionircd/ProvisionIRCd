@@ -899,7 +899,6 @@ class Client:
                 current_events = key.events
                 IRCD.selector.modify(self.local.socket, current_events | selectors.EVENT_WRITE, data=self)
             except (ValueError, OSError) as ex:
-                logging.exception(ex)
                 self.exit(f"Write error: {str(ex)}")
                 return
 
