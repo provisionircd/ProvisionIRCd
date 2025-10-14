@@ -121,7 +121,7 @@ def process_event(event, listen_sockets):
                 logging.exception(f"Unexpected error modifying socket to read-only for {client.name}: {ex}")
 
 
-@IRCD.debug_freeze
+@IRCD.debug_freeze(debug=1)
 def wrap_socket(client: Client, starttls=0) -> int:
     """
     Initiates or continues a non-blocking TLS handshake using flags.
@@ -189,7 +189,7 @@ def wrap_socket(client: Client, starttls=0) -> int:
     return 1
 
 
-@IRCD.debug_freeze
+@IRCD.debug_freeze(debug=1)
 def client_setup_finished(client, listen_obj):
     client.local.handshake = 1
 
@@ -211,7 +211,7 @@ def client_setup_finished(client, listen_obj):
     logging.debug(f"Accepted socket on {listen_obj.port}: {client.ip} -- fd: {client.local.socket.fileno()}")
 
 
-@IRCD.debug_freeze
+@IRCD.debug_freeze(debug=1)
 def post_accept(client, listen_obj):
     if client.local.conn:
         client.local.conn.setblocking(0)
@@ -253,7 +253,7 @@ def post_accept(client, listen_obj):
     client_setup_finished(client, listen_obj)
 
 
-@IRCD.debug_freeze
+@IRCD.debug_freeze(debug=1)
 def accept_socket(sock, listen_obj):
     if sum(1 for _ in IRCD.get_clients(registered=0)) >= 100:
         return logging.warning(f"SYN flood - not processing current connection.")
@@ -569,8 +569,13 @@ def get_full_recv(client, sock):
     try:
         while part := sock.recv(4096):
             buffer.append(part.decode())
+
+        if not buffer:
+            return -1
+
         client.local.temp_recvbuffer += ''.join(buffer)
         return 1
+
     except (SSL.WantReadError, BlockingIOError) as ex:
         client.local.temp_recvbuffer += ''.join(buffer)
         return 1 if client.local.temp_recvbuffer else 0

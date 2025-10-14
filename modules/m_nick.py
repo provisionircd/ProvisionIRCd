@@ -107,7 +107,7 @@ def cmd_nick_remote(client, recv):
     newnick = str(recv[1]).strip().removeprefix(':')
     broadcast_nickchange(client, newnick)
     msg = f"*** {client.name} ({client.user.username}@{client.user.realhost}) has changed their nickname to {newnick}"
-    IRCD.log(client, "info", "nick", "REMOTE_NICK_CHANGE", msg)
+    IRCD.log(client, "info", "nick", "REMOTE_NICK_CHANGE", msg, sync=0)
     IRCD.run_hook(Hook.REMOTE_NICKCHANGE, client, newnick)
     client.name = newnick
 

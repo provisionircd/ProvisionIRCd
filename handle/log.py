@@ -47,7 +47,7 @@ class Log:
         if IRCD.me.creationtime:
             source = log_entry.client.id if log_entry.client.id else log_entry.client.name
             data = f":{source} SLOG {log_entry.level} {log_entry.rootevent} {log_entry.event} {log_entry.message}"
-            IRCD.send_to_servers(log_entry.client.direction, [], data)
+            IRCD.send_to_servers(log_entry.client, [], data)
 
     @staticmethod
     def log(client, level: str, rootevent: str, event: str, message: str, sync: int = 1):
