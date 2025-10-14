@@ -75,7 +75,6 @@ def cmd_authenticate(client, recv):
 
 
 def cmd_sasl(client, recv):
-    # logging.debug(f"SASL from client {client.name}: {recv}")
     SaslInfo.server = IRCD.find_client(IRCD.get_setting("sasl-server"))
     if not SaslInfo.server:
         logging.debug(f"SASL request received but SASL server is offline")
@@ -86,10 +85,15 @@ def cmd_sasl(client, recv):
 
     if recv[1] in [IRCD.me.name, IRCD.me.id]:
         # :00B SASL dev.provisionweb.org <C|D> [...]
-        if not (target_client := IRCD.find_client(recv[2])) or target_client.user.account != '*':
+        if not (target_client := IRCD.find_client(recv[2])):
+            logging.error(f"Unable to find target SASL client for: {recv[2]}")
             return
 
         if recv[3] == 'C':
+            if target_client.user.account != '*':
+                logging.error(f"SASL client already logged in: {recv[2]}")
+                return
+
             target_client.send([], f"AUTHENTICATE {recv[4]}")
 
         elif recv[3] == 'D':  # Done?
@@ -120,12 +124,11 @@ def cmd_svslogin(client, recv):
         if account != curr_account:
             IRCD.run_hook(Hook.ACCOUNT_LOGIN, auth_client, curr_account)
 
-    data = f":{client.id} {' '.join(recv)}"
-    IRCD.send_to_servers(client, [], data)
+    IRCD.send_to_servers(client, [], f":{client.id} {' '.join(recv)}")
 
 
 def check_sasl_timeout():
-    if not (sasl_server := IRCD.find_client(IRCD.get_setting('sasl-server'))):
+    if not (sasl_server := IRCD.find_client(IRCD.get_setting("sasl-server"))):
         SaslInfo.server = None
     elif sasl_server.server.synced and not sasl_server.has_flag(Flag.CLIENT_EXIT):
         SaslInfo.server = sasl_server
@@ -137,7 +140,7 @@ def check_sasl_timeout():
         # logging.debug(f"SASL auth timed out for {client.name}")
         if client := IRCD.find_client(client_id):
             IRCD.server_notice(client, "SASL request timed out (server or client misbehaving) --"
-                                       "aborting SASL and continuing connection...")
+                                       " aborting SASL and continuing connection...")
             client.sendnumeric(Numeric.ERR_SASLABORTED)
         del SaslInfo.request_init[client_id]
 
@@ -155,6 +158,8 @@ def sasl_server_online(client):
         logging.debug(f"Registered as SASL server.")
         if mech := SaslInfo.server.get_md_value("saslmechlist"):
             Capability.add("sasl", mech)
+        else:
+            logging.warning("No saslmechlist available.")
 
 
 def sasl_server_offline(client):
