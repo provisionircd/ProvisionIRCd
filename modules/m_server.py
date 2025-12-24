@@ -16,7 +16,7 @@ def broadcast_network_to_new_server(client):
         return
 
     logging.debug(f"Broadcasting all our servers to {client.name}")
-    for s_client in [s for s in IRCD.get_clients(server=1) if s != client and s.name and s.id]:
+    for s_client in [s for s in IRCD.get_clients(server=1) if s != client and s != IRCD.me and s.name and s.id]:
         logging.debug(f"Syncing server {s_client.name} to {client.name}")
         client.send([], f":{s_client.uplink.id} SID {s_client.name} {s_client.hopcount + 1} {s_client.id} :{s_client.info}")
 
@@ -77,78 +77,77 @@ def auth_incoming_link(client) -> int:
         logging.debug(f"Link denied for {client.name}: max connections for this class")
         return 0
 
-    if client.local.incoming:
-        if not link.incoming_mask.is_match(client):
-            deny_direct_link(client, Error.SERVER_LINK_NOMATCH_MASK)
-            logging.debug(f"Link denied for {client.name}: incoming mask does not match incoming:mask")
-            return 0
+    if client.local.incoming and not link.incoming_mask.is_match(client):
+        deny_direct_link(client, Error.SERVER_LINK_NOMATCH_MASK)
+        logging.debug(f"Link denied for {client.name}: incoming mask does not match incoming:mask")
+        return 0
 
-        client_certfp = client.get_md_value("certfp")
+    client_certfp = client.get_md_value("certfp")
 
-        if link.auth:
-            password = link.auth["password"]
-            fingerprint = link.auth["fingerprint"]
-            cn = link.auth["common-name"]
-            auth_match = 0
+    if link.auth:
+        password = link.auth["password"]
+        fingerprint = link.auth["fingerprint"]
+        cn = link.auth["common-name"]
+        auth_match = 0
 
-            if password:
-                if client.local.authpass != password:
-                    deny_direct_link(client, Error.SERVER_LINK_INCORRECT_PASSWORD)
-                    logging.debug(f"[auth] Link denied for {client.name}: incorrect password")
-                    return 0
-                logging.debug(f"[auth] Incoming link password is a match")
-                auth_match = 1
+        if password:
+            if client.local.authpass != password:
+                deny_direct_link(client, Error.SERVER_LINK_INCORRECT_PASSWORD)
+                logging.debug(f"[auth] Link denied for {client.name}: incorrect password")
+                return 0
+            logging.debug(f"[auth] Incoming link password is a match")
+            auth_match = 1
 
-            if fingerprint:
-                if not client.local.tls:
-                    deny_direct_link(client, Error.SERVER_LINK_AUTH_NO_TLS)
-                    return 0
-                if not client_certfp or client_certfp != fingerprint:
-                    deny_direct_link(client, Error.SERVER_LINK_NOMATCH_CERTFP)
-                    logging.debug(f"Link denied for {client.name}: certificate fingerprint mismatch")
-                    logging.debug(f"Required: {fingerprint}")
-                    logging.debug(f"Received: {client_certfp}")
-                    return 0
-                logging.debug(f"[auth] Incoming link fingerprint is a match")
-                auth_match = 1
+        if fingerprint:
+            if not client.local.tls:
+                deny_direct_link(client, Error.SERVER_LINK_AUTH_NO_TLS)
+                return 0
+            if not client_certfp or client_certfp != fingerprint:
+                deny_direct_link(client, Error.SERVER_LINK_NOMATCH_CERTFP)
+                logging.debug(f"Link denied for {client.name}: certificate fingerprint mismatch")
+                logging.debug(f"Required: {fingerprint}")
+                logging.debug(f"Received: {client_certfp}")
+                return 0
+            logging.debug(f"[auth] Incoming link fingerprint is a match")
+            auth_match = 1
 
-            if cn:
-                if not client.local.tls:
-                    deny_direct_link(client, Error.SERVER_LINK_AUTH_NO_TLS)
-                    return 0
-                if not auth_match:
-                    deny_direct_link(client, Error.SERVER_LINK_MISSING_AUTH_CN)
-                    return 0
-                client_cn = client.get_md_value(name="cert_cn")
-                if not client_cn or client_cn.lower() != cn.lower():
-                    deny_direct_link(client, Error.SERVER_LINK_NOMATCH_CN)
-                    logging.debug(f"Link denied for {client.name}: certificate Common-Name mismatch")
-                    logging.debug(f"Required: {cn}")
-                    logging.debug(f"Received: {client_cn}")
-                    return 0
-                logging.debug(f"[auth] Incoming link CN is a match")
+        if cn:
+            if not client.local.tls:
+                deny_direct_link(client, Error.SERVER_LINK_AUTH_NO_TLS)
+                return 0
+            if not auth_match:
+                deny_direct_link(client, Error.SERVER_LINK_MISSING_AUTH_CN)
+                return 0
+            client_cn = client.get_md_value(name="cert_cn")
+            if not client_cn or client_cn.lower() != cn.lower():
+                deny_direct_link(client, Error.SERVER_LINK_NOMATCH_CN)
+                logging.debug(f"Link denied for {client.name}: certificate Common-Name mismatch")
+                logging.debug(f"Required: {cn}")
+                logging.debug(f"Received: {client_cn}")
+                return 0
+            logging.debug(f"[auth] Incoming link CN is a match")
 
-            logging.debug(f"[auth] Incoming server successfully authenticated")
+        logging.debug(f"[auth] Incoming server successfully authenticated")
+        client.server.link = link
+        return 1
+
+    # Deprecated method below.
+    if re.match(r"[A-Fa-f0-9]{64}$", link.password):
+        """ This link requires a certificate fingerprint. """
+        if client_certfp and client_certfp == link.password:
+            logging.debug(f"Link authenticated by certificate fingerprint")
             client.server.link = link
             return 1
+        deny_direct_link(client, Error.SERVER_LINK_NOMATCH_CERTFP)
+        logging.debug(f"Link denied for {client.name}: certificate fingerprint mismatch")
+        logging.debug(f"Required: {link.password}")
+        logging.debug(f"Received: {client_certfp}")
+        return 0
 
-        # Deprecated method below.
-        if re.match(r"[A-Fa-f0-9]{64}$", link.password):
-            """ This link requires a certificate fingerprint. """
-            if client_certfp and client_certfp == link.password:
-                logging.debug(f"Link authenticated by certificate fingerprint")
-                client.server.link = link
-                return 1
-            deny_direct_link(client, Error.SERVER_LINK_NOMATCH_CERTFP)
-            logging.debug(f"Link denied for {client.name}: certificate fingerprint mismatch")
-            logging.debug(f"Required: {link.password}")
-            logging.debug(f"Received: {client_certfp}")
-            return 0
-
-        if client.local.authpass != link.password:
-            deny_direct_link(client, Error.SERVER_LINK_INCORRECT_PASSWORD)
-            logging.debug(f"Link denied for {client.name}: incorrect password")
-            return 0
+    if client.local.authpass != link.password:
+        deny_direct_link(client, Error.SERVER_LINK_INCORRECT_PASSWORD)
+        logging.debug(f"Link denied for {client.name}: incorrect password")
+        return 0
 
     client.server.link = link
     return 1
@@ -172,19 +171,31 @@ def cmd_server(client, recv) -> None:
         logging.warning(f"Received SERVER message from {client.name} before PROTOCTL.")
         return client.exit("No PROTOCTL message received")
 
+    if not client.id:
+        logging.warning(f"Received SERVER message from {client.name} without prior SID in PROTOCTL.")
+        return client.exit("No SID received in PROTOCTL")
+
     name = recv[1]
     if (server_exists := IRCD.find_client(name)) and server_exists != client:
         logging.warning(f"[SERVER] Server with name {name} already exists")
         return deny_direct_link(client, Error.SERVER_NAME_EXISTS, name)
 
     client.name = name
-    client.hopcount = int(recv[2])
+
+    try:
+        client.hopcount = int(recv[2])
+    except ValueError:
+        return client.exit("Invalid hopcount")
 
     info = ' '.join(recv[3:])
     if "VL" in client.local.protoctl:
         vl = recv[3].split()[0].removeprefix(':')
-        version, flags, num = vl.split('-')
-        info = ' '.join(recv[4:])
+        if '-' in vl and len(vl.split('-')) == 3:
+            version, flags, num = vl.split('-')
+            info = ' '.join(recv[4:])
+        else:
+            logging.warning(f"Invalid VL format from {client.name}: {vl}")
+            return client.exit("Invalid VL format")
 
     client.info = info.removeprefix(':')
 
@@ -196,6 +207,7 @@ def cmd_server(client, recv) -> None:
 
     client.server.authed = 1
     logging.info(f"[SERVER] New server: {client.name}. Uplink: {client.uplink.name}, direction: {client.direction.name}")
+
     if client.local.incoming:
         start_link_negotiation(client)
 
@@ -212,18 +224,21 @@ def cmd_server(client, recv) -> None:
 
 @logging.client_context
 def cmd_sid(client, recv):
+    if not client.server or not client.server.authed:
+        logging.warning(f"Ignoring SID from unauthorized client: {client.name}")
+        return
+
     name = recv[1]
     hopcount = int(recv[2])
     sid = recv[3]
 
     if IRCD.find_client(name):
         err_msg = f"Server {name} is already in use on the network"
-        client.direct_send(f":{IRCD.me.id} ERROR :{err_msg}")
-        client.exit(err_msg)
+        client.direction.send([], f"SQUIT {sid} :{err_msg}")
         return
 
     if IRCD.find_client(sid):
-        client.direct_send(f"SQUIT {sid} :SID {sid} is already in use on the network")
+        client.direction.send([], f"SQUIT {sid} :SID {sid} is already in use on the network")
         return
 
     if client.direction.server.link:
@@ -253,10 +268,10 @@ def cmd_sid(client, recv):
         msg = f"Link {client.name} -> {new_server.name} successfully established"
         IRCD.log(client.uplink, "info", "link", "SERVER_LINKED_REMOTE", msg, sync=0)
 
-    IRCD.run_hook(Hook.SERVER_CONNECT, client)
+    IRCD.run_hook(Hook.SERVER_CONNECT, new_server)
     data = f":{client.id} SID {new_server.name} {new_server.hopcount + 1} {new_server.id} :{new_server.info}"
     IRCD.send_to_servers(client, mtags=[], data=data)
-    IRCD.run_hook(Hook.POST_SERVER_CONNECT, client)
+    IRCD.run_hook(Hook.POST_SERVER_CONNECT, new_server)
 
 
 def init(module):

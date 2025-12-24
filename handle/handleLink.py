@@ -100,8 +100,17 @@ def sync_data(newserver):
     IRCD.run_hook(Hook.SERVER_SYNC, newserver)
     logging.debug(f"We ({IRCD.me.name}) are done syncing to {newserver.name}, sending EOS.")
     newserver.send([], f":{IRCD.me.id} EOS")
-    for server_client in [c for c in IRCD.get_clients(server=1) if c not in [IRCD.me, newserver]]:
+
+    for server_client in IRCD.get_clients(server=1):
+        if server_client in [IRCD.me, newserver]:
+            continue
+
+        if not server_client.server.synced:
+            logging.warning(f"[sync_data()] {server_client.name} has not been synced yet, not sending EOS to {newserver.name}")
+            continue
+
         newserver.send([], f":{server_client.id} EOS")
+
     IRCD.run_hook(Hook.POST_SERVER_CONNECT, newserver)
 
 
@@ -152,6 +161,8 @@ def start_outgoing_link(link, tls=0, auto_connect=0, starter=None):
                     pass
                 except Exception as ex:
                     logging.exception(ex)
+                    client.exit(f"Handshake failed: {ex}")
+                    return
 
             IRCD.selector.register(client.local.socket, selectors.EVENT_READ, data=client)
             client.local.handshake = 1

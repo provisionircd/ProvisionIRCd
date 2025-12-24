@@ -50,7 +50,7 @@ def cmd_sanick(client, recv):
     if target.local:
         target.add_flag(Flag.CLIENT_USER_SANICK)
         nick_cmd.do(target, "NICK", newnick)
-        target.flags.remove(Flag.CLIENT_USER_SANICK)
+        target.del_flag(Flag.CLIENT_USER_SANICK)
         msg = f"*** Your nickname has been forcefully changed to {target.name}."
         IRCD.server_notice(target, msg)
 

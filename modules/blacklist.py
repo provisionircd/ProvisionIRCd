@@ -127,13 +127,15 @@ def start_blacklist_check(client):
         loop = asyncio.get_running_loop()
         loop.create_task(blacklist_check(client))
     except RuntimeError:
-        # No running event loop, create a new one.
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            loop.run_until_complete(blacklist_check(client))
-        finally:
-            loop.close()
+        def _threaded_check(c):
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(blacklist_check(c))
+            finally:
+                loop.close()
+
+        IRCD.run_parallel_function(_threaded_check, args=(client,))
 
 
 def init(module):

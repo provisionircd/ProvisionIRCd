@@ -563,11 +563,10 @@ class IRCD:
     @staticmethod
     def do_delayed_process():
         """ Process all deferred server messages after link sync completes. """
-        deferred_servers = list(IRCD.process_after_eos)
-        if deferred_servers and any(IRCD.get_clients(server=1, registered=0)):
-            logging.warning(f"Received do_delayed_process() but some servers are still not done syncing.")
+        if IRCD.current_link_sync:
             return
 
+        deferred_servers = list(IRCD.process_after_eos)
         IRCD.process_after_eos.clear()
 
         for server in deferred_servers:
@@ -739,7 +738,7 @@ class IRCD:
     @staticmethod
     def get_clients(local=None, registered=None, user=None, server=None, usermodes: str = '', cap: str = ''):
         """
-        Unified method to get filtered clients with flexible parameter combinations
+        Unified method to get filtered clients with flexible parameter combinations.
 
         Parameters:
         - local: None (any), 1 (local only), 0 (remote only)
@@ -825,7 +824,7 @@ class IRCD:
             return
 
         if isinstance(find, str):
-            find = find.removeprefix(':').lower()
+            find = find.removeprefix(':').lower().strip()
 
         if IRCD.running and find in {IRCD.me.name.lower(), IRCD.me.id.lower()} and not user:
             return IRCD.me
@@ -835,6 +834,7 @@ class IRCD:
                 return
             if server and not target.server:
                 return
+
             return target
 
     @staticmethod
@@ -843,13 +843,13 @@ class IRCD:
         if not find:
             return []
 
-        pattern = find.removeprefix(':').lower()
+        pattern = find.removeprefix(':').lower().strip()
         servers = [IRCD.me] + [c for c in Client.table if c.server and c.id]
         return [s for s in servers if is_match(pattern, s.name.lower()) or is_match(pattern, s.id.lower())]
 
     @staticmethod
     def run_hook(hook, *args) -> None:
-        for _, _ in Hook.call(hook, args=args):
+        for result, func in Hook.call(hook, args=args):
             pass
 
     @staticmethod
@@ -900,7 +900,7 @@ class IRCD:
                     IRCD.send_after_eos[to_client] = []
 
                 IRCD.send_after_eos[to_client].append((mtags, data))
-                return
+                continue
 
             to_client.send(mtags, data)
 

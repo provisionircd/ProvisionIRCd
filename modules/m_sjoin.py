@@ -21,12 +21,10 @@ def get_users_from_memberlist(memberlist: list) -> list:
             entry = match.groups()[2]
 
         user_uid = ''
-        for char in entry:
-            if char in list_prefixes:
-                # Not interested in those.
-                break
-            if char not in user_prefixes:
-                user_uid += char
+        if entry[0] in list_prefixes:
+            continue
+
+        user_uid = ''.join([c for c in entry if c not in user_prefixes])
 
         if user_uid and (user := IRCD.find_client(user_uid)):
             users.append(user)
@@ -304,6 +302,7 @@ def cmd_sjoin(client, recv: list) -> None:
             if not memberlist[0].strip():
                 del memberlist[0]
             break
+
         channel_modes = param if not channel_modes else channel_modes
         channel_modes_params.append(param) if channel_modes != param else None
 

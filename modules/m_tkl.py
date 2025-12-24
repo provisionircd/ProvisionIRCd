@@ -181,7 +181,7 @@ class Tkl:
             if tkl.type == 's':
                 for shun_client in Tkl.find_matches(tkl):
                     if shun_client.is_shunned():
-                        shun_client.flags.remove(Flag.CLIENT_SHUNNED)
+                        shun_client.del_flag(Flag.CLIENT_SHUNNED)
 
     def do_ban(self, client):
         if client.has_flag(Flag.CLIENT_EXIT):

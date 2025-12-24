@@ -390,7 +390,8 @@ class Client:
         else:
             if self.local and not self.local.incoming and not self.server.link.auto_connect:
                 IRCD.log(IRCD.me, "error", "link", "LINK_OUT_FAIL", f"Unable to connect to {self.name}: {reason}", sync=0)
-            IRCD.do_delayed_process()
+
+        IRCD.do_delayed_process()
 
         if self.server.authed:
             logging.debug(f"[server_exit()] Broadcasting to all other servers that server {self.name} has quit: {reason}")
@@ -790,6 +791,9 @@ class Client:
 
         try:
             for line in list(self.local.recvbuffer):
+                if self.has_flag(Flag.CLIENT_EXIT):
+                    break
+
                 time_to_execute, recv = line
                 if self.user and time_to_execute - current_time > 0 and 'o' not in self.user.modes:
                     continue
@@ -798,13 +802,11 @@ class Client:
                 if self.user:
                     self.add_flood_penalty(100)
 
-                if (self.server and IRCD.current_link_sync and
-                        IRCD.current_link_sync != self and
-                        cmd != "SQUIT" and
-                        self not in IRCD.process_after_eos):
-                    IRCD.process_after_eos.append(self)
-                    logging.debug(f"Deferring {self.name} until sync with {IRCD.current_link_sync.name} completes")
-                    continue
+                if self.server and IRCD.current_link_sync and IRCD.current_link_sync != self and cmd != "SQUIT":
+                    if self not in IRCD.process_after_eos:
+                        IRCD.process_after_eos.append(self)
+                        logging.debug(f"Deferring {self.name} until sync with {IRCD.current_link_sync.name} completes")
+                    return
 
                 self.local.recvbuffer.remove(line)
 
@@ -833,17 +835,6 @@ class Client:
 
                         source_client = found_client or self
 
-                # source_client = self
-                # if recv.startswith(':') and len(recv) > 1:
-                #     source_id = recv[1:].split()[0]
-                #     if self.server:
-                #         source_client = IRCD.find_client(source_id)
-                #         if not source_client and self.server.authed:
-                #             logging.warning(f"Unknown server message from {self.id}: {recv}")
-                #             continue
-                #         source_client = source_client or self
-                #     recv = recv.split(' ', maxsplit=1)[1]
-
                 seen = set()
                 parsed_tags = [tag for tag in parsed_tags if not (tag.name in seen or seen.add(tag.name))]
 
@@ -861,6 +852,7 @@ class Client:
                         source_client.recv_mtags.clear()
                         continue
                     cmd.do(source_client, *recv)
+
                 elif cmd == 0 and not self.server:
                     self.sendnumeric(Numeric.ERR_UNKNOWNCOMMAND, command)
                     IRCD.run_hook(Hook.POST_COMMAND, self, recv[0], recv)
@@ -960,11 +952,10 @@ class Client:
             self.exit(f"Write error: {str(ex)}")
             return
 
-        if lines_sent > 0:
-            if lines_sent == len(lines):
-                self.local.sendbuffer = ''
-            else:
-                self.local.sendbuffer = '\n'.join(lines[lines_sent:])
+        if lines_sent == len(lines):
+            self.local.sendbuffer = ''
+        else:
+            self.local.sendbuffer = '\n'.join(lines[lines_sent:])
 
     def direct_send_old(self, data):
         """ Directly sends data to a socket. """

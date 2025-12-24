@@ -136,7 +136,7 @@ class Channel:
         return ''.join(cmode.flag for cmode in self.get_membermodes_sorted() if self.client_has_membermodes(client, cmode.flag))
 
     def get_member_rank(self, client, get_highest=True):
-        membermodes_sorted = self.get_membermodes_sorted(reverse=not get_highest)
+        membermodes_sorted = self.get_membermodes_sorted(reverse=get_highest)
         return next((mode.rank for mode in membermodes_sorted
                      if mode.prefix in self.get_membermodes_sorted(client=client, prefix=1)), 0)
 
@@ -162,6 +162,7 @@ class Channel:
             member = ChannelMember()
             member.join_time = int(time())
             member.client = client
+            self.membercount += 1
             self.member_by_client[client] = member
             self.seen_dict[client] = []
             return 1
@@ -273,9 +274,10 @@ class Channel:
                 return entry.mask
 
     def remove_client(self, client):
-        self.membercount -= 1
         if member := self.find_member(client):
+            self.membercount -= 1
             self.member_by_client.pop(member.client, None)
+            self.seen_dict.pop(client, None)
         else:
             logging.error(f"Unable to remove {client.name} (uplink={client.uplink.name}) from channel {self.name}: member not found")
 
@@ -323,7 +325,6 @@ class Channel:
             self.seen_dict[client].append(new_user)
 
     def do_join(self, mtags, client):
-        self.membercount += 1
         if not self.find_member(client):
             self.create_member(client)
 

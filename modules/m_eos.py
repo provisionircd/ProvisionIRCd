@@ -9,7 +9,9 @@ from handle.logger import logging
 
 @logging.client_context
 def cmd_eos(client, recv):
-    if IRCD.current_link_sync in [client, client.uplink, client.direction]:
+    # TODO: Check:
+    #  if IRCD.current_link_sync in [client, client.uplink, client.direction]:
+    if IRCD.current_link_sync == client:
         IRCD.current_link_sync = None
 
     if client.server.synced:
@@ -19,17 +21,18 @@ def cmd_eos(client, recv):
     client.add_flag(Flag.CLIENT_REGISTERED)
 
     IRCD.send_to_servers(client, mtags=[], data=f":{client.id} EOS")
-    logging.debug(f"EOS received. Uplink: {client.uplink.name})")
+    logging.info(f"[cmd_eos()] EOS received for {client.name}. Marked as synced. Uplink: {client.uplink.name})")
 
-    """ We can now process other servers' recv buffer """
-    IRCD.do_delayed_process()
-
+    # TODO: Test: swapped send_after_eos and do_delayed_process()
     """ Send held back data for this client """
     if client in IRCD.send_after_eos:
         logging.debug(f"Now sending previously held back server data to {client.name}")
         for mtags, data in IRCD.send_after_eos[client]:
             IRCD.send_to_one_server(client, mtags, data)
         del IRCD.send_after_eos[client]
+
+    """ We can now process other servers' recv buffer """
+    IRCD.do_delayed_process()
 
     for batch in Batch.pool:
         started_by = client if client.local else client.uplink

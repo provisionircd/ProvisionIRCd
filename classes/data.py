@@ -669,6 +669,9 @@ class Isupport:
 
     @staticmethod
     def send_to_client(client):
+        if not client.is_local_user():
+            return
+
         line = []
         for isupport in Isupport.table:
             line.append(isupport.string)

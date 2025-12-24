@@ -121,7 +121,7 @@ class Mask:
         checks = [
             (self.websockets, lambda _: client.websocket),
             (self.webirc, lambda _: client.webirc),
-            (self.tls, lambda _: client.local and not client.local.tls),
+            (self.tls, lambda _: client.local and client.local.tls),
             (self.identified, lambda _: client.user.account != '*'),
             (self.ip, lambda ip: is_match(ip, client.ip)),
             (self.certfp, lambda certfp: certfp == client.get_md_value("certfp")),

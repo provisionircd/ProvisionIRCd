@@ -121,7 +121,7 @@ def process_event(event, listen_sockets):
                 logging.exception(f"Unexpected error modifying socket to read-only for {client.name}: {ex}")
 
 
-@IRCD.debug_freeze(debug=1)
+@IRCD.debug_freeze(debug=0)
 def wrap_socket(client: Client, starttls=0) -> int:
     """
     Initiates or continues a non-blocking TLS handshake using flags.

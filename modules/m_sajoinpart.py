@@ -43,7 +43,7 @@ def cmd_sajoinpart(client, recv):
         if what == "join":
             target.add_flag(Flag.CLIENT_USER_SAJOIN)
             Command.do(target, "JOIN", channel.name)
-            target.flags.remove(Flag.CLIENT_USER_SAJOIN)
+            target.del_flag(Flag.CLIENT_USER_SAJOIN)
         else:
             Command.do(target, "PART", channel.name)
 
